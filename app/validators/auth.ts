@@ -9,7 +9,7 @@ export const registerValidator = vine.create({
   email: email().unique({ table: 'users', column: 'email' }),
   password: password(),
   telefono: vine.string().maxLength(20).nullable().optional(),
-  rol: vine.enum(['conductor', 'cliente']),
+  rol: vine.enum(['conductor', 'cliente', 'admin']),
   edad: vine.number().min(18).max(120).nullable().optional(),
   cedula: vine.string().maxLength(20).nullable().optional(),
   placa: vine.string().maxLength(20).nullable().optional(),

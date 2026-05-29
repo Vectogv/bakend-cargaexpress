@@ -80,6 +80,25 @@ router
 
 router
   .group(() => {
+    router.get('dashboard', [controllers.Admin, 'dashboard'])
+    router.get('users', [controllers.Admin, 'users'])
+    router.get('drivers', [controllers.Admin, 'drivers'])
+    router.get('trips', [controllers.Admin, 'trips'])
+    router.get('earnings', [controllers.Admin, 'earnings'])
+    router.put('users/:id', [controllers.Admin, 'updateUser'])
+    router.put('users/:id/suspend', [controllers.Admin, 'toggleSuspendUser'])
+    router.put('users/:id/avatar', [controllers.Admin, 'uploadUserAvatar'])
+    router.delete('users/:id', [controllers.Admin, 'deleteUser'])
+    router.get('profile', [controllers.Admin, 'profile'])
+    router.put('profile', [controllers.Admin, 'updateProfile'])
+    router.post('profile/avatar', [controllers.Admin, 'uploadProfileAvatar'])
+  })
+  .prefix('/api/admin')
+  .as('admin')
+  .use(middleware.auth())
+
+router
+  .group(() => {
     router.get('help', [controllers.Support, 'help'])
     router.get('emergency', [controllers.Support, 'emergency'])
   })

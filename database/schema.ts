@@ -132,7 +132,7 @@ export class UbicacionesDriverSchema extends BaseModel {
 }
 
 export class UserSchema extends BaseModel {
-  static $columns = ['apellido', 'avatar', 'createdAt', 'edad', 'email', 'fullName', 'id', 'nombre', 'password', 'rol', 'telefono', 'updatedAt'] as const
+  static $columns = ['apellido', 'avatar', 'createdAt', 'edad', 'email', 'fullName', 'id', 'nombre', 'password', 'rol', 'suspendido', 'telefono', 'updatedAt'] as const
   $columns = UserSchema.$columns
   @column()
   declare apellido: string | null
@@ -154,6 +154,8 @@ export class UserSchema extends BaseModel {
   declare password: string
   @column()
   declare rol: string | null
+  @column()
+  declare suspendido: boolean
   @column()
   declare telefono: string | null
   @column.dateTime({ autoCreate: true, autoUpdate: true })

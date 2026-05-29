@@ -48,6 +48,22 @@ export interface ApiDefinition {
       read: typeof routes['notifications.notification.read']
     }
   }
+  admin: {
+    admin: {
+      dashboard: typeof routes['admin.admin.dashboard']
+      users: typeof routes['admin.admin.users']
+      drivers: typeof routes['admin.admin.drivers']
+      trips: typeof routes['admin.admin.trips']
+      earnings: typeof routes['admin.admin.earnings']
+      updateUser: typeof routes['admin.admin.update_user']
+      toggleSuspendUser: typeof routes['admin.admin.toggle_suspend_user']
+      uploadUserAvatar: typeof routes['admin.admin.upload_user_avatar']
+      deleteUser: typeof routes['admin.admin.delete_user']
+      profile: typeof routes['admin.admin.profile']
+      updateProfile: typeof routes['admin.admin.update_profile']
+      uploadProfileAvatar: typeof routes['admin.admin.upload_profile_avatar']
+    }
+  }
   support: {
     support: {
       help: typeof routes['support.support.help']

@@ -319,6 +319,150 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/notification_controller').default['read']>>>
     }
   }
+  'admin.admin.dashboard': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/dashboard'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['dashboard']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['dashboard']>>>
+    }
+  }
+  'admin.admin.users': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/users'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['users']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['users']>>>
+    }
+  }
+  'admin.admin.drivers': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/drivers'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['drivers']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['drivers']>>>
+    }
+  }
+  'admin.admin.trips': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/trips'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['trips']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['trips']>>>
+    }
+  }
+  'admin.admin.earnings': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/earnings'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['earnings']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['earnings']>>>
+    }
+  }
+  'admin.admin.update_user': {
+    methods: ["PUT"]
+    pattern: '/api/admin/users/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateUser']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateUser']>>>
+    }
+  }
+  'admin.admin.toggle_suspend_user': {
+    methods: ["PUT"]
+    pattern: '/api/admin/users/:id/suspend'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['toggleSuspendUser']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['toggleSuspendUser']>>>
+    }
+  }
+  'admin.admin.upload_user_avatar': {
+    methods: ["PUT"]
+    pattern: '/api/admin/users/:id/avatar'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['uploadUserAvatar']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['uploadUserAvatar']>>>
+    }
+  }
+  'admin.admin.delete_user': {
+    methods: ["DELETE"]
+    pattern: '/api/admin/users/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['deleteUser']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['deleteUser']>>>
+    }
+  }
+  'admin.admin.profile': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/profile'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['profile']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['profile']>>>
+    }
+  }
+  'admin.admin.update_profile': {
+    methods: ["PUT"]
+    pattern: '/api/admin/profile'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateProfile']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateProfile']>>>
+    }
+  }
+  'admin.admin.upload_profile_avatar': {
+    methods: ["POST"]
+    pattern: '/api/admin/profile/avatar'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['uploadProfileAvatar']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['uploadProfileAvatar']>>>
+    }
+  }
   'support.support.help': {
     methods: ["GET","HEAD"]
     pattern: '/api/support/help'

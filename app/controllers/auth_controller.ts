@@ -73,6 +73,9 @@ export default class AuthController {
     if (!user || user.password !== password) {
       return response.status(400).send({ errors: [{ message: 'Invalid user credentials' }] })
     }
+    if (user.suspendido) {
+      return response.status(403).send({ errors: [{ message: 'Tu cuenta ha sido suspendida. Contacta al administrador.' }] })
+    }
     const token = await User.accessTokens.create(user, [], { expiresIn: '7 days' })
 
     const refreshTokenValue = randomUUID()
