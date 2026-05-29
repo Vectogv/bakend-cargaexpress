@@ -1,7 +1,7 @@
 import type User from '#models/user'
 import { BaseTransformer } from '@adonisjs/core/transformers'
 
-export default class UserTransformer extends BaseTransformer<User> {
+export default class AuthTransformer extends BaseTransformer<User> {
   toObject() {
     const user = this.resource
     return {
@@ -9,12 +9,7 @@ export default class UserTransformer extends BaseTransformer<User> {
       nombre: user.nombre,
       apellido: user.apellido,
       email: user.email,
-      telefono: user.telefono,
-      edad: user.edad,
-      avatar: user.avatar,
       rol: user.rol,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
     }
   }
 }

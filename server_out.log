@@ -1,0 +1,69 @@
+c[ info ] starting server in static mode...
+[ info ] loading hooks...
+[ info ] generating indexes...
+[ info ] codegen: created 5 file(s)
+[ info ] starting HTTP server...
+╭─────────────────────────────────────────────────╮
+│                                                 │
+│    Server address: http://localhost:3333        │
+│    Mode: static                                 │
+│    Ready in: 1.01 s                             │
+│    Press h to show help                         │
+│                                                 │
+╰─────────────────────────────────────────────────╯
+[19:49:42.681] [32mINFO[39m (6284): [36mstarted HTTP server on localhost:3333[39m
+[19:49:42.748] [32mINFO[39m (6284): [36mSocket.io initialized[39m
+[ info ] tuyau: created api client registry (./.adonisjs/client/registry) (3.08 ms)
+[19:52:23.532] [31mERROR[39m (6284): [36minsert into `conductores` (`capacidad`, `cedula`, `created_at`, `placa`, `tipo_vehiculo`, `usuario_id`) values ('1000kg', '12345678', '2026-05-29 19:52:23', 'ABC123', 'Camion', 12) - Duplicate entry '12345678' for key 'conductores.conductores_cedula_unique'[39m
+    [35mrequest_id[39m: "95ed9eb9-ed4f-484e-8780-ac9ad662fe9d"
+    [35mx-request-id[39m: "95ed9eb9-ed4f-484e-8780-ac9ad662fe9d"
+    err: {
+      "type": "Error",
+      "message": "insert into `conductores` (`capacidad`, `cedula`, `created_at`, `placa`, `tipo_vehiculo`, `usuario_id`) values ('1000kg', '12345678', '2026-05-29 19:52:23', 'ABC123', 'Camion', 12) - Duplicate entry '12345678' for key 'conductores.conductores_cedula_unique'",
+      "stack":
+          Error: insert into `conductores` (`capacidad`, `cedula`, `created_at`, `placa`, `tipo_vehiculo`, `usuario_id`) values ('1000kg', '12345678', '2026-05-29 19:52:23', 'ABC123', 'Camion', 12) - Duplicate entry '12345678' for key 'conductores.conductores_cedula_unique'
+              at Packet.asError (D:\cargaexpressbakend\node_modules\mysql2\lib\packets\packet.js:788:17)
+              at Query.execute (D:\cargaexpressbakend\node_modules\mysql2\lib\commands\command.js:29:26)
+              at Connection.handlePacket (D:\cargaexpressbakend\node_modules\mysql2\lib\base\connection.js:552:34)
+              at PacketParser.onPacket (D:\cargaexpressbakend\node_modules\mysql2\lib\base\connection.js:102:12)
+              at PacketParser.executeStart (D:\cargaexpressbakend\node_modules\mysql2\lib\packet_parser.js:75:16)
+              at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\mysql2\lib\base\connection.js:109:25)
+              at Socket.emit (node:events:509:28)
+              at addChunk (node:internal/streams/readable:563:12)
+              at readableAddChunkPushByteMode (node:internal/streams/readable:514:3)
+              at Readable.push (node:internal/streams/readable:394:5)
+      "code": "ER_DUP_ENTRY",
+      "errno": 1062,
+      "sqlState": "23000",
+      "sqlMessage": "Duplicate entry '12345678' for key 'conductores.conductores_cedula_unique'",
+      "sql": "insert into `conductores` (`capacidad`, `cedula`, `created_at`, `placa`, `tipo_vehiculo`, `usuario_id`) values ('1000kg', '12345678', '2026-05-29 19:52:23', 'ABC123', 'Camion', 12)",
+      "status": 500
+    }
+[20:04:26.556] [33mWARN[39m (6284): [36mRow not found[39m
+    [35mrequest_id[39m: "0bd1b5a4-e763-4726-92af-3d6b6423491c"
+    [35mx-request-id[39m: "0bd1b5a4-e763-4726-92af-3d6b6423491c"
+[21:08:47.900] [31mERROR[39m (6284): [36minsert into `conductores` (`capacidad`, `cedula`, `created_at`, `placa`, `tipo_vehiculo`, `usuario_id`) values ('500kg', 'V-TEST01', '2026-05-29 21:08:47', 'DUP-001', 'Camioneta', 17) - Duplicate entry 'V-TEST01' for key 'conductores.conductores_cedula_unique'[39m
+    [35mrequest_id[39m: "c460b595-a99f-47c6-8729-4a0799384bf3"
+    [35mx-request-id[39m: "c460b595-a99f-47c6-8729-4a0799384bf3"
+    err: {
+      "type": "Error",
+      "message": "insert into `conductores` (`capacidad`, `cedula`, `created_at`, `placa`, `tipo_vehiculo`, `usuario_id`) values ('500kg', 'V-TEST01', '2026-05-29 21:08:47', 'DUP-001', 'Camioneta', 17) - Duplicate entry 'V-TEST01' for key 'conductores.conductores_cedula_unique'",
+      "stack":
+          Error: insert into `conductores` (`capacidad`, `cedula`, `created_at`, `placa`, `tipo_vehiculo`, `usuario_id`) values ('500kg', 'V-TEST01', '2026-05-29 21:08:47', 'DUP-001', 'Camioneta', 17) - Duplicate entry 'V-TEST01' for key 'conductores.conductores_cedula_unique'
+              at Packet.asError (D:\cargaexpressbakend\node_modules\mysql2\lib\packets\packet.js:788:17)
+              at Query.execute (D:\cargaexpressbakend\node_modules\mysql2\lib\commands\command.js:29:26)
+              at Connection.handlePacket (D:\cargaexpressbakend\node_modules\mysql2\lib\base\connection.js:552:34)
+              at PacketParser.onPacket (D:\cargaexpressbakend\node_modules\mysql2\lib\base\connection.js:102:12)
+              at PacketParser.executeStart (D:\cargaexpressbakend\node_modules\mysql2\lib\packet_parser.js:75:16)
+              at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\mysql2\lib\base\connection.js:109:25)
+              at Socket.emit (node:events:509:28)
+              at addChunk (node:internal/streams/readable:563:12)
+              at readableAddChunkPushByteMode (node:internal/streams/readable:514:3)
+              at Readable.push (node:internal/streams/readable:394:5)
+      "code": "ER_DUP_ENTRY",
+      "errno": 1062,
+      "sqlState": "23000",
+      "sqlMessage": "Duplicate entry 'V-TEST01' for key 'conductores.conductores_cedula_unique'",
+      "sql": "insert into `conductores` (`capacidad`, `cedula`, `created_at`, `placa`, `tipo_vehiculo`, `usuario_id`) values ('500kg', 'V-TEST01', '2026-05-29 21:08:47', 'DUP-001', 'Camioneta', 17)",
+      "status": 500
+    }

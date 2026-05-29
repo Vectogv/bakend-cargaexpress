@@ -32,19 +32,177 @@ export class AuthAccessTokenSchema extends BaseModel {
   declare updatedAt: DateTime | null
 }
 
-export class UserSchema extends BaseModel {
-  static $columns = ['createdAt', 'email', 'fullName', 'id', 'password', 'updatedAt'] as const
-  $columns = UserSchema.$columns
+export class ConductoreSchema extends BaseModel {
+  static $columns = ['calificacion', 'capacidad', 'cedula', 'createdAt', 'fotoConductor', 'fotoVehiculo', 'horasActivo', 'id', 'online', 'placa', 'tipoVehiculo', 'totalViajes', 'ultimaUbicacionLat', 'ultimaUbicacionLng', 'usuarioId'] as const
+  $columns = ConductoreSchema.$columns
+  @column()
+  declare calificacion: string | null
+  @column()
+  declare capacidad: string | null
+  @column()
+  declare cedula: string
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
+  @column()
+  declare fotoConductor: string | null
+  @column()
+  declare fotoVehiculo: string | null
+  @column()
+  declare horasActivo: string | null
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare online: boolean | null
+  @column()
+  declare placa: string
+  @column()
+  declare tipoVehiculo: string | null
+  @column()
+  declare totalViajes: number | null
+  @column()
+  declare ultimaUbicacionLat: string | null
+  @column()
+  declare ultimaUbicacionLng: string | null
+  @column()
+  declare usuarioId: number
+}
+
+export class GananciaSchema extends BaseModel {
+  static $columns = ['conductorId', 'createdAt', 'id', 'monto', 'viajeId'] as const
+  $columns = GananciaSchema.$columns
+  @column()
+  declare conductorId: number
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare monto: string
+  @column()
+  declare viajeId: number | null
+}
+
+export class NotificacioneSchema extends BaseModel {
+  static $columns = ['createdAt', 'id', 'leido', 'mensaje', 'tipo', 'titulo', 'usuarioId'] as const
+  $columns = NotificacioneSchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare leido: boolean | null
+  @column()
+  declare mensaje: string | null
+  @column()
+  declare tipo: string
+  @column()
+  declare titulo: string
+  @column()
+  declare usuarioId: number
+}
+
+export class RefreshTokenSchema extends BaseModel {
+  static $columns = ['createdAt', 'expiresAt', 'id', 'token', 'userId'] as const
+  $columns = RefreshTokenSchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column.dateTime()
+  declare expiresAt: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare token: string
+  @column()
+  declare userId: number
+}
+
+export class UbicacionesDriverSchema extends BaseModel {
+  static $columns = ['conductorId', 'createdAt', 'id', 'lat', 'lng'] as const
+  $columns = UbicacionesDriverSchema.$columns
+  @column()
+  declare conductorId: number
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare lat: string
+  @column()
+  declare lng: string
+}
+
+export class UserSchema extends BaseModel {
+  static $columns = ['apellido', 'avatar', 'createdAt', 'edad', 'email', 'fullName', 'id', 'nombre', 'password', 'rol', 'telefono', 'updatedAt'] as const
+  $columns = UserSchema.$columns
+  @column()
+  declare apellido: string | null
+  @column()
+  declare avatar: string | null
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column()
+  declare edad: number | null
   @column()
   declare email: string
   @column()
   declare fullName: string | null
   @column({ isPrimary: true })
   declare id: number
+  @column()
+  declare nombre: string | null
   @column({ serializeAs: null })
   declare password: string
+  @column()
+  declare rol: string | null
+  @column()
+  declare telefono: string | null
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime | null
+}
+
+export class ViajeSchema extends BaseModel {
+  static $columns = ['aceptadoAt', 'calificacionCliente', 'canceladoAt', 'carga', 'clienteId', 'completadoAt', 'conductorId', 'createdAt', 'destinoDireccion', 'destinoLat', 'destinoLng', 'enCursoAt', 'estado', 'finalizadoAt', 'id', 'motivoCancelacion', 'origenDireccion', 'origenLat', 'origenLng', 'precioEstimado', 'precioFinal'] as const
+  $columns = ViajeSchema.$columns
+  @column.dateTime()
+  declare aceptadoAt: DateTime | null
+  @column()
+  declare calificacionCliente: number | null
+  @column.dateTime()
+  declare canceladoAt: DateTime | null
+  @column()
+  declare carga: string | null
+  @column()
+  declare clienteId: number
+  @column.dateTime()
+  declare completadoAt: DateTime | null
+  @column()
+  declare conductorId: number | null
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column()
+  declare destinoDireccion: string
+  @column()
+  declare destinoLat: string
+  @column()
+  declare destinoLng: string
+  @column.dateTime()
+  declare enCursoAt: DateTime | null
+  @column()
+  declare estado: string
+  @column.dateTime()
+  declare finalizadoAt: DateTime | null
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare motivoCancelacion: string | null
+  @column()
+  declare origenDireccion: string
+  @column()
+  declare origenLat: string
+  @column()
+  declare origenLng: string
+  @column()
+  declare precioEstimado: string | null
+  @column()
+  declare precioFinal: string | null
 }
