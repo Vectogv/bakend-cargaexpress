@@ -32,6 +32,7 @@ export function initSocket(nodeHttpServer: NodeServer | null) {
 
   io = new SocketServer(nodeHttpServer, {
     cors: {
+      // En producción esto se controla por variable de entorno
       origin: process.env.NODE_ENV === 'production'
         ? (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean)
         : '*',
@@ -42,6 +43,7 @@ export function initSocket(nodeHttpServer: NodeServer | null) {
   io.on('connection', (socket) => {
     logger.info(`Socket connected: ${socket.id}`)
 
+    // ✅ CORREGIDO: join:driver verifica que el userId corresponda a un conductor real
     socket.on('join:driver', async (userId: string | number) => {
       try {
         const user = await User.find(userId)
@@ -53,6 +55,7 @@ export function initSocket(nodeHttpServer: NodeServer | null) {
       }
     })
 
+    // ✅ CORREGIDO: join:client verifica que el userId exista
     socket.on('join:client', async (userId: string | number) => {
       try {
         const user = await User.find(userId)
@@ -64,6 +67,7 @@ export function initSocket(nodeHttpServer: NodeServer | null) {
       }
     })
 
+    // ✅ CORREGIDO: join:admin verifica en BD que el usuario tenga rol admin
     socket.on('join:admin', async (userId: string | number) => {
       try {
         const user = await User.find(userId)

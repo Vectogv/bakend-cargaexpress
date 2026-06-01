@@ -27,18 +27,7 @@ export class AlertasEmergenciaSchema extends BaseModel {
 }
 
 export class AuthAccessTokenSchema extends BaseModel {
-  static $columns = [
-    'abilities',
-    'createdAt',
-    'expiresAt',
-    'hash',
-    'id',
-    'lastUsedAt',
-    'name',
-    'tokenableId',
-    'type',
-    'updatedAt',
-  ] as const
+  static $columns = ['abilities', 'createdAt', 'expiresAt', 'hash', 'id', 'lastUsedAt', 'name', 'tokenableId', 'type', 'updatedAt'] as const
   $columns = AuthAccessTokenSchema.$columns
   @column()
   declare abilities: string
@@ -63,16 +52,7 @@ export class AuthAccessTokenSchema extends BaseModel {
 }
 
 export class CalificacioneSchema extends BaseModel {
-  static $columns = [
-    'calificadoId',
-    'calificadorId',
-    'comentario',
-    'createdAt',
-    'id',
-    'puntaje',
-    'tipo',
-    'viajeId',
-  ] as const
+  static $columns = ['calificadoId', 'calificadorId', 'comentario', 'createdAt', 'id', 'puntaje', 'tipo', 'viajeId'] as const
   $columns = CalificacioneSchema.$columns
   @column()
   declare calificadoId: number
@@ -93,17 +73,7 @@ export class CalificacioneSchema extends BaseModel {
 }
 
 export class ComunicadoSchema extends BaseModel {
-  static $columns = [
-    'contenido',
-    'createdAt',
-    'estado',
-    'id',
-    'moderadorId',
-    'notaRechazo',
-    'publicadoAt',
-    'titulo',
-    'zona',
-  ] as const
+  static $columns = ['contenido', 'createdAt', 'estado', 'id', 'moderadorId', 'notaRechazo', 'publicadoAt', 'titulo', 'zona'] as const
   $columns = ComunicadoSchema.$columns
   @column()
   declare contenido: string
@@ -126,27 +96,7 @@ export class ComunicadoSchema extends BaseModel {
 }
 
 export class ConductoreSchema extends BaseModel {
-  static $columns = [
-    'calificacion',
-    'capacidad',
-    'cedula',
-    'createdAt',
-    'estadoVerificacion',
-    'fotoCedula',
-    'fotoConductor',
-    'fotoLicencia',
-    'fotoVehiculo',
-    'horasActivo',
-    'id',
-    'notaRechazo',
-    'online',
-    'placa',
-    'tipoVehiculo',
-    'totalViajes',
-    'ultimaUbicacionLat',
-    'ultimaUbicacionLng',
-    'usuarioId',
-  ] as const
+  static $columns = ['calificacion', 'capacidad', 'cedula', 'createdAt', 'estadoVerificacion', 'fotoCedula', 'fotoConductor', 'fotoLicencia', 'fotoVehiculo', 'horasActivo', 'id', 'notaRechazo', 'online', 'placa', 'tipoVehiculo', 'totalViajes', 'ultimaUbicacionLat', 'ultimaUbicacionLng', 'usuarioId'] as const
   $columns = ConductoreSchema.$columns
   @column()
   declare calificacion: string | null
@@ -189,18 +139,7 @@ export class ConductoreSchema extends BaseModel {
 }
 
 export class ConfiguracionPlataformaSchema extends BaseModel {
-  static $columns = [
-    'bannerActivo',
-    'bannerImagenUrl',
-    'bannerLink',
-    'bannerTexto',
-    'createdAt',
-    'id',
-    'nequiNombre',
-    'nequiNumero',
-    'updatedAt',
-    'zonasCobertura',
-  ] as const
+  static $columns = ['bannerActivo', 'bannerImagenUrl', 'bannerLink', 'bannerTexto', 'createdAt', 'id', 'nequiNombre', 'nequiNumero', 'updatedAt', 'zonasCobertura'] as const
   $columns = ConfiguracionPlataformaSchema.$columns
   @column()
   declare bannerActivo: boolean
@@ -225,19 +164,7 @@ export class ConfiguracionPlataformaSchema extends BaseModel {
 }
 
 export class DisputaSchema extends BaseModel {
-  static $columns = [
-    'clienteId',
-    'conductorId',
-    'createdAt',
-    'estado',
-    'id',
-    'resueltaAt',
-    'resultado',
-    'soporteCliente',
-    'versionCliente',
-    'versionConductor',
-    'viajeId',
-  ] as const
+  static $columns = ['clienteId', 'conductorId', 'createdAt', 'estado', 'id', 'resueltaAt', 'resultado', 'soporteCliente', 'versionCliente', 'versionConductor', 'viajeId'] as const
   $columns = DisputaSchema.$columns
   @column()
   declare clienteId: number
@@ -264,16 +191,7 @@ export class DisputaSchema extends BaseModel {
 }
 
 export class EncuestaSchema extends BaseModel {
-  static $columns = [
-    'createdAt',
-    'estado',
-    'fechaCierre',
-    'id',
-    'moderadorId',
-    'opciones',
-    'pregunta',
-    'zona',
-  ] as const
+  static $columns = ['createdAt', 'estado', 'fechaCierre', 'id', 'moderadorId', 'opciones', 'pregunta', 'zona'] as const
   $columns = EncuestaSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -294,15 +212,7 @@ export class EncuestaSchema extends BaseModel {
 }
 
 export class ForoMensajeSchema extends BaseModel {
-  static $columns = [
-    'autorId',
-    'contenido',
-    'createdAt',
-    'eliminado',
-    'fijado',
-    'id',
-    'zona',
-  ] as const
+  static $columns = ['autorId', 'contenido', 'createdAt', 'eliminado', 'fijado', 'id', 'zona'] as const
   $columns = ForoMensajeSchema.$columns
   @column()
   declare autorId: number
@@ -321,18 +231,7 @@ export class ForoMensajeSchema extends BaseModel {
 }
 
 export class GananciaSchema extends BaseModel {
-  static $columns = [
-    'comision',
-    'comisionPagada',
-    'comisionPagadaAt',
-    'conductorId',
-    'createdAt',
-    'id',
-    'monto',
-    'montoBruto',
-    'montoNeto',
-    'viajeId',
-  ] as const
+  static $columns = ['comision', 'comisionPagada', 'comisionPagadaAt', 'conductorId', 'createdAt', 'id', 'monto', 'montoBruto', 'montoNeto', 'viajeId'] as const
   $columns = GananciaSchema.$columns
   @column()
   declare comision: string | null
@@ -357,15 +256,7 @@ export class GananciaSchema extends BaseModel {
 }
 
 export class LogsRespaldoSchema extends BaseModel {
-  static $columns = [
-    'archivo',
-    'createdAt',
-    'driveId',
-    'errorMensaje',
-    'estado',
-    'fecha',
-    'id',
-  ] as const
+  static $columns = ['archivo', 'createdAt', 'driveId', 'errorMensaje', 'estado', 'fecha', 'id'] as const
   $columns = LogsRespaldoSchema.$columns
   @column()
   declare archivo: string | null
@@ -452,16 +343,7 @@ export class RefreshTokenSchema extends BaseModel {
 }
 
 export class ReporteSchema extends BaseModel {
-  static $columns = [
-    'clienteId',
-    'conductorId',
-    'createdAt',
-    'descripcion',
-    'estado',
-    'id',
-    'motivo',
-    'viajeId',
-  ] as const
+  static $columns = ['clienteId', 'conductorId', 'createdAt', 'descripcion', 'estado', 'id', 'motivo', 'viajeId'] as const
   $columns = ReporteSchema.$columns
   @column()
   declare clienteId: number
@@ -482,14 +364,7 @@ export class ReporteSchema extends BaseModel {
 }
 
 export class ReportesModeradorSchema extends BaseModel {
-  static $columns = [
-    'conductorId',
-    'createdAt',
-    'descripcion',
-    'estado',
-    'id',
-    'moderadorId',
-  ] as const
+  static $columns = ['conductorId', 'createdAt', 'descripcion', 'estado', 'id', 'moderadorId'] as const
   $columns = ReportesModeradorSchema.$columns
   @column()
   declare conductorId: number
@@ -521,18 +396,7 @@ export class RespuestasEncuestaSchema extends BaseModel {
 }
 
 export class RutasFavoritaSchema extends BaseModel {
-  static $columns = [
-    'createdAt',
-    'destinoDireccion',
-    'destinoLat',
-    'destinoLng',
-    'id',
-    'nombre',
-    'origenDireccion',
-    'origenLat',
-    'origenLng',
-    'userId',
-  ] as const
+  static $columns = ['createdAt', 'destinoDireccion', 'destinoLat', 'destinoLng', 'id', 'nombre', 'origenDireccion', 'origenLat', 'origenLng', 'userId'] as const
   $columns = RutasFavoritaSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -572,44 +436,14 @@ export class UbicacionesDriverSchema extends BaseModel {
 }
 
 export class UserSchema extends BaseModel {
-  static $columns = [
-    'apellido',
-    'avatar',
-    'calificacion',
-    'comprobantePago',
-    'contactoEmergenciaNombre',
-    'contactoEmergenciaTelefono',
-    'createdAt',
-    'deudaFechaLimite',
-    'edad',
-    'email',
-    'esModerador',
-    'estadoCuenta',
-    'fcmToken',
-    'fullName',
-    'id',
-    'montoDeuda',
-    'nombre',
-    'password',
-    'reportesInfundadosConductor',
-    'reputacion',
-    'rol',
-    'suspendido',
-    'telefono',
-    'tieneDeudaActiva',
-    'totalReportes',
-    'totalViajesCompletados',
-    'updatedAt',
-    'visibilidad',
-    'zonaModerador',
-  ] as const
+  static $columns = ['apellido', 'avatar', 'calificacion', 'comprobantePago', 'contactoEmergenciaNombre', 'contactoEmergenciaTelefono', 'createdAt', 'deudaFechaLimite', 'edad', 'email', 'esModerador', 'estadoCuenta', 'fcmToken', 'fullName', 'id', 'montoDeuda', 'nombre', 'password', 'reportesInfundadosConductor', 'reputacion', 'rol', 'suspendido', 'telefono', 'tieneDeudaActiva', 'totalReportes', 'totalViajesCompletados', 'updatedAt', 'visibilidad', 'zonaModerador'] as const
   $columns = UserSchema.$columns
   @column()
   declare apellido: string | null
   @column()
   declare avatar: string | null
   @column()
-  declare calificacion: number | null
+  declare calificacion: string | null
   @column()
   declare comprobantePago: string | null
   @column()
@@ -635,7 +469,7 @@ export class UserSchema extends BaseModel {
   @column({ isPrimary: true })
   declare id: number
   @column()
-  declare montoDeuda: number | null
+  declare montoDeuda: string | null
   @column()
   declare nombre: string | null
   @column({ serializeAs: null })
@@ -643,7 +477,7 @@ export class UserSchema extends BaseModel {
   @column()
   declare reportesInfundadosConductor: number
   @column()
-  declare reputacion: number
+  declare reputacion: string
   @column()
   declare rol: string | null
   @column()
@@ -665,31 +499,7 @@ export class UserSchema extends BaseModel {
 }
 
 export class ViajeSchema extends BaseModel {
-  static $columns = [
-    'aceptadoAt',
-    'calificacionCliente',
-    'canceladoAt',
-    'carga',
-    'clienteId',
-    'completadoAt',
-    'conductorId',
-    'createdAt',
-    'destinoDireccion',
-    'destinoLat',
-    'destinoLng',
-    'enCursoAt',
-    'estado',
-    'finalizadoAt',
-    'fotoEntrega',
-    'id',
-    'motivoCancelacion',
-    'origenDireccion',
-    'origenLat',
-    'origenLng',
-    'precioCliente',
-    'precioEstimado',
-    'precioFinal',
-  ] as const
+  static $columns = ['aceptadoAt', 'calificacionCliente', 'canceladoAt', 'carga', 'clienteId', 'completadoAt', 'conductorId', 'createdAt', 'destinoDireccion', 'destinoLat', 'destinoLng', 'enCursoAt', 'estado', 'finalizadoAt', 'fotoEntrega', 'id', 'motivoCancelacion', 'origenDireccion', 'origenLat', 'origenLng', 'precioCliente', 'precioEstimado', 'precioFinal'] as const
   $columns = ViajeSchema.$columns
   @column.dateTime()
   declare aceptadoAt: DateTime | null
@@ -732,9 +542,9 @@ export class ViajeSchema extends BaseModel {
   @column()
   declare origenLng: string
   @column()
-  declare precioCliente: number | null
+  declare precioCliente: string | null
   @column()
-  declare precioEstimado: number | null
+  declare precioEstimado: string | null
   @column()
-  declare precioFinal: number | null
+  declare precioFinal: string | null
 }

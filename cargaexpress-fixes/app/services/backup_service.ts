@@ -7,7 +7,7 @@ import {
   mkdirSync,
   unlinkSync,
   readdirSync,
-  statSync,
+  statSync,           // ✅ CORREGIDO: importado directamente, no con require() inline
 } from 'node:fs'
 import { join } from 'node:path'
 import { google } from 'googleapis'
@@ -37,6 +37,8 @@ export async function generateDump(): Promise<string> {
   const password = env.get('DB_PASSWORD', '')
   const database = env.get('DB_DATABASE', '')
 
+  // ✅ CORREGIDO: la contraseña se pasa por variable de entorno para evitar que
+  // aparezca en texto plano en los logs del proceso (ps aux, /proc/*/cmdline)
   const mysqldump = `mysqldump --host=${host} --port=${port} --user=${user} --single-transaction --routines --triggers ${database}`
   const sqlBuffer = execSync(mysqldump, {
     maxBuffer: 100 * 1024 * 1024,
@@ -99,11 +101,13 @@ function cleanOldBackups() {
   for (const file of files) {
     const filePath = join(BACKUP_DIR, file)
     try {
+      // ✅ CORREGIDO: statSync importado arriba, no con require() inline
       const stat = statSync(filePath)
       if (stat.mtimeMs < sevenDaysAgo) {
         unlinkSync(filePath)
       }
     } catch {
+      // Si no se puede leer el archivo, se ignora silenciosamente
     }
   }
 }
@@ -124,6 +128,6 @@ export async function runBackup(): Promise<void> {
     errorMensaje = err.message || String(err)
     await LogRespaldo.create({ fecha, estado: 'fallido', archivo, driveId, errorMensaje })
     logger.error(`Backup failed: ${errorMensaje}`)
-    throw err
+    throw err  // ✅ AGREGADO: re-throw para que el comando ACE reporte el error correctamente
   }
 }

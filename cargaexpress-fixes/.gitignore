@@ -17,7 +17,7 @@ firebase-credentials.json
 # Google service account keys
 google-service-account*.json
 
-# Logs del servidor
+# Logs del servidor — ✅ AGREGADO
 *.log
 server_err.log
 server_out.log

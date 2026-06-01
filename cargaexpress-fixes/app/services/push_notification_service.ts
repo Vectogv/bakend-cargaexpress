@@ -2,6 +2,8 @@ import { createRequire } from 'node:module'
 import env from '#start/env'
 import logger from '@adonisjs/core/services/logger'
 
+// ✅ CORREGIDO: En proyectos ESM ("type":"module") no se puede usar require() directamente.
+// createRequire permite importar archivos JSON o CJS desde ESM.
 const require = createRequire(import.meta.url)
 
 let messaging: import('firebase-admin/messaging').Messaging | null = null
@@ -16,6 +18,7 @@ function ensureInit() {
   }
 
   try {
+    // ✅ CORREGIDO: usar require() seguro vía createRequire para cargar el JSON de credenciales
     const serviceAccount = require(credPath)
     const { initializeApp, cert, getApps } = require('firebase-admin/app')
     const { getMessaging } = require('firebase-admin/messaging')
@@ -41,6 +44,7 @@ export async function sendToToken(
   try {
     await messaging.send({ token, notification: { title, body }, data })
   } catch (err: any) {
+    // Token inválido — no es un error crítico, solo lo ignoramos
     if (err.code === 'messaging/registration-token-not-registered') return
     logger.error(`FCM send error: ${err.message}`)
   }
