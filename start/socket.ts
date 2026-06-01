@@ -11,6 +11,18 @@ export function getIO(): SocketServer {
   return io
 }
 
+export function emitToClient(clienteId: number | string, event: string, data: unknown) {
+  getIO().to(`client:${clienteId}`).emit(event, data)
+}
+
+export function emitToDriver(driverUserId: number | string, event: string, data: unknown) {
+  getIO().to(`driver:${driverUserId}`).emit(event, data)
+}
+
+export function emitToAdmin(event: string, data: unknown) {
+  getIO().to('admin').emit(event, data)
+}
+
 export function initSocket(nodeHttpServer: NodeServer | null) {
   if (!nodeHttpServer) {
     logger.warn('No Node HTTP server available for Socket.io')
@@ -33,6 +45,12 @@ export function initSocket(nodeHttpServer: NodeServer | null) {
 
     socket.on('join:client', (userId: string | number) => {
       socket.join(`client:${userId}`)
+    })
+
+    socket.on('join:admin', (rol: string) => {
+      if (rol === 'admin') {
+        socket.join('admin')
+      }
     })
 
     socket.on('disconnect', () => {

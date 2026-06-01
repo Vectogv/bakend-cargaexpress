@@ -4,7 +4,10 @@ import NotificacionTransformer from '#transformers/notificacion_transformer'
 import { ApiOperation, ApiResponse } from '@foadonis/openapi/decorators'
 
 export default class NotificationController {
-  @ApiOperation({ summary: 'List notifications', description: 'Returns all notifications for the authenticated user' })
+  @ApiOperation({
+    summary: 'List notifications',
+    description: 'Returns all notifications for the authenticated user',
+  })
   @ApiResponse({ type: 'array' })
   async index({ auth, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -12,10 +15,15 @@ export default class NotificationController {
       .where('usuario_id', user.id)
       .orderBy('createdAt', 'desc')
 
-    return serialize.withoutWrapping(notificaciones.map((n) => NotificacionTransformer.transform(n)))
+    return serialize.withoutWrapping(
+      notificaciones.map((n) => NotificacionTransformer.transform(n))
+    )
   }
 
-  @ApiOperation({ summary: 'Mark notification as read', description: 'Marks a specific notification as read' })
+  @ApiOperation({
+    summary: 'Mark notification as read',
+    description: 'Marks a specific notification as read',
+  })
   @ApiResponse({ type: 'object' })
   async read({ params, serialize }: HttpContext) {
     const notificacion = await Notificacion.findOrFail(params.id)

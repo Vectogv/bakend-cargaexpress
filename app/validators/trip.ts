@@ -12,6 +12,7 @@ export const tripRequestValidator = vine.create({
     lng: vine.number().min(-180).max(180),
   }),
   descripcion: vine.string().nullable().optional(),
+  precioCliente: vine.number().min(0),
 })
 
 export const tripCompleteValidator = vine.create({

@@ -79,6 +79,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/profile_controller').default['avatar']>>>
     }
   }
+  'users.profile.update_fcm_token': {
+    methods: ["PUT"]
+    pattern: '/api/users/fcm-token'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/profile_controller').default['updateFcmToken']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/profile_controller').default['updateFcmToken']>>>
+    }
+  }
   'drivers.driver.status': {
     methods: ["PUT"]
     pattern: '/api/drivers/status'
@@ -127,6 +139,30 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['todayStats']>>>
     }
   }
+  'drivers.driver.earnings_history': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/drivers/earnings/history'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['earningsHistory']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['earningsHistory']>>>
+    }
+  }
+  'drivers.driver.earnings_pdf': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/drivers/earnings/pdf'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['earningsPDF']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['earningsPDF']>>>
+    }
+  }
   'drivers.driver.vehicle_photo': {
     methods: ["POST"]
     pattern: '/api/drivers/vehicle-photo'
@@ -161,6 +197,42 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['driverPhoto']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['driverPhoto']>>>
+    }
+  }
+  'drivers.driver.upload_cedula': {
+    methods: ["POST"]
+    pattern: '/api/drivers/verification/cedula'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['uploadCedula']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['uploadCedula']>>>
+    }
+  }
+  'drivers.driver.upload_licencia': {
+    methods: ["POST"]
+    pattern: '/api/drivers/verification/licencia'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['uploadLicencia']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['uploadLicencia']>>>
+    }
+  }
+  'drivers.driver.upload_vehiculo': {
+    methods: ["POST"]
+    pattern: '/api/drivers/verification/vehiculo'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['uploadVehiculo']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/driver_controller').default['uploadVehiculo']>>>
     }
   }
   'trips.trip.request': {
@@ -293,6 +365,138 @@ export interface Registry {
       query: ExtractQuery<InferInput<(typeof import('#validators/trip').tripCancelValidator)>>
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['cancel']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['cancel']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'trips.trip.rate': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/rate'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['rate']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['rate']>>>
+    }
+  }
+  'trips.trip.delivery_photo': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/delivery-photo'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['deliveryPhoto']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['deliveryPhoto']>>>
+    }
+  }
+  'trips.chat.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/trips/:id/chat'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/chat_controller').default['index']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/chat_controller').default['index']>>>
+    }
+  }
+  'trips.chat.store': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/chat'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/chat_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/chat_controller').default['store']>>>
+    }
+  }
+  'trips.dispute.store': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/dispute'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['store']>>>
+    }
+  }
+  'trips.dispute.appeal': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/dispute/appeal'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['appeal']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['appeal']>>>
+    }
+  }
+  'trips.dispute.upload_support': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/dispute/support'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['uploadSupport']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['uploadSupport']>>>
+    }
+  }
+  'trips.offer.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/trips/:id/offers'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['index']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['index']>>>
+    }
+  }
+  'trips.offer.store': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/offers'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['store']>>>
+    }
+  }
+  'trips.offer.accept': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/offers/:offerId/accept'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue, ParamValue]
+      params: { id: ParamValue; offerId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['accept']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['accept']>>>
+    }
+  }
+  'trips.report.store': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/report'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/report_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/report_controller').default['store']>>>
     }
   }
   'notifications.notification.index': {
@@ -439,6 +643,30 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['profile']>>>
     }
   }
+  'admin.admin.emergencies': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/emergencies'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['emergencies']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['emergencies']>>>
+    }
+  }
+  'admin.admin.resolve_emergency': {
+    methods: ["PUT"]
+    pattern: '/api/admin/emergencies/:id/resolve'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['resolveEmergency']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['resolveEmergency']>>>
+    }
+  }
   'admin.admin.update_profile': {
     methods: ["PUT"]
     pattern: '/api/admin/profile'
@@ -463,6 +691,330 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['uploadProfileAvatar']>>>
     }
   }
+  'admin.admin.conductor_debt': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/commissions'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['conductorDebt']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['conductorDebt']>>>
+    }
+  }
+  'admin.admin.mark_commission_paid': {
+    methods: ["PUT"]
+    pattern: '/api/admin/commissions/:conductorId/paid'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { conductorId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['markCommissionPaid']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['markCommissionPaid']>>>
+    }
+  }
+  'admin.admin.commission_history': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/commissions/:conductorId/history'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { conductorId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['commissionHistory']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['commissionHistory']>>>
+    }
+  }
+  'admin.admin.reports': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/reports'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['reports']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['reports']>>>
+    }
+  }
+  'admin.admin.resolve_report': {
+    methods: ["PUT"]
+    pattern: '/api/admin/reports/:id/resolve'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['resolveReport']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['resolveReport']>>>
+    }
+  }
+  'admin.admin.disputes': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/disputes'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['disputes']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['disputes']>>>
+    }
+  }
+  'admin.admin.resolve_dispute': {
+    methods: ["PUT"]
+    pattern: '/api/admin/disputes/:id/resolve'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['resolveDispute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['resolveDispute']>>>
+    }
+  }
+  'admin.admin.clear_debt': {
+    methods: ["PUT"]
+    pattern: '/api/admin/users/:id/clear-debt'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['clearDebt']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['clearDebt']>>>
+    }
+  }
+  'admin.admin.pending_verifications': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/verifications'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['pendingVerifications']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['pendingVerifications']>>>
+    }
+  }
+  'admin.admin.approve_driver': {
+    methods: ["PUT"]
+    pattern: '/api/admin/verifications/:conductorId/approve'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { conductorId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['approveDriver']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['approveDriver']>>>
+    }
+  }
+  'admin.admin.reject_driver': {
+    methods: ["PUT"]
+    pattern: '/api/admin/verifications/:conductorId/reject'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { conductorId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['rejectDriver']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['rejectDriver']>>>
+    }
+  }
+  'admin.admin.pending_payments': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/payments/pending'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['pendingPayments']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['pendingPayments']>>>
+    }
+  }
+  'admin.admin.confirm_payment': {
+    methods: ["PUT"]
+    pattern: '/api/admin/payments/:userId/confirm'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { userId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['confirmPayment']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['confirmPayment']>>>
+    }
+  }
+  'admin.admin.reject_payment': {
+    methods: ["PUT"]
+    pattern: '/api/admin/payments/:userId/reject'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { userId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['rejectPayment']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['rejectPayment']>>>
+    }
+  }
+  'admin.admin.update_config': {
+    methods: ["PUT"]
+    pattern: '/api/admin/config'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateConfig']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateConfig']>>>
+    }
+  }
+  'admin.admin.update_coverage': {
+    methods: ["PUT"]
+    pattern: '/api/admin/config/coverage'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateCoverage']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateCoverage']>>>
+    }
+  }
+  'admin.admin.update_banner': {
+    methods: ["PUT"]
+    pattern: '/api/admin/config/banner'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateBanner']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateBanner']>>>
+    }
+  }
+  'admin.admin.assign_moderator': {
+    methods: ["PUT"]
+    pattern: '/api/admin/users/:id/moderator'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['assignModerator']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['assignModerator']>>>
+    }
+  }
+  'admin.admin.approve_comunicado': {
+    methods: ["PUT"]
+    pattern: '/api/admin/comunicados/:id/approve'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['approveComunicado']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['approveComunicado']>>>
+    }
+  }
+  'admin.admin.reject_comunicado': {
+    methods: ["PUT"]
+    pattern: '/api/admin/comunicados/:id/reject'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['rejectComunicado']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['rejectComunicado']>>>
+    }
+  }
+  'admin.admin.approve_encuesta': {
+    methods: ["PUT"]
+    pattern: '/api/admin/encuestas/:id/approve'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['approveEncuesta']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['approveEncuesta']>>>
+    }
+  }
+  'admin.admin.moderator_reports': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/moderator-reports'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['moderatorReports']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['moderatorReports']>>>
+    }
+  }
+  'admin.admin.backup_logs': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/backups'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['backupLogs']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['backupLogs']>>>
+    }
+  }
+  'admin.admin.manual_backup': {
+    methods: ["POST"]
+    pattern: '/api/admin/backups/run'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['manualBackup']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['manualBackup']>>>
+    }
+  }
+  'favorites.favorite_route.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/favorites'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/favorite_route_controller').default['index']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/favorite_route_controller').default['index']>>>
+    }
+  }
+  'favorites.favorite_route.store': {
+    methods: ["POST"]
+    pattern: '/api/favorites'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/favorite_route_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/favorite_route_controller').default['store']>>>
+    }
+  }
+  'favorites.favorite_route.destroy': {
+    methods: ["DELETE"]
+    pattern: '/api/favorites/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/favorite_route_controller').default['destroy']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/favorite_route_controller').default['destroy']>>>
+    }
+  }
   'support.support.help': {
     methods: ["GET","HEAD"]
     pattern: '/api/support/help'
@@ -485,6 +1037,198 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/support_controller').default['emergency']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/support_controller').default['emergency']>>>
+    }
+  }
+  'payment.payment.info': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/payment/debt'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/payment_controller').default['info']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/payment_controller').default['info']>>>
+    }
+  }
+  'payment.payment.upload_proof': {
+    methods: ["POST"]
+    pattern: '/api/payment/proof'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/payment_controller').default['uploadProof']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/payment_controller').default['uploadProof']>>>
+    }
+  }
+  'moderator.moderator.store_comunicado': {
+    methods: ["POST"]
+    pattern: '/api/moderator/comunicados'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['storeComunicado']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['storeComunicado']>>>
+    }
+  }
+  'moderator.moderator.my_comunicados': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/comunicados'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['myComunicados']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['myComunicados']>>>
+    }
+  }
+  'moderator.moderator.drivers_list': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/drivers'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['driversList']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['driversList']>>>
+    }
+  }
+  'moderator.moderator.inactive_drivers': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/drivers/inactive'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['inactiveDrivers']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['inactiveDrivers']>>>
+    }
+  }
+  'moderator.moderator.notify_driver': {
+    methods: ["POST"]
+    pattern: '/api/moderator/drivers/:id/notify'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['notifyDriver']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['notifyDriver']>>>
+    }
+  }
+  'moderator.moderator.report_driver': {
+    methods: ["POST"]
+    pattern: '/api/moderator/drivers/:id/report'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['reportDriver']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['reportDriver']>>>
+    }
+  }
+  'moderator.moderator.store_encuesta': {
+    methods: ["POST"]
+    pattern: '/api/moderator/encuestas'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['storeEncuesta']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['storeEncuesta']>>>
+    }
+  }
+  'moderator.moderator.encuesta_results': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/encuestas/:id/results'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['encuestaResults']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['encuestaResults']>>>
+    }
+  }
+  'moderator.moderator.answer_encuesta': {
+    methods: ["POST"]
+    pattern: '/api/moderator/encuestas/:id/answer'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['answerEncuesta']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['answerEncuesta']>>>
+    }
+  }
+  'foro.moderator.foro_index': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/foro'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroIndex']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroIndex']>>>
+    }
+  }
+  'foro.moderator.foro_store': {
+    methods: ["POST"]
+    pattern: '/api/foro'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroStore']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroStore']>>>
+    }
+  }
+  'foro.moderator.foro_pin': {
+    methods: ["PUT"]
+    pattern: '/api/foro/:id/pin'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroPin']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroPin']>>>
+    }
+  }
+  'foro.moderator.foro_delete': {
+    methods: ["DELETE"]
+    pattern: '/api/foro/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroDelete']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroDelete']>>>
+    }
+  }
+  'emergency.trigger': {
+    methods: ["POST"]
+    pattern: '/api/emergency'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/emergency_controller').default['trigger']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/emergency_controller').default['trigger']>>>
     }
   }
 }

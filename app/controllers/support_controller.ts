@@ -25,7 +25,10 @@ export default class SupportController {
     })
   }
 
-  @ApiOperation({ summary: 'Get emergency numbers', description: 'Returns emergency and support phone numbers' })
+  @ApiOperation({
+    summary: 'Get emergency numbers',
+    description: 'Returns emergency and support phone numbers',
+  })
   @ApiResponse({ type: 'object' })
   async emergency({ serialize }: HttpContext) {
     return serialize.withoutWrapping({

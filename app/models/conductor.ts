@@ -21,6 +21,10 @@ export default class Conductor extends BaseModel {
     'horasActivo',
     'ultimaUbicacionLat',
     'ultimaUbicacionLng',
+    'estadoVerificacion',
+    'fotoCedula',
+    'fotoLicencia',
+    'notaRechazo',
     'createdAt',
   ] as const
   $columns = Conductor.$columns
@@ -80,6 +84,22 @@ export default class Conductor extends BaseModel {
   @ApiProperty()
   @column()
   declare ultimaUbicacionLng: number | null
+
+  @ApiProperty()
+  @column()
+  declare estadoVerificacion: string
+
+  @ApiProperty()
+  @column()
+  declare fotoCedula: string | null
+
+  @ApiProperty()
+  @column()
+  declare fotoLicencia: string | null
+
+  @ApiProperty()
+  @column()
+  declare notaRechazo: string | null
 
   @ApiProperty()
   @column.dateTime({ autoCreate: true })

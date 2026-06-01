@@ -6,7 +6,18 @@ import Viaje from './viaje.js'
 import { ApiProperty } from '@foadonis/openapi/decorators'
 
 export default class Ganancia extends BaseModel {
-  static $columns = ['id', 'conductorId', 'viajeId', 'monto', 'createdAt'] as const
+  static $columns = [
+    'id',
+    'conductorId',
+    'viajeId',
+    'monto',
+    'montoBruto',
+    'comision',
+    'montoNeto',
+    'comisionPagada',
+    'comisionPagadaAt',
+    'createdAt',
+  ] as const
   $columns = Ganancia.$columns
 
   @ApiProperty()
@@ -24,6 +35,26 @@ export default class Ganancia extends BaseModel {
   @ApiProperty()
   @column()
   declare monto: number
+
+  @ApiProperty()
+  @column()
+  declare montoBruto: number | null
+
+  @ApiProperty()
+  @column()
+  declare comision: number | null
+
+  @ApiProperty()
+  @column()
+  declare montoNeto: number | null
+
+  @ApiProperty()
+  @column()
+  declare comisionPagada: boolean
+
+  @ApiProperty()
+  @column.dateTime()
+  declare comisionPagadaAt: DateTime | null
 
   @ApiProperty()
   @column.dateTime({ autoCreate: true })

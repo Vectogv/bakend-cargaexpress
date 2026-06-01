@@ -6,4 +6,6 @@ export const updateProfileValidator = vine.create({
   email: vine.string().email().maxLength(254).optional(),
   telefono: vine.string().maxLength(20).nullable().optional(),
   edad: vine.number().min(18).max(120).nullable().optional(),
+  contactoEmergenciaNombre: vine.string().maxLength(100).nullable().optional(),
+  contactoEmergenciaTelefono: vine.string().maxLength(20).nullable().optional(),
 })

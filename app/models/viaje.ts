@@ -18,10 +18,13 @@ export default class Viaje extends BaseModel {
     'destinoLat',
     'destinoLng',
     'carga',
+    'precioCliente',
     'precioEstimado',
     'precioFinal',
     'motivoCancelacion',
     'calificacionCliente',
+    'fotoEntrega',
+    'tiempoEstimadoMinutos',
     'createdAt',
     'aceptadoAt',
     'completadoAt',
@@ -77,6 +80,10 @@ export default class Viaje extends BaseModel {
 
   @ApiProperty()
   @column()
+  declare precioCliente: number | null
+
+  @ApiProperty()
+  @column()
   declare precioEstimado: number | null
 
   @ApiProperty()
@@ -92,26 +99,28 @@ export default class Viaje extends BaseModel {
   declare calificacionCliente: number | null
 
   @ApiProperty()
+  @column()
+  declare fotoEntrega: string | null
+
+  @ApiProperty()
+  @column()
+  declare tiempoEstimadoMinutos: number | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
-  @ApiProperty()
   @column.dateTime()
   declare aceptadoAt: DateTime | null
 
-  @ApiProperty()
   @column.dateTime()
   declare completadoAt: DateTime | null
 
-  @ApiProperty()
   @column.dateTime()
   declare canceladoAt: DateTime | null
 
-  @ApiProperty()
   @column.dateTime()
   declare enCursoAt: DateTime | null
 
-  @ApiProperty()
   @column.dateTime()
   declare finalizadoAt: DateTime | null
 

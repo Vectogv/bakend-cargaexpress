@@ -6,7 +6,10 @@ import { randomUUID } from 'node:crypto'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 
 export default class ProfileController {
-  @ApiOperation({ summary: 'Get user profile', description: 'Returns the authenticated user profile with conductor info' })
+  @ApiOperation({
+    summary: 'Get user profile',
+    description: 'Returns the authenticated user profile with conductor info',
+  })
   @ApiResponse({ type: 'object' })
   async show({ auth, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -21,6 +24,9 @@ export default class ProfileController {
       edad: user.edad,
       avatar: user.avatar,
       rol: user.rol,
+      calificacion: user.calificacion,
+      contactoEmergenciaNombre: user.contactoEmergenciaNombre,
+      contactoEmergenciaTelefono: user.contactoEmergenciaTelefono,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       conductor: user.conductor
@@ -46,7 +52,10 @@ export default class ProfileController {
     return serialize.withoutWrapping(result)
   }
 
-  @ApiOperation({ summary: 'Update user profile', description: 'Updates the authenticated user profile fields' })
+  @ApiOperation({
+    summary: 'Update user profile',
+    description: 'Updates the authenticated user profile fields',
+  })
   @ApiBody({ type: () => updateProfileValidator })
   @ApiResponse({ type: 'object' })
   async update({ auth, request, serialize, response }: HttpContext) {
@@ -57,9 +66,17 @@ export default class ProfileController {
     if (data.apellido !== undefined) user.apellido = data.apellido
     if (data.telefono !== undefined) user.telefono = data.telefono
     if (data.edad !== undefined) user.edad = data.edad
+    if (data.contactoEmergenciaNombre !== undefined)
+      user.contactoEmergenciaNombre = data.contactoEmergenciaNombre
+    if (data.contactoEmergenciaTelefono !== undefined)
+      user.contactoEmergenciaTelefono = data.contactoEmergenciaTelefono
 
     if (data.email !== undefined && data.email !== user.email) {
-      const exists = await db.from('users').where('email', data.email).whereNot('id', user.id).first()
+      const exists = await db
+        .from('users')
+        .where('email', data.email)
+        .whereNot('id', user.id)
+        .first()
       if (exists) {
         return response.status(409).send({ error: 'El email ya está registrado' })
       }
@@ -77,6 +94,8 @@ export default class ProfileController {
       edad: user.edad,
       avatar: user.avatar,
       rol: user.rol,
+      contactoEmergenciaNombre: user.contactoEmergenciaNombre,
+      contactoEmergenciaTelefono: user.contactoEmergenciaTelefono,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     })
@@ -102,5 +121,13 @@ export default class ProfileController {
     await user.save()
 
     return serialize.withoutWrapping({ avatar: user.avatar })
+  }
+
+  async updateFcmToken({ auth, request, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const { fcmToken } = request.only(['fcmToken'])
+    user.fcmToken = fcmToken || null
+    await user.save()
+    return serialize.withoutWrapping({ fcmToken: user.fcmToken })
   }
 }
