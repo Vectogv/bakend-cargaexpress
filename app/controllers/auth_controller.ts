@@ -45,7 +45,7 @@ export default class AuthController {
       if (data.rol === 'conductor') {
         await Conductor.create(
           {
-            usuarioId: user.id,
+            usuarioId: newUser.id,
             cedula: data.cedula || '',
             placa: data.placa || '',
             tipoVehiculo: data.tipoVehiculo || null,
@@ -55,7 +55,7 @@ export default class AuthController {
         )
       }
 
-      return user
+      return newUser
     })
 
     const token = await User.accessTokens.create(user, [], { expiresIn: '7 days' })
@@ -67,20 +67,24 @@ export default class AuthController {
       created_at: DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss'),
     })
 
-    if (user.rol === 'conductor') {
-      emitToAdmin('admin:new_driver', {
-        id: String(user.id),
-        nombre: user.nombre,
-        apellido: user.apellido,
-        email: user.email,
-      })
-    } else {
-      emitToAdmin('admin:new_user', {
-        id: String(user.id),
-        nombre: user.nombre,
-        apellido: user.apellido,
-        email: user.email,
-      })
+    try {
+      if (user.rol === 'conductor') {
+        emitToAdmin('admin:new_driver', {
+          id: String(user.id),
+          nombre: user.nombre,
+          apellido: user.apellido,
+          email: user.email,
+        })
+      } else {
+        emitToAdmin('admin:new_user', {
+          id: String(user.id),
+          nombre: user.nombre,
+          apellido: user.apellido,
+          email: user.email,
+        })
+      }
+    } catch {
+      // Socket.io may not be initialized in test environment
     }
 
     return serialize.withoutWrapping({
