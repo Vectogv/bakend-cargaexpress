@@ -29,13 +29,15 @@ export default class extends BaseSchema {
     // (en producción esto debería hacerse con cuidado; aquí dejamos la migración
     //  segura asumiendo que el sistema está en estado limpio al deployar)
     await this.db.rawQuery(`
-      DELETE FROM ganancias
-      WHERE id NOT IN (
-        SELECT MIN(id) FROM ganancias
+      DELETE g FROM ganancias g
+      LEFT JOIN (
+        SELECT MIN(id) AS keep_id
+        FROM ganancias
         WHERE viaje_id IS NOT NULL
         GROUP BY viaje_id
-      )
-      AND viaje_id IS NOT NULL
+      ) keepper ON keepper.keep_id = g.id
+      WHERE keepper.keep_id IS NULL
+      AND g.viaje_id IS NOT NULL
     `)
 
     this.schema.alterTable(this.tableName, (table) => {

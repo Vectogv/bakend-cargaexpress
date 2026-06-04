@@ -12,6 +12,7 @@ export const controllers = {
   Driver: () => import('#controllers/driver_controller'),
   Emergency: () => import('#controllers/emergency_controller'),
   FavoriteRoute: () => import('#controllers/favorite_route_controller'),
+  Leader: () => import('#controllers/leader_controller'),
   Moderator: () => import('#controllers/moderator_controller'),
   NewAccount: () => import('#controllers/new_account_controller'),
   Notification: () => import('#controllers/notification_controller'),

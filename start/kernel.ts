@@ -48,4 +48,8 @@ export const middleware = router.named({
   auth: () => import('#middleware/auth_middleware'),
   admin: () => import('#middleware/admin_middleware'),
   moderator: () => import('#middleware/moderator_middleware'),
+  rateLimit: () => import('#middleware/rate_limit_middleware'),
+  idempotency: () => import('#middleware/idempotency_middleware'),
+  leader: () => import('#middleware/leader_middleware'),
+  leaderPermission: () => import('#middleware/leader_permission_middleware'),
 })
