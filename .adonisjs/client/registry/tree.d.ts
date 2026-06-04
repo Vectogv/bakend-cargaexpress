@@ -7,6 +7,7 @@ export interface ApiDefinition {
       register: typeof routes['auth.auth.register']
       login: typeof routes['auth.auth.login']
       refreshToken: typeof routes['auth.auth.refresh_token']
+      logout: typeof routes['auth.auth.logout']
     }
   }
   users: {
@@ -107,6 +108,7 @@ export interface ApiDefinition {
       updateCoverage: typeof routes['admin.admin.update_coverage']
       updateBanner: typeof routes['admin.admin.update_banner']
       assignModerator: typeof routes['admin.admin.assign_moderator']
+      assignLeader: typeof routes['admin.admin.assign_leader']
       approveComunicado: typeof routes['admin.admin.approve_comunicado']
       rejectComunicado: typeof routes['admin.admin.reject_comunicado']
       approveEncuesta: typeof routes['admin.admin.approve_encuesta']
@@ -157,5 +159,17 @@ export interface ApiDefinition {
   }
   emergency: {
     trigger: typeof routes['emergency.trigger']
+  }
+  leader: {
+    leader: {
+      foroIndex: typeof routes['leader.leader.foro_index']
+      foroStore: typeof routes['leader.leader.foro_store']
+      foroPin: typeof routes['leader.leader.foro_pin']
+      foroDelete: typeof routes['leader.leader.foro_delete']
+      storeComunicado: typeof routes['leader.leader.store_comunicado']
+      myComunicados: typeof routes['leader.leader.my_comunicados']
+      driversList: typeof routes['leader.leader.drivers_list']
+      reportsLimited: typeof routes['leader.leader.reports_limited']
+    }
   }
 }

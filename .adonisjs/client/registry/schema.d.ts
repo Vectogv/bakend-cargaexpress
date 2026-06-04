@@ -43,6 +43,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/auth_controller').default['refreshToken']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
+  'auth.auth.logout': {
+    methods: ["POST"]
+    pattern: '/api/auth/logout'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/auth_controller').default['logout']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/auth_controller').default['logout']>>>
+    }
+  }
   'users.profile.show': {
     methods: ["GET","HEAD"]
     pattern: '/api/users/profile'
@@ -907,6 +919,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['assignModerator']>>>
     }
   }
+  'admin.admin.assign_leader': {
+    methods: ["PUT"]
+    pattern: '/api/admin/users/:id/leader'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['assignLeader']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['assignLeader']>>>
+    }
+  }
   'admin.admin.approve_comunicado': {
     methods: ["PUT"]
     pattern: '/api/admin/comunicados/:id/approve'
@@ -1229,6 +1253,102 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/emergency_controller').default['trigger']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/emergency_controller').default['trigger']>>>
+    }
+  }
+  'leader.leader.foro_index': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/leader/foro'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroIndex']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroIndex']>>>
+    }
+  }
+  'leader.leader.foro_store': {
+    methods: ["POST"]
+    pattern: '/api/leader/foro'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroStore']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroStore']>>>
+    }
+  }
+  'leader.leader.foro_pin': {
+    methods: ["PUT"]
+    pattern: '/api/leader/foro/:id/pin'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroPin']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroPin']>>>
+    }
+  }
+  'leader.leader.foro_delete': {
+    methods: ["DELETE"]
+    pattern: '/api/leader/foro/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroDelete']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroDelete']>>>
+    }
+  }
+  'leader.leader.store_comunicado': {
+    methods: ["POST"]
+    pattern: '/api/leader/comunicados'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['storeComunicado']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['storeComunicado']>>>
+    }
+  }
+  'leader.leader.my_comunicados': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/leader/comunicados'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['myComunicados']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['myComunicados']>>>
+    }
+  }
+  'leader.leader.drivers_list': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/leader/drivers'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['driversList']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['driversList']>>>
+    }
+  }
+  'leader.leader.reports_limited': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/leader/reports'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['reportsLimited']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['reportsLimited']>>>
     }
   }
 }

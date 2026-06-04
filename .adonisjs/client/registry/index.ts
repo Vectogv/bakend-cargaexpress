@@ -24,6 +24,12 @@ const routes = {
     tokens: [{"old":"/api/auth/refresh-token","type":0,"val":"api","end":""},{"old":"/api/auth/refresh-token","type":0,"val":"auth","end":""},{"old":"/api/auth/refresh-token","type":0,"val":"refresh-token","end":""}],
     types: placeholder as Registry['auth.auth.refresh_token']['types'],
   },
+  'auth.auth.logout': {
+    methods: ["POST"],
+    pattern: '/api/auth/logout',
+    tokens: [{"old":"/api/auth/logout","type":0,"val":"api","end":""},{"old":"/api/auth/logout","type":0,"val":"auth","end":""},{"old":"/api/auth/logout","type":0,"val":"logout","end":""}],
+    types: placeholder as Registry['auth.auth.logout']['types'],
+  },
   'users.profile.show': {
     methods: ["GET","HEAD"],
     pattern: '/api/users/profile',
@@ -456,6 +462,12 @@ const routes = {
     tokens: [{"old":"/api/admin/users/:id/moderator","type":0,"val":"api","end":""},{"old":"/api/admin/users/:id/moderator","type":0,"val":"admin","end":""},{"old":"/api/admin/users/:id/moderator","type":0,"val":"users","end":""},{"old":"/api/admin/users/:id/moderator","type":1,"val":"id","end":""},{"old":"/api/admin/users/:id/moderator","type":0,"val":"moderator","end":""}],
     types: placeholder as Registry['admin.admin.assign_moderator']['types'],
   },
+  'admin.admin.assign_leader': {
+    methods: ["PUT"],
+    pattern: '/api/admin/users/:id/leader',
+    tokens: [{"old":"/api/admin/users/:id/leader","type":0,"val":"api","end":""},{"old":"/api/admin/users/:id/leader","type":0,"val":"admin","end":""},{"old":"/api/admin/users/:id/leader","type":0,"val":"users","end":""},{"old":"/api/admin/users/:id/leader","type":1,"val":"id","end":""},{"old":"/api/admin/users/:id/leader","type":0,"val":"leader","end":""}],
+    types: placeholder as Registry['admin.admin.assign_leader']['types'],
+  },
   'admin.admin.approve_comunicado': {
     methods: ["PUT"],
     pattern: '/api/admin/comunicados/:id/approve',
@@ -617,6 +629,54 @@ const routes = {
     pattern: '/api/emergency',
     tokens: [{"old":"/api/emergency","type":0,"val":"api","end":""},{"old":"/api/emergency","type":0,"val":"emergency","end":""}],
     types: placeholder as Registry['emergency.trigger']['types'],
+  },
+  'leader.leader.foro_index': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/leader/foro',
+    tokens: [{"old":"/api/leader/foro","type":0,"val":"api","end":""},{"old":"/api/leader/foro","type":0,"val":"leader","end":""},{"old":"/api/leader/foro","type":0,"val":"foro","end":""}],
+    types: placeholder as Registry['leader.leader.foro_index']['types'],
+  },
+  'leader.leader.foro_store': {
+    methods: ["POST"],
+    pattern: '/api/leader/foro',
+    tokens: [{"old":"/api/leader/foro","type":0,"val":"api","end":""},{"old":"/api/leader/foro","type":0,"val":"leader","end":""},{"old":"/api/leader/foro","type":0,"val":"foro","end":""}],
+    types: placeholder as Registry['leader.leader.foro_store']['types'],
+  },
+  'leader.leader.foro_pin': {
+    methods: ["PUT"],
+    pattern: '/api/leader/foro/:id/pin',
+    tokens: [{"old":"/api/leader/foro/:id/pin","type":0,"val":"api","end":""},{"old":"/api/leader/foro/:id/pin","type":0,"val":"leader","end":""},{"old":"/api/leader/foro/:id/pin","type":0,"val":"foro","end":""},{"old":"/api/leader/foro/:id/pin","type":1,"val":"id","end":""},{"old":"/api/leader/foro/:id/pin","type":0,"val":"pin","end":""}],
+    types: placeholder as Registry['leader.leader.foro_pin']['types'],
+  },
+  'leader.leader.foro_delete': {
+    methods: ["DELETE"],
+    pattern: '/api/leader/foro/:id',
+    tokens: [{"old":"/api/leader/foro/:id","type":0,"val":"api","end":""},{"old":"/api/leader/foro/:id","type":0,"val":"leader","end":""},{"old":"/api/leader/foro/:id","type":0,"val":"foro","end":""},{"old":"/api/leader/foro/:id","type":1,"val":"id","end":""}],
+    types: placeholder as Registry['leader.leader.foro_delete']['types'],
+  },
+  'leader.leader.store_comunicado': {
+    methods: ["POST"],
+    pattern: '/api/leader/comunicados',
+    tokens: [{"old":"/api/leader/comunicados","type":0,"val":"api","end":""},{"old":"/api/leader/comunicados","type":0,"val":"leader","end":""},{"old":"/api/leader/comunicados","type":0,"val":"comunicados","end":""}],
+    types: placeholder as Registry['leader.leader.store_comunicado']['types'],
+  },
+  'leader.leader.my_comunicados': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/leader/comunicados',
+    tokens: [{"old":"/api/leader/comunicados","type":0,"val":"api","end":""},{"old":"/api/leader/comunicados","type":0,"val":"leader","end":""},{"old":"/api/leader/comunicados","type":0,"val":"comunicados","end":""}],
+    types: placeholder as Registry['leader.leader.my_comunicados']['types'],
+  },
+  'leader.leader.drivers_list': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/leader/drivers',
+    tokens: [{"old":"/api/leader/drivers","type":0,"val":"api","end":""},{"old":"/api/leader/drivers","type":0,"val":"leader","end":""},{"old":"/api/leader/drivers","type":0,"val":"drivers","end":""}],
+    types: placeholder as Registry['leader.leader.drivers_list']['types'],
+  },
+  'leader.leader.reports_limited': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/leader/reports',
+    tokens: [{"old":"/api/leader/reports","type":0,"val":"api","end":""},{"old":"/api/leader/reports","type":0,"val":"leader","end":""},{"old":"/api/leader/reports","type":0,"val":"reports","end":""}],
+    types: placeholder as Registry['leader.leader.reports_limited']['types'],
   },
 } as const satisfies Record<string, AdonisEndpoint>
 

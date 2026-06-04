@@ -7,6 +7,7 @@ export type ScannedRoutes = {
     'auth.auth.register': { paramsTuple?: []; params?: {} }
     'auth.auth.login': { paramsTuple?: []; params?: {} }
     'auth.auth.refresh_token': { paramsTuple?: []; params?: {} }
+    'auth.auth.logout': { paramsTuple?: []; params?: {} }
     'users.profile.show': { paramsTuple?: []; params?: {} }
     'users.profile.update': { paramsTuple?: []; params?: {} }
     'users.profile.avatar': { paramsTuple?: []; params?: {} }
@@ -79,6 +80,7 @@ export type ScannedRoutes = {
     'admin.admin.update_coverage': { paramsTuple?: []; params?: {} }
     'admin.admin.update_banner': { paramsTuple?: []; params?: {} }
     'admin.admin.assign_moderator': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'admin.admin.assign_leader': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.reject_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -106,6 +108,14 @@ export type ScannedRoutes = {
     'foro.moderator.foro_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'foro.moderator.foro_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'emergency.trigger': { paramsTuple?: []; params?: {} }
+    'leader.leader.foro_index': { paramsTuple?: []; params?: {} }
+    'leader.leader.foro_store': { paramsTuple?: []; params?: {} }
+    'leader.leader.foro_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'leader.leader.foro_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'leader.leader.store_comunicado': { paramsTuple?: []; params?: {} }
+    'leader.leader.my_comunicados': { paramsTuple?: []; params?: {} }
+    'leader.leader.drivers_list': { paramsTuple?: []; params?: {} }
+    'leader.leader.reports_limited': { paramsTuple?: []; params?: {} }
   }
   GET: {
     'users.profile.show': { paramsTuple?: []; params?: {} }
@@ -145,6 +155,10 @@ export type ScannedRoutes = {
     'moderator.moderator.inactive_drivers': { paramsTuple?: []; params?: {} }
     'moderator.moderator.encuesta_results': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'foro.moderator.foro_index': { paramsTuple?: []; params?: {} }
+    'leader.leader.foro_index': { paramsTuple?: []; params?: {} }
+    'leader.leader.my_comunicados': { paramsTuple?: []; params?: {} }
+    'leader.leader.drivers_list': { paramsTuple?: []; params?: {} }
+    'leader.leader.reports_limited': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
     'users.profile.show': { paramsTuple?: []; params?: {} }
@@ -184,11 +198,16 @@ export type ScannedRoutes = {
     'moderator.moderator.inactive_drivers': { paramsTuple?: []; params?: {} }
     'moderator.moderator.encuesta_results': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'foro.moderator.foro_index': { paramsTuple?: []; params?: {} }
+    'leader.leader.foro_index': { paramsTuple?: []; params?: {} }
+    'leader.leader.my_comunicados': { paramsTuple?: []; params?: {} }
+    'leader.leader.drivers_list': { paramsTuple?: []; params?: {} }
+    'leader.leader.reports_limited': { paramsTuple?: []; params?: {} }
   }
   POST: {
     'auth.auth.register': { paramsTuple?: []; params?: {} }
     'auth.auth.login': { paramsTuple?: []; params?: {} }
     'auth.auth.refresh_token': { paramsTuple?: []; params?: {} }
+    'auth.auth.logout': { paramsTuple?: []; params?: {} }
     'users.profile.avatar': { paramsTuple?: []; params?: {} }
     'drivers.driver.vehicle_photo': { paramsTuple?: []; params?: {} }
     'drivers.driver.driver_photo': { paramsTuple?: []; params?: {} }
@@ -222,6 +241,8 @@ export type ScannedRoutes = {
     'moderator.moderator.answer_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'foro.moderator.foro_store': { paramsTuple?: []; params?: {} }
     'emergency.trigger': { paramsTuple?: []; params?: {} }
+    'leader.leader.foro_store': { paramsTuple?: []; params?: {} }
+    'leader.leader.store_comunicado': { paramsTuple?: []; params?: {} }
   }
   PUT: {
     'users.profile.update': { paramsTuple?: []; params?: {} }
@@ -246,15 +267,18 @@ export type ScannedRoutes = {
     'admin.admin.update_coverage': { paramsTuple?: []; params?: {} }
     'admin.admin.update_banner': { paramsTuple?: []; params?: {} }
     'admin.admin.assign_moderator': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'admin.admin.assign_leader': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.reject_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'foro.moderator.foro_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'leader.leader.foro_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   DELETE: {
     'admin.admin.delete_user': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'favorites.favorite_route.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'foro.moderator.foro_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'leader.leader.foro_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
 }
 declare module '@adonisjs/core/types/http' {
