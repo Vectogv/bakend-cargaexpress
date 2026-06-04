@@ -162,7 +162,7 @@ test.group('Profile - FCM Token', (group) => {
     response.assertBodyContains({ fcmToken: 'test-fcm-token-123' })
   })
 
-  test('set FCM token to null', async ({ client }) => {
+  test('set FCM token to null', async ({ client, assert }) => {
     const token = await registerAndGetToken(client)
 
     const response = await client

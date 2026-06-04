@@ -10,8 +10,22 @@ router.get('/', () => {
   return { hello: 'world' }
 })
 
+
+router.get('/health', async ({ response }) => {
+  // Endpoint de health check para load balancers, k8s, etc.
+  // Retorna 200 si el servidor está operativo.
+  return response.status(200).send({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
 router.get('/storage/uploads/:fileName', async ({ params, response }) => {
-  const filePath = app.makePath('storage', 'uploads', params.fileName)
+  // Sanitize fileName to prevent path traversal attacks
+  const rawName = params.fileName as string
+  const safeName = require('node:path').basename(rawName)
+  // Reject if the sanitized name differs (contained path separators or ..)
+  if (!safeName || safeName !== rawName || safeName.startsWith('.')) {
+    return response.status(400).send({ error: 'Invalid file name' })
+  }
+  const filePath = app.makePath('storage', 'uploads', safeName)
   if (!fs.existsSync(filePath)) {
     return response.status(404).send({ error: 'File not found' })
   }
@@ -23,9 +37,12 @@ router
     router.post('register', [controllers.Auth, 'register'])
     router.post('login', [controllers.Auth, 'login'])
     router.post('refresh-token', [controllers.Auth, 'refreshToken'])
+    // Cierra sesión: revoca el access token actual
+    router.post('logout', [controllers.Auth, 'logout'])
   })
   .prefix('/api/auth')
   .as('auth')
+  .use(middleware.rateLimit({ max: 10, windowMs: 60_000 })) // 10 intentos / minuto por IP
 
 router
   .group(() => {
@@ -60,15 +77,18 @@ router
 router
   .group(() => {
     router.post('request', [controllers.Trip, 'request'])
+      .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
     router.get('nearby', [controllers.Trip, 'nearby'])
     router.get('active', [controllers.Trip, 'active'])
     router.get('history', [controllers.Trip, 'history'])
     router.get(':id', [controllers.Trip, 'show'])
-    router.post(':id/accept', [controllers.Trip, 'accept'])
+    router.post(':id/accept', [controllers.Trip, 'accept']) // @deprecated — usar POST :id/offers/:offerId/accept
     router.post(':id/decline', [controllers.Trip, 'decline'])
     router.post(':id/start-trip', [controllers.Trip, 'startTrip'])
     router.post(':id/complete', [controllers.Trip, 'complete'])
+      .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
     router.post(':id/finalize', [controllers.Trip, 'finalize'])
+      .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
     router.post(':id/cancel', [controllers.Trip, 'cancel'])
     router.post(':id/rate', [controllers.Trip, 'rate'])
     router.post(':id/delivery-photo', [controllers.Trip, 'deliveryPhoto'])
@@ -79,6 +99,7 @@ router
     router.post(':id/dispute/support', [controllers.Dispute, 'uploadSupport'])
     router.get(':id/offers', [controllers.Offer, 'index'])
     router.post(':id/offers', [controllers.Offer, 'store'])
+      .use(middleware.rateLimit({ max: 10, windowMs: 60_000 }))
     router.post(':id/offers/:offerId/accept', [controllers.Offer, 'accept'])
     router.post(':id/report', [controllers.Report, 'store'])
   })
@@ -129,6 +150,7 @@ router
     router.put('config/coverage', [controllers.Admin, 'updateCoverage'])
     router.put('config/banner', [controllers.Admin, 'updateBanner'])
     router.put('users/:id/moderator', [controllers.Admin, 'assignModerator'])
+    router.put('users/:id/leader', [controllers.Admin, 'assignLeader'])     // Asignar/quitar rol leader a conductor
     router.put('comunicados/:id/approve', [controllers.Admin, 'approveComunicado'])
     router.put('comunicados/:id/reject', [controllers.Admin, 'rejectComunicado'])
     router.put('encuestas/:id/approve', [controllers.Admin, 'approveEncuesta'])
@@ -223,3 +245,62 @@ router.get('/swagger', async () => {
 router.get('/docs', async () => {
   return AutoSwagger.default.scalar('/swagger')
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LÍDER DE CONDUCTORES
+// Prefix: /api/leader
+// Middleware: auth() + leader()          → verifica driver + extra_roles["leader"]
+//             leaderPermission(permiso)  → verifica permiso granular por ruta
+//
+// ACCESO DENEGADO A:
+//   /api/admin/*  /api/payment/*  verificación  datos financieros
+//   chats privados  config del sistema  eliminación de usuarios
+// ─────────────────────────────────────────────────────────────────────────────
+router
+  .group(() => {
+    // Foro — ver todos los posts
+    router
+      .get('foro', [controllers.Leader, 'foroIndex'])
+      .use(middleware.leaderPermission({ permission: 'foro.read' }))
+
+    // Foro — crear post propio
+    router
+      .post('foro', [controllers.Leader, 'foroStore'])
+      .use(middleware.leaderPermission({ permission: 'foro.write' }))
+
+    // Foro — fijar/desfijar post
+    router
+      .put('foro/:id/pin', [controllers.Leader, 'foroPin'])
+      .use(middleware.leaderPermission({ permission: 'foro.pin' }))
+
+    // Foro — eliminar post propio únicamente
+    router
+      .delete('foro/:id', [controllers.Leader, 'foroDelete'])
+      .use(middleware.leaderPermission({ permission: 'foro.delete' }))
+
+    // Comunicados — crear (queda "pendiente", requiere aprobación de admin)
+    router
+      .post('comunicados', [controllers.Leader, 'storeComunicado'])
+      .use([
+        middleware.rateLimit({ max: 5, windowMs: 60_000 }),
+        middleware.leaderPermission({ permission: 'announcements.create' }),
+      ])
+
+    // Comunicados — ver solo los suyos
+    router
+      .get('comunicados', [controllers.Leader, 'myComunicados'])
+      .use(middleware.leaderPermission({ permission: 'announcements.read' }))
+
+    // Conductores — lista básica sin datos sensibles
+    router
+      .get('drivers', [controllers.Leader, 'driversList'])
+      .use(middleware.leaderPermission({ permission: 'drivers.view_limited' }))
+
+    // Reportes — conteos y tipos, sin datos identificatorios
+    router
+      .get('reports', [controllers.Leader, 'reportsLimited'])
+      .use(middleware.leaderPermission({ permission: 'reports.view_limited' }))
+  })
+  .prefix('/api/leader')
+  .as('leader')
+  .use([middleware.auth(), middleware.leader()])

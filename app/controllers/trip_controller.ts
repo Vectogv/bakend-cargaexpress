@@ -10,8 +10,12 @@ import { DateTime } from 'luxon'
 import app from '@adonisjs/core/services/app'
 import { randomUUID } from 'node:crypto'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
-import { getIO, emitToClient, emitToDriver, emitToAdmin } from '#start/socket'
+import { emitToClient, emitToDriver, emitToAdmin } from '#start/socket'
+import { ensureUploadDir } from '#app/helpers/ensure_upload_dir'
 import { sendToMultiple, sendToToken } from '#services/push_notification_service'
+import GeoService from '#services/geo_service'
+import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
+import TripFinalizationService from '#services/trip_finalization_service'
 
 export default class TripController {
   @ApiOperation({ summary: 'Request a trip', description: 'Creates a new trip request' })
@@ -19,11 +23,29 @@ export default class TripController {
   @ApiResponse({ type: 'object' })
   async request({ auth, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
+    if (user.rol !== 'cliente') {
+      return response
+        .status(403)
+        .send({ error: 'Solo los clientes pueden solicitar viajes.' })
+    }
     if (user.estadoCuenta !== 'activa') {
       return response
         .status(403)
         .send({ error: 'Tu cuenta no está activa. No puedes solicitar viajes.' })
     }
+
+    // Un cliente no puede tener más de un viaje activo simultáneo.
+    const viajeActivo = await Viaje.query()
+      .where('cliente_id', user.id)
+      .whereIn('estado', ['buscando_conductor', 'aceptado', 'en_curso'])
+      .first()
+    if (viajeActivo) {
+      return response.status(409).send({
+        error: 'Ya tienes un viaje activo. Debes cancelarlo o esperar a que termine.',
+        viajeId: String(viajeActivo.id),
+      })
+    }
+
     const data = await request.validateUsing(tripRequestValidator)
 
     const config = await ConfiguracionPlataforma.first()
@@ -62,8 +84,27 @@ export default class TripController {
       precioEstimado: data.precioCliente,
     })
 
-    const io = getIO()
-    io.emit('trip:new', {
+    // Obtener conductores online dentro de 20km del origen usando Haversine en DB
+    // Antes: traía TODOS los conductores online sin filtro geográfico (bug de performance y spam)
+    const conductoresCercanosRaw = await GeoService.obtenerConductoresCercanos(
+      data.origen.lat,
+      data.origen.lng,
+      20
+    )
+
+    // Para emitir por socket y push, necesitamos los usuarioId y fcmToken
+    // GeoService devuelve los datos básicos; cargamos el resto con una query simple
+    const conductorIds = conductoresCercanosRaw.map((c: any) => c.id)
+
+    let conductoresCercanos: any[] = []
+    if (conductorIds.length > 0) {
+      conductoresCercanos = await Conductor.query()
+        .whereIn('id', conductorIds)
+        .whereHas('usuario', (q) => q.whereNotNull('fcm_token'))
+        .preload('usuario')
+    }
+
+    const tripPayload = {
       id: String(viaje.id),
       clienteId: String(viaje.clienteId),
       estado: viaje.estado,
@@ -81,12 +122,13 @@ export default class TripController {
       precioCliente: viaje.precioCliente,
       precioEstimado: viaje.precioEstimado,
       createdAt: viaje.createdAt.toISO(),
-    })
+    }
 
-    const conductoresCercanos = await Conductor.query()
-      .where('online', true)
-      .whereHas('usuario', (q) => q.whereNotNull('fcm_token'))
-      .preload('usuario')
+    // Emitir solo a conductores online en lugar de broadcast global
+    for (const c of conductoresCercanos) {
+      emitToDriver(c.usuarioId, 'trip:new', tripPayload)
+    }
+
     const tokens = conductoresCercanos.map((c) => c.usuario.fcmToken).filter(Boolean) as string[]
     if (tokens.length > 0) {
       await sendToMultiple(
@@ -117,49 +159,45 @@ export default class TripController {
 
   @ApiOperation({
     summary: 'Get nearby trips',
-    description: 'Returns trips near a given location within a radius',
+    description: 'Returns trips near a given location within a radius. Uses DB-level Haversine — no in-memory filtering.',
   })
   @ApiResponse({ type: 'array' })
-  async nearby({ request, serialize }: HttpContext) {
-    const lat = Number.parseFloat(request.input('lat', '0'))
-    const lng = Number.parseFloat(request.input('lng', '0'))
+  async nearby({ request, serialize, response }: HttpContext) {
+    const lat = Number.parseFloat(request.input('lat', ''))
+    const lng = Number.parseFloat(request.input('lng', ''))
     const radio = Number.parseFloat(request.input('radio', '5'))
 
-    const viajes = await Viaje.query()
-      .where('estado', 'buscando_conductor')
-      .preload('cliente')
-      .orderBy('createdAt', 'desc')
+    // Validar coordenadas antes de cualquier operación
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      return response.status(422).send({ error: 'lat inválida. Debe ser un número entre -90 y 90.' })
+    }
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      return response.status(422).send({ error: 'lng inválida. Debe ser un número entre -180 y 180.' })
+    }
+    if (!Number.isFinite(radio) || radio <= 0 || radio > 200) {
+      return response.status(422).send({ error: 'radio inválido. Debe ser un número entre 0 y 200.' })
+    }
 
-    const result = viajes
-      .filter((v) => v.cliente.visibilidad !== 'baneado')
-      .map((v) => {
-        const dlat = v.origenLat - lat
-        const dlng = v.origenLng - lng
-        const distancia = Math.round(Math.sqrt(dlat * dlat + dlng * dlng) * 111.32 * 100) / 100
+    // Delegar el filtrado geográfico al motor de DB (Haversine en SQL)
+    // Evita traer todos los viajes a memoria del servidor para luego filtrarlos.
+    const viajes = await GeoService.obtenerViajesCercanos(lat, lng, radio)
 
-        return {
-          id: String(v.id),
-          cliente: {
-            nombre: `${v.cliente.nombre || ''} ${v.cliente.apellido || ''}`.trim(),
-            reputacion: v.cliente.reputacion,
-            visibilidad: v.cliente.visibilidad,
-            totalViajes: v.cliente.totalViajesCompletados,
-            totalReportes: v.cliente.totalReportes,
-            calificacion: 4.8,
-          },
-          origen: { direccion: v.origenDireccion, lat: v.origenLat, lng: v.origenLng },
-          destino: { direccion: v.destinoDireccion, lat: v.destinoLat, lng: v.destinoLng },
-          carga: v.carga,
-          precioEstimado: v.precioEstimado,
-          distancia,
-          createdAt: v.createdAt.toISO(),
-        }
-      })
-      .filter((v) => v.distancia <= radio)
-      .sort((a, b) => {
-        const order: Record<string, number> = { normal: 0, reducida: 1, baneado: 2 }
-        return (order[a.cliente.visibilidad] ?? 2) - (order[b.cliente.visibilidad] ?? 2)
-      })
+    const result = viajes.map((v: any) => ({
+      id: String(v.id),
+      cliente: {
+        nombre: `${v.nombre || ''} ${v.apellido || ''}`.trim(),
+        reputacion: v.reputacion,
+        visibilidad: v.visibilidad,
+        totalViajes: v.totalViajes,
+        calificacion: v.calificacion ?? 5.0,
+      },
+      origen: { direccion: v.origenDireccion, lat: v.origenLat, lng: v.origenLng },
+      destino: { direccion: v.destinoDireccion, lat: v.destinoLat, lng: v.destinoLng },
+      carga: v.carga,
+      precioEstimado: v.precioEstimado,
+      distancia: Math.round(Number(v.distancia_km) * 100) / 100,
+      createdAt: v.createdAt,
+    }))
 
     return serialize.withoutWrapping(result)
   }
@@ -197,9 +235,20 @@ export default class TripController {
     return serialize.withoutWrapping(this.formatViajeResponse(viaje))
   }
 
-  @ApiOperation({ summary: 'Accept a trip', description: 'Driver accepts a pending trip' })
+  @ApiOperation({ summary: 'Accept a trip (DEPRECATED)', description: 'DEPRECATED: usar POST /trips/:id/offers/:offerId/accept. Este endpoint será eliminado en la próxima versión mayor.' })
   @ApiResponse({ type: 'object' })
   async accept({ params, serialize, auth, response }: HttpContext) {
+    // Cabecera de deprecación según RFC 8594
+    response.header('Deprecation', 'true')
+    response.header(
+      'Sunset',
+      new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString() // 90 días
+    )
+    response.header(
+      'Link',
+      '</api/trips/:id/offers/:offerId/accept>; rel="successor-version"'
+    )
+
     const user = auth.getUserOrFail()
     if (user.rol !== 'conductor') {
       return response.status(403).send({ error: 'Solo los conductores pueden aceptar viajes' })
@@ -214,6 +263,15 @@ export default class TripController {
     }
 
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+
+    if (user.suspendido) {
+      return response.status(403).send({ error: 'Tu cuenta está suspendida. Contacta al administrador.' })
+    }
+
+    if (conductor.estadoVerificacion !== 'aprobado') {
+      return response.status(403).send({ error: 'Tu cuenta de conductor no está verificada.' })
+    }
+
     viaje.conductorId = conductor.id
     viaje.estado = 'aceptado'
     viaje.aceptadoAt = DateTime.now()
@@ -266,8 +324,24 @@ export default class TripController {
     description: 'Changes trip to en_curso after driver picks up cargo',
   })
   @ApiResponse({ type: 'object' })
-  async startTrip({ params, serialize }: HttpContext) {
+  async startTrip({ auth, params, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+
+    if (user.rol !== 'conductor') {
+      return response.status(403).send({ error: 'Solo el conductor puede iniciar el viaje' })
+    }
+
     const viaje = await Viaje.findOrFail(params.id)
+
+    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    if (viaje.conductorId !== conductor.id) {
+      return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
+    }
+
+    if (!TripStateMachine.validarTransicion(viaje.estado as EstadoViaje, 'en_curso')) {
+      return response.status(422).send({ error: `El viaje debe estar en estado 'aceptado' para iniciarse (estado actual: ${viaje.estado})` })
+    }
+
     viaje.estado = 'en_curso'
     viaje.enCursoAt = DateTime.now()
     await viaje.save()
@@ -287,10 +361,34 @@ export default class TripController {
 
   @ApiOperation({ summary: 'Decline a trip', description: 'Driver declines a pending trip' })
   @ApiResponse({ type: 'object' })
-  async decline({ params, serialize }: HttpContext) {
+  async decline({ auth, params, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+
+    if (user.rol !== 'conductor') {
+      return response.status(403).send({ error: 'Solo los conductores pueden rechazar viajes' })
+    }
+
     const viaje = await Viaje.findOrFail(params.id)
+
+    if (!TripStateMachine.validarTransicion(viaje.estado as EstadoViaje, 'rechazado')) {
+      return response.status(422).send({ error: `Este viaje no se puede rechazar en su estado actual (${viaje.estado})` })
+    }
+
+    // Si el viaje está aceptado, solo el conductor asignado puede rechazarlo
+    if (viaje.estado === 'aceptado') {
+      const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+      if (viaje.conductorId !== conductor.id) {
+        return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
+      }
+    }
+
     viaje.estado = 'rechazado'
     await viaje.save()
+
+    emitToClient(viaje.clienteId, 'trip:declined', {
+      id: String(viaje.id),
+      estado: viaje.estado,
+    })
 
     return serialize.withoutWrapping({ id: String(viaje.id), estado: viaje.estado })
   }
@@ -298,15 +396,31 @@ export default class TripController {
   @ApiOperation({ summary: 'Complete a trip', description: 'Marks a trip as completed' })
   @ApiBody({ type: () => tripCompleteValidator })
   @ApiResponse({ type: 'object' })
-  async complete({ params, request, serialize }: HttpContext) {
-    const data = await request.validateUsing(tripCompleteValidator)
+  async complete({ auth, params, request, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+
+    if (user.rol !== 'conductor') {
+      return response.status(403).send({ error: 'Solo el conductor puede completar el viaje' })
+    }
+
     const viaje = await Viaje.findOrFail(params.id)
+
+    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    if (viaje.conductorId !== conductor.id) {
+      return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
+    }
+
+    if (!TripStateMachine.validarTransicion(viaje.estado as EstadoViaje, 'completado')) {
+      return response.status(422).send({ error: `El viaje debe estar 'en_curso' para completarse (estado actual: ${viaje.estado})` })
+    }
+
+    const data = await request.validateUsing(tripCompleteValidator)
     viaje.estado = 'completado'
     viaje.precioFinal = data.montoFinal
     viaje.completadoAt = DateTime.now()
     await viaje.save()
 
-    emitToClient(viaje.clienteId, 'trip:completed', {
+    emitToClient(viaje.clienteId, 'trip:finalized', {
       id: String(viaje.id),
       estado: viaje.estado,
       montoFinal: viaje.precioFinal,
@@ -323,98 +437,122 @@ export default class TripController {
 
   @ApiOperation({
     summary: 'Finalize delivery',
-    description: 'Confirms delivery, sets driver online, records payment',
+    description: 'Confirms delivery, sets driver online, records payment. Idempotent — safe to retry.',
   })
   @ApiBody({ type: () => tripCompleteValidator })
   @ApiResponse({ type: 'object' })
-  async finalize({ params, request, serialize, response }: HttpContext) {
+  async finalize({ auth, params, request, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
     const data = await request.validateUsing(tripCompleteValidator)
-    const viaje = await Viaje.find(params.id)
-    if (!viaje) {
-      return response.status(404).send({ error: 'Viaje no encontrado' })
-    }
-    if (viaje.estado !== 'completado') {
-      return response
-        .status(422)
-        .send({ error: 'El viaje debe estar completado antes de finalizar' })
-    }
-    viaje.estado = 'finalizado'
-    viaje.precioFinal = data.montoFinal
-    viaje.finalizadoAt = DateTime.now()
-    await viaje.save()
 
-    if (viaje.conductorId) {
-      const montoBruto = data.montoFinal
-      const comision = Math.round(montoBruto * 0.1 * 100) / 100
-      const montoNeto = montoBruto - comision
+    // ── Delegar toda la lógica financiera al servicio centralizado ────────
+    // TripFinalizationService garantiza:
+    //   • Atomicidad (transacción única)
+    //   • Bloqueo pesimista (SELECT FOR UPDATE)
+    //   • Idempotencia (re-read after lock)
+    //   • Protección contra disputa activa
+    //   • Validación de estado y permisos
+    const result = await TripFinalizationService.finalize({
+      viajeId: params.id,
+      montoFinal: data.montoFinal,
+      actorUserId: user.id,
+      actorRol: user.rol,
+    })
 
-      await Ganancia.create({
-        conductorId: viaje.conductorId,
-        viajeId: viaje.id,
-        monto: montoNeto,
-        montoBruto,
-        comision,
-        montoNeto,
-        comisionPagada: false,
+    if (!result.ok) {
+      return response.status(result.statusCode).send({ error: result.error })
+    }
+
+    // ── Notificaciones y sockets (fuera de la transacción) ────────────────
+    // Si la operación fue idempotente (el viaje ya estaba finalizado) no
+    // volvemos a emitir eventos para no spam al frontend con duplicados.
+    if (!result.idempotent) {
+      emitToClient(Number(result.viaje.id), 'trip:finalized', {
+        id: result.viaje.id,
+        estado: result.viaje.estado,
+        montoFinal: result.viaje.montoFinal,
+        finalizadoAt: result.viaje.finalizadoAt,
       })
 
-      const conductor = await Conductor.find(viaje.conductorId)
-      if (conductor) {
-        conductor.totalViajes += 1
-        conductor.online = true
-        await conductor.save()
+      emitToAdmin('admin:trip_completed', {
+        viajeId: result.viaje.id,
+        estado: result.viaje.estado,
+        montoFinal: result.viaje.montoFinal,
+      })
+
+      // Push notification al cliente
+      const viaje = await Viaje.find(Number(result.viaje.id))
+      if (viaje) {
+        const cliente = await User.find(viaje.clienteId)
+        if (cliente?.fcmToken) {
+          await sendToToken(
+            cliente.fcmToken,
+            'Envío entregado',
+            'Tu envío ha sido entregado exitosamente'
+          )
+        }
+
+        // Push notification al conductor (comisión acumulada)
+        if (viaje.conductorId) {
+          const conductor = await Conductor.find(viaje.conductorId)
+          if (conductor) {
+            const conductorUser = await User.find(conductor.usuarioId)
+            if (conductorUser?.fcmToken && conductorUser.montoDeuda && conductorUser.deudaFechaLimite) {
+              const diasRestantes = Math.ceil(
+                conductorUser.deudaFechaLimite.diff(DateTime.now(), 'days').days
+              )
+              const comision = Math.round(data.montoFinal * 0.1 * 100) / 100
+              await sendToToken(
+                conductorUser.fcmToken,
+                'Nueva comisión registrada',
+                `Se registró una comisión de $${comision.toLocaleString('es-CO')} por este viaje. Tu deuda total es $${conductorUser.montoDeuda.toLocaleString('es-CO')}. Tienes ${diasRestantes} días para pagar.`
+              )
+            }
+          }
+        }
       }
     }
-
-    const cliente = await User.find(viaje.clienteId)
-    if (cliente) {
-      cliente.totalViajesCompletados += 1
-      if (cliente.totalViajesCompletados % 10 === 0 && cliente.reputacion < 5.0) {
-        cliente.reputacion = Math.min(5.0, cliente.reputacion + 0.5)
-      }
-      if (cliente.totalViajesCompletados >= 1 && cliente.reputacion < 5.0) {
-        cliente.reputacion = Math.min(5.0, cliente.reputacion + 0.1)
-      }
-      await cliente.save()
-    }
-
-    emitToClient(viaje.clienteId, 'trip:completed', {
-      id: String(viaje.id),
-      estado: viaje.estado,
-      montoFinal: viaje.precioFinal,
-      finalizadoAt: viaje.finalizadoAt.toISO(),
-    })
-
-    const clienteUser = await User.find(viaje.clienteId)
-    if (clienteUser?.fcmToken) {
-      await sendToToken(
-        clienteUser.fcmToken,
-        'Envío entregado',
-        'Tu envío ha sido entregado exitosamente'
-      )
-    }
-
-    emitToAdmin('admin:trip_completed', {
-      viajeId: String(viaje.id),
-      estado: viaje.estado,
-      montoFinal: viaje.precioFinal,
-    })
 
     return serialize.withoutWrapping({
-      id: String(viaje.id),
-      estado: viaje.estado,
-      montoFinal: viaje.precioFinal,
-      finalizadoAt: viaje.finalizadoAt.toISO(),
+      id: result.viaje.id,
+      estado: result.viaje.estado,
+      montoFinal: result.viaje.montoFinal,
+      finalizadoAt: result.viaje.finalizadoAt,
     })
   }
 
   @ApiOperation({ summary: 'Cancel a trip', description: 'Cancels a trip with an optional reason' })
   @ApiBody({ type: () => tripCancelValidator })
   @ApiResponse({ type: 'object' })
-  async cancel({ params, request, serialize, auth }: HttpContext) {
+  async cancel({ params, request, serialize, auth, response }: HttpContext) {
     const user = auth.getUserOrFail()
     const data = await request.validateUsing(tripCancelValidator)
     const viaje = await Viaje.findOrFail(params.id)
+
+    // Validar que el usuario sea el cliente o el conductor del viaje
+    if (user.rol === 'conductor') {
+      const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+      // Si el viaje no tiene conductor asignado todavía, ningún conductor puede cancelarlo
+      if (viaje.conductorId === null || viaje.conductorId === undefined) {
+        return response.status(403).send({ error: 'Solo el cliente puede cancelar un viaje que aún no tiene conductor asignado' })
+      }
+      if (viaje.conductorId !== conductor.id) {
+        return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
+      }
+    } else if (user.rol === 'cliente') {
+      if (viaje.clienteId !== user.id) {
+        return response.status(403).send({ error: 'Este viaje no te pertenece' })
+      }
+    } else if (user.rol !== 'admin') {
+      return response.status(403).send({ error: 'No tienes permisos para cancelar este viaje' })
+    }
+
+    if (!TripStateMachine.validarTransicion(viaje.estado as EstadoViaje, 'cancelado')) {
+      return response
+        .status(422)
+        .send({ error: `El viaje no puede cancelarse en su estado actual (${viaje.estado})` })
+    }
+
     const estadoAnterior = viaje.estado
     viaje.estado = 'cancelado'
     viaje.motivoCancelacion = data.motivo || null
@@ -461,7 +599,8 @@ export default class TripController {
   async history({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const limitRaw = Number.parseInt(request.input('limit', '20'))
+    const limit = Math.min(100, Math.max(1, Number.isNaN(limitRaw) ? 20 : limitRaw))
     let query
     if (user.rol === 'conductor') {
       const conductor = await Conductor.findByOrFail('usuario_id', user.id)
@@ -492,12 +631,26 @@ export default class TripController {
     description: 'Returns details of a specific trip by ID',
   })
   @ApiResponse({ type: 'object' })
-  async show({ params, serialize }: HttpContext) {
+  async show({ auth, params, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
     const viaje = await Viaje.query()
       .where('id', params.id)
       .preload('cliente')
       .preload('conductor', (q) => q.preload('usuario'))
       .firstOrFail()
+
+    // Solo el cliente, el conductor asignado o un admin pueden ver los detalles del viaje
+    if (user.rol !== 'admin') {
+      const esCliente = viaje.clienteId === user.id
+      let esConductor = false
+      if (user.rol === 'conductor' && viaje.conductorId) {
+        const conductor = await Conductor.findBy('usuario_id', user.id)
+        esConductor = conductor !== null && viaje.conductorId === conductor.id
+      }
+      if (!esCliente && !esConductor) {
+        return response.status(403).send({ error: 'No tienes permisos para ver este viaje' })
+      }
+    }
 
     return serialize.withoutWrapping(this.formatViajeResponse(viaje))
   }
@@ -536,7 +689,7 @@ export default class TripController {
       tiempoEstimadoMinutos: viaje.tiempoEstimadoMinutos,
       precioEstimado: viaje.precioEstimado,
       precioFinal: viaje.precioFinal,
-      tiempoEstimado: 12,
+      // tiempoEstimadoMinutos ya está incluido arriba
       createdAt: viaje.createdAt.toISO(),
       aceptadoAt: viaje.aceptadoAt?.toISO() || null,
       enCursoAt: viaje.enCursoAt?.toISO() || null,
@@ -578,6 +731,12 @@ export default class TripController {
     let tipo: string
 
     if (user.rol === 'cliente') {
+      // Verificar que el cliente es dueño del viaje
+      if (viaje.clienteId !== user.id) {
+        return response
+          .status(403)
+          .send(serialize.withoutWrapping({ error: 'No eres el cliente de este viaje' }))
+      }
       if (!viaje.conductorId) {
         return response
           .status(422)
@@ -587,6 +746,13 @@ export default class TripController {
       calificadoId = conductor.usuarioId
       tipo = 'cliente_a_conductor'
     } else if (user.rol === 'conductor') {
+      // Verificar que el conductor es quien realizó el viaje
+      const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+      if (viaje.conductorId !== conductor.id) {
+        return response
+          .status(403)
+          .send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
+      }
       calificadoId = viaje.clienteId
       tipo = 'conductor_a_cliente'
     } else {
@@ -641,16 +807,22 @@ export default class TripController {
         .send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
     }
 
+    if (!['en_curso', 'completado'].includes(viaje.estado)) {
+      return response
+        .status(422)
+        .send(serialize.withoutWrapping({ error: 'Solo puedes subir foto de entrega cuando el viaje está en curso o completado' }))
+    }
+
     const file = request.file('file', {
       size: '5mb',
       extnames: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
     })
     if (!file) {
-      return serialize.withoutWrapping({ error: 'No file uploaded' })
+      return response.status(400).send({ error: 'No file uploaded' })
     }
 
     const fileName = `delivery-${viaje.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(ensureUploadDir(), { name: fileName })
 
     viaje.fotoEntrega = `/storage/uploads/${fileName}`
     await viaje.save()
