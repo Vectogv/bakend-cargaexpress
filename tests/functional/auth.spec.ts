@@ -27,14 +27,14 @@ test.group('Auth - Register', (group) => {
       email: `carlos${ts}@test.com`,
       password: '123456',
       rol: 'conductor',
-      cedula: `12345678${ts}`,
+      cedula: `${ts}`,
       placa: 'ABC-123',
       tipoVehiculo: 'camioneta',
       capacidad: '1000 kg',
     })
 
     response.assertStatus(200)
-    response.assertBodyContains({ nombre: 'Carlos', email: 'carlos@test.com', rol: 'conductor' })
+    response.assertBodyContains({ nombre: 'Carlos', email: `carlos${ts}@test.com`, rol: 'conductor' })
     assert.isDefined(response.body().token)
     assert.isDefined(response.body().refreshToken)
   })
@@ -140,7 +140,7 @@ test.group('Auth - Login', (group) => {
       email: `carlos${ts}@test.com`,
       password: '123456',
       rol: 'conductor',
-      cedula: `12345678${ts}`,
+      cedula: `${ts}`,
       placa: 'ABC-123',
       tipoVehiculo: 'camioneta',
       capacidad: '1000 kg',
@@ -152,7 +152,7 @@ test.group('Auth - Login', (group) => {
     })
 
     response.assertStatus(200)
-    response.assertBodyContains({ email: 'carlos@test.com', rol: 'conductor' })
+    response.assertBodyContains({ email: `carlos${ts}@test.com`, rol: 'conductor' })
   })
 
   test('login with invalid password', async ({ client }) => {

@@ -2,6 +2,7 @@ import Conductor from '#models/conductor'
 import Ganancia from '#models/ganancia'
 import UbicacionDriver from '#models/ubicacion_driver'
 import Viaje from '#models/viaje'
+import PDFDocument from 'pdfkit'
 import { driverStatusValidator, driverLocationValidator } from '#validators/driver'
 import type { HttpContext } from '@adonisjs/core/http'
 import app from '@adonisjs/core/services/app'
@@ -386,7 +387,6 @@ export default class DriverController {
     const user = auth.getUserOrFail()
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
-    const PDFDocument = require('pdfkit')
     const doc = new PDFDocument({ margin: 50 })
 
     response.response.setHeader('Content-Type', 'application/pdf')

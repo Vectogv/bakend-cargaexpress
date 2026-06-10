@@ -14,7 +14,7 @@ test.group('Drivers - Status', (group) => {
       email,
       password: '123456',
       rol: 'conductor',
-      cedula: `87654321${ts}`,
+      cedula: `${ts}`,
       placa: 'XYZ-789',
       tipoVehiculo: 'sedan',
       capacidad: '500 kg',
@@ -115,7 +115,7 @@ test.group('Drivers - Location', (group) => {
       email: `driver-loc-${ts}@test.com`,
       password: '123456',
       rol: 'conductor',
-      cedula: `11111111${ts}`,
+      cedula: `${ts}`,
       placa: 'LOC-001',
       tipoVehiculo: 'suv',
       capacidad: '800 kg',
@@ -176,7 +176,7 @@ test.group('Drivers - Earnings', (group) => {
       email: `driver-earn-${ts}@test.com`,
       password: '123456',
       rol: 'conductor',
-      cedula: `22222222${ts}`,
+      cedula: `${ts}`,
       placa: 'ERN-002',
       tipoVehiculo: 'pickup',
       capacidad: '1500 kg',
@@ -208,7 +208,7 @@ test.group('Drivers - Earnings', (group) => {
     response.assertBodyContains({ data: [], total: 0 })
   })
 
-  test('get earnings history with pagination', async ({ client }) => {
+  test('get earnings history with pagination', async ({ client, assert }) => {
     const token = await registerConductor(client)
 
     const response = await client
