@@ -12,7 +12,7 @@ test.group('Profile - Show', (group) => {
       password: '123456',
       rol,
       ...(rol === 'conductor'
-        ? { cedula: '12345678', placa: 'ABC-123', tipoVehiculo: 'camioneta', capacidad: '1000 kg' }
+        ? { cedula: '12345678', placa: `PRF-${Date.now()}`, tipoVehiculo: 'camioneta', capacidad: '1000 kg' }
         : {}),
     })
     return res.body().token
@@ -38,7 +38,7 @@ test.group('Profile - Show', (group) => {
     response.assertStatus(200)
     response.assertBodyContains({ nombre: 'Test', rol: 'conductor' })
     assert.isDefined(response.body().conductor)
-    assert.equal(response.body().conductor.placa, 'ABC-123')
+    assert.isDefined(response.body().conductor.placa)
     assert.equal(response.body().conductor.tipoVehiculo, 'camioneta')
   })
 

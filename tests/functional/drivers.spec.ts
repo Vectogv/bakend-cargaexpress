@@ -15,7 +15,7 @@ test.group('Drivers - Status', (group) => {
       password: '123456',
       rol: 'conductor',
       cedula: `${ts}`,
-      placa: 'XYZ-789',
+      placa: `XYZ-${Date.now()}`,
       tipoVehiculo: 'sedan',
       capacidad: '500 kg',
     })
@@ -116,7 +116,7 @@ test.group('Drivers - Location', (group) => {
       password: '123456',
       rol: 'conductor',
       cedula: `${ts}`,
-      placa: 'LOC-001',
+      placa: `LOC-${ts}`,
       tipoVehiculo: 'suv',
       capacidad: '800 kg',
     })
@@ -177,7 +177,7 @@ test.group('Drivers - Earnings', (group) => {
       password: '123456',
       rol: 'conductor',
       cedula: `${ts}`,
-      placa: 'ERN-002',
+      placa: `ERN-${ts}`,
       tipoVehiculo: 'pickup',
       capacidad: '1500 kg',
     })

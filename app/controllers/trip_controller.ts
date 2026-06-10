@@ -11,7 +11,6 @@ import app from '@adonisjs/core/services/app'
 import { randomUUID } from 'node:crypto'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import { emitToClient, emitToDriver, emitToAdmin } from '#start/socket'
-import { ensureUploadDir } from '#app/helpers/ensure_upload_dir'
 import { sendToMultiple, sendToToken } from '#services/push_notification_service'
 import GeoService from '#services/geo_service'
 import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
@@ -222,7 +221,7 @@ export default class TripController {
     } else {
       viaje = await Viaje.query()
         .where('cliente_id', user.id)
-        .whereIn('estado', ['aceptado', 'en_curso'])
+        .whereIn('estado', ['buscando_conductor', 'aceptado', 'en_curso'])
         .preload('cliente')
         .preload('conductor', (q) => q.preload('usuario'))
         .first()
@@ -672,29 +671,32 @@ export default class TripController {
               `${viaje.conductor.usuario.nombre || ''} ${viaje.conductor.usuario.apellido || ''}`.trim(),
             telefono: viaje.conductor.usuario.telefono,
             placa: viaje.conductor.placa,
+            tipoVehiculo: viaje.conductor.tipoVehiculo,
           }
         : null,
       origen: {
         direccion: viaje.origenDireccion,
-        lat: viaje.origenLat,
-        lng: viaje.origenLng,
+        lat: Number(viaje.origenLat),
+        lng: Number(viaje.origenLng),
       },
       destino: {
         direccion: viaje.destinoDireccion,
-        lat: viaje.destinoLat,
-        lng: viaje.destinoLng,
+        lat: Number(viaje.destinoLat),
+        lng: Number(viaje.destinoLng),
       },
       carga: viaje.carga,
       fotoEntrega: viaje.fotoEntrega,
-      tiempoEstimadoMinutos: viaje.tiempoEstimadoMinutos,
-      precioEstimado: viaje.precioEstimado,
-      precioFinal: viaje.precioFinal,
+      tiempoEstimadoMinutos: Number(viaje.tiempoEstimadoMinutos),
+      precioEstimado: Number(viaje.precioEstimado),
+      precioFinal: Number(viaje.precioFinal),
       // tiempoEstimadoMinutos ya está incluido arriba
       createdAt: viaje.createdAt.toISO(),
       aceptadoAt: viaje.aceptadoAt?.toISO() || null,
       enCursoAt: viaje.enCursoAt?.toISO() || null,
       completadoAt: viaje.completadoAt?.toISO() || null,
       finalizadoAt: viaje.finalizadoAt?.toISO() || null,
+      canceladoAt: viaje.canceladoAt?.toISO() || null,
+      motivoCancelacion: viaje.motivoCancelacion,
     }
   }
 
@@ -822,7 +824,7 @@ export default class TripController {
     }
 
     const fileName = `delivery-${viaje.id}-${randomUUID()}.${file.extname}`
-    await file.move(ensureUploadDir(), { name: fileName })
+    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
 
     viaje.fotoEntrega = `/storage/uploads/${fileName}`
     await viaje.save()

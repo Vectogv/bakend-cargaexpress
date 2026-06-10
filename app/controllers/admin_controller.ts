@@ -107,6 +107,10 @@ export default class AdminController {
         calificacion: d.calificacion,
         totalViajes: d.totalViajes,
         horasActivo: d.horasActivo,
+        estadoVerificacion: d.estadoVerificacion,
+        fotoCedula: d.fotoCedula,
+        fotoLicencia: d.fotoLicencia,
+        notaRechazo: d.notaRechazo,
         fotoConductor: d.fotoConductor,
         fotoVehiculo: d.fotoVehiculo,
         usuario: d.usuario

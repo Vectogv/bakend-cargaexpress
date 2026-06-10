@@ -28,7 +28,7 @@ test.group('Auth - Register', (group) => {
       password: '123456',
       rol: 'conductor',
       cedula: `${ts}`,
-      placa: 'ABC-123',
+      placa: `ABC-${ts}`,
       tipoVehiculo: 'camioneta',
       capacidad: '1000 kg',
     })
@@ -141,7 +141,7 @@ test.group('Auth - Login', (group) => {
       password: '123456',
       rol: 'conductor',
       cedula: `${ts}`,
-      placa: 'ABC-123',
+      placa: `ABC-${ts}`,
       tipoVehiculo: 'camioneta',
       capacidad: '1000 kg',
     })

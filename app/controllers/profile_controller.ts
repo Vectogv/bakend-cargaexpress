@@ -45,6 +45,10 @@ export default class ProfileController {
             horasActivo: user.conductor.horasActivo,
             ultimaUbicacionLat: user.conductor.ultimaUbicacionLat,
             ultimaUbicacionLng: user.conductor.ultimaUbicacionLng,
+            estadoVerificacion: user.conductor.estadoVerificacion,
+            fotoCedula: user.conductor.fotoCedula,
+            fotoLicencia: user.conductor.fotoLicencia,
+            notaRechazo: user.conductor.notaRechazo,
           }
         : undefined,
     }
