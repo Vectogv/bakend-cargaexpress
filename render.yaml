@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: cargaexpress-backend
+    runtime: node
+    repo: https://github.com/Vectogv/bakend-cargaexpress
+    plan: free
+    branch: main
+    buildCommand: npm run build
+    startCommand: bash start.sh
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        value: https://cargaexpress-backend.onrender.com
+      - key: LOG_LEVEL
+        value: info
+      - key: SESSION_DRIVER
+        value: cookie
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_DATABASE
+        value: defaultdb
+      - key: DB_SSL
+        value: true
+      - key: CORS_ORIGIN
+        sync: false
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
