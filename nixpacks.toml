@@ -2,7 +2,10 @@
 nixPkgs = ["nodejs", "nodePackages.pnpm"]
 
 [phases.install]
-cmds = ["npm install"]
+cmds = ["npm install --include=dev"]
 
 [phases.build]
 cmds = ["npm run build"]
+
+[phases.start]
+cmd = "bash start.sh"
