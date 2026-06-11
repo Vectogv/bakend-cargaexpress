@@ -35,6 +35,7 @@ export type ScannedRoutes = {
     'trips.trip.complete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.finalize': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.cancel': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'trips.trip.request_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.rate': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.delivery_photo': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.chat.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -87,6 +88,9 @@ export type ScannedRoutes = {
     'admin.admin.moderator_reports': { paramsTuple?: []; params?: {} }
     'admin.admin.backup_logs': { paramsTuple?: []; params?: {} }
     'admin.admin.manual_backup': { paramsTuple?: []; params?: {} }
+    'admin.admin.cancellation_requests': { paramsTuple?: []; params?: {} }
+    'admin.admin.approve_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'admin.admin.reject_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'favorites.favorite_route.index': { paramsTuple?: []; params?: {} }
     'favorites.favorite_route.store': { paramsTuple?: []; params?: {} }
     'favorites.favorite_route.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -146,6 +150,7 @@ export type ScannedRoutes = {
     'admin.admin.pending_payments': { paramsTuple?: []; params?: {} }
     'admin.admin.moderator_reports': { paramsTuple?: []; params?: {} }
     'admin.admin.backup_logs': { paramsTuple?: []; params?: {} }
+    'admin.admin.cancellation_requests': { paramsTuple?: []; params?: {} }
     'favorites.favorite_route.index': { paramsTuple?: []; params?: {} }
     'support.support.help': { paramsTuple?: []; params?: {} }
     'support.support.emergency': { paramsTuple?: []; params?: {} }
@@ -189,6 +194,7 @@ export type ScannedRoutes = {
     'admin.admin.pending_payments': { paramsTuple?: []; params?: {} }
     'admin.admin.moderator_reports': { paramsTuple?: []; params?: {} }
     'admin.admin.backup_logs': { paramsTuple?: []; params?: {} }
+    'admin.admin.cancellation_requests': { paramsTuple?: []; params?: {} }
     'favorites.favorite_route.index': { paramsTuple?: []; params?: {} }
     'support.support.help': { paramsTuple?: []; params?: {} }
     'support.support.emergency': { paramsTuple?: []; params?: {} }
@@ -221,6 +227,7 @@ export type ScannedRoutes = {
     'trips.trip.complete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.finalize': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.cancel': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'trips.trip.request_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.rate': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.delivery_photo': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.chat.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -232,6 +239,8 @@ export type ScannedRoutes = {
     'trips.report.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.upload_profile_avatar': { paramsTuple?: []; params?: {} }
     'admin.admin.manual_backup': { paramsTuple?: []; params?: {} }
+    'admin.admin.approve_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'admin.admin.reject_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'favorites.favorite_route.store': { paramsTuple?: []; params?: {} }
     'payment.payment.upload_proof': { paramsTuple?: []; params?: {} }
     'moderator.moderator.store_comunicado': { paramsTuple?: []; params?: {} }

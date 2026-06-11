@@ -3,6 +3,7 @@ import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
 import Ganancia from '#models/ganancia'
 import Calificacion from '#models/calificacion'
+import SolicitudCancelacion from '#models/solicitud_cancelacion'
 import ConfiguracionPlataforma from '#models/configuracion_plataforma'
 import { tripRequestValidator, tripCompleteValidator, tripCancelValidator } from '#validators/trip'
 import type { HttpContext } from '@adonisjs/core/http'
@@ -528,6 +529,11 @@ export default class TripController {
     const data = await request.validateUsing(tripCancelValidator)
     const viaje = await Viaje.findOrFail(params.id)
 
+    // Solo el admin puede cancelar un viaje en curso
+    if (viaje.estado === 'en_curso' && user.rol !== 'admin') {
+      return response.status(403).send({ error: 'No puedes cancelar un viaje en curso. Debes solicitar la cancelación al administrador.' })
+    }
+
     // Validar que el usuario sea el cliente o el conductor del viaje
     if (user.rol === 'conductor') {
       const conductor = await Conductor.findByOrFail('usuario_id', user.id)
@@ -587,6 +593,57 @@ export default class TripController {
       id: String(viaje.id),
       estado: viaje.estado,
       canceladoAt: viaje.canceladoAt.toISO(),
+    })
+  }
+
+  @ApiOperation({ summary: 'Request cancellation', description: 'Conductor requests trip cancellation when en_curso. Admin must approve.' })
+  @ApiResponse({ type: 'object' })
+  async requestCancellation({ auth, params, request, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    if (user.rol !== 'conductor') {
+      return response.status(403).send({ error: 'Solo los conductores pueden solicitar cancelación' })
+    }
+
+    const viaje = await Viaje.findOrFail(params.id)
+    if (viaje.estado !== 'en_curso') {
+      return response.status(422).send({ error: `Solo puedes solicitar cancelación cuando el viaje está en curso (estado actual: ${viaje.estado})` })
+    }
+
+    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    if (viaje.conductorId !== conductor.id) {
+      return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
+    }
+
+    // Verificar que no exista ya una solicitud pendiente
+    const existente = await SolicitudCancelacion.query()
+      .where('viaje_id', viaje.id)
+      .where('estado', 'pendiente')
+      .first()
+    if (existente) {
+      return response.status(409).send({ error: 'Ya existe una solicitud de cancelación pendiente para este viaje' })
+    }
+
+    const { motivo } = request.only(['motivo'])
+
+    const solicitud = await SolicitudCancelacion.create({
+      viajeId: viaje.id,
+      conductorId: conductor.id,
+      motivo: motivo || 'Sin motivo especificado',
+      estado: 'pendiente',
+    })
+
+    emitToAdmin('admin:cancellation_requested', {
+      id: String(solicitud.id),
+      viajeId: String(viaje.id),
+      conductorId: String(conductor.id),
+      motivo: solicitud.motivo,
+      createdAt: solicitud.createdAt.toISO(),
+    })
+
+    return serialize.withoutWrapping({
+      id: String(solicitud.id),
+      estado: solicitud.estado,
+      message: 'Solicitud de cancelación enviada al administrador',
     })
   }
 

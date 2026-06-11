@@ -10,7 +10,7 @@ export type EstadoViaje =
 const transiciones: Record<EstadoViaje, EstadoViaje[]> = {
   buscando_conductor: ['aceptado', 'cancelado', 'rechazado'],
   aceptado: ['en_curso', 'cancelado'],
-  en_curso: ['completado'],
+  en_curso: ['completado', 'cancelado'],
   completado: ['finalizado'],
   finalizado: [],
   cancelado: [],

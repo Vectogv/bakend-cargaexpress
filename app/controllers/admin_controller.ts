@@ -10,6 +10,8 @@ import Comunicado from '#models/comunicado'
 import Encuesta from '#models/encuesta'
 import ReporteModerador from '#models/reporte_moderador'
 import LogRespaldo from '#models/log_respaldo'
+import SolicitudCancelacion from '#models/solicitud_cancelacion'
+import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import app from '@adonisjs/core/services/app'
@@ -1130,5 +1132,106 @@ export default class AdminController {
         createdAt: r.createdAt.toISO(),
       }))
     )
+  }
+
+  async cancellationRequests({ serialize }: HttpContext) {
+    const solicitudes = await SolicitudCancelacion.query()
+      .where('estado', 'pendiente')
+      .preload('viaje')
+      .preload('conductor', (q) => q.preload('usuario'))
+      .orderBy('created_at', 'desc')
+
+    return serialize.withoutWrapping(
+      solicitudes.map((s) => ({
+        id: s.id,
+        tripId: String(s.viajeId),
+        conductorId: String(s.conductorId),
+        motivo: s.motivo,
+        estado: s.estado,
+        createdAt: s.createdAt.toISO(),
+        origenDireccion: s.viaje.origenDireccion,
+        destinoDireccion: s.viaje.destinoDireccion,
+        conductor: s.conductor
+          ? {
+              id: String(s.conductor.id),
+              nombre:
+                `${s.conductor.usuario?.nombre || ''} ${s.conductor.usuario?.apellido || ''}`.trim(),
+              placa: s.conductor.placa,
+              telefono: s.conductor.usuario?.telefono,
+            }
+          : null,
+      }))
+    )
+  }
+
+  async approveCancellation({ params, response, serialize }: HttpContext) {
+    const solicitud = await SolicitudCancelacion.query()
+      .where('id', params.id)
+      .where('estado', 'pendiente')
+      .preload('viaje')
+      .preload('conductor', (q) => q.preload('usuario'))
+      .first()
+
+    if (!solicitud) {
+      return response.status(404).send({ error: 'Solicitud de cancelación no encontrada o ya fue procesada' })
+    }
+
+    const viaje = solicitud.viaje
+    if (!TripStateMachine.validarTransicion(viaje.estado as EstadoViaje, 'cancelado')) {
+      return response.status(422).send({ error: `El viaje no puede cancelarse en su estado actual (${viaje.estado})` })
+    }
+
+    viaje.estado = 'cancelado'
+    viaje.motivoCancelacion = `Cancelación aprobada por admin — ${solicitud.motivo}`
+    viaje.canceladoAt = DateTime.now()
+    await viaje.save()
+
+    solicitud.estado = 'aprobado'
+    solicitud.resueltoAt = DateTime.now()
+    await solicitud.save()
+
+    emitToClient(viaje.clienteId, 'trip:cancelled', {
+      id: String(viaje.id),
+      estado: viaje.estado,
+      motivo: viaje.motivoCancelacion,
+    })
+
+    if (viaje.conductorId) {
+      const conductor = await Conductor.find(viaje.conductorId)
+      if (conductor) {
+        emitToDriver(conductor.usuarioId, 'trip:cancelled', {
+          id: String(viaje.id),
+          estado: viaje.estado,
+          motivo: viaje.motivoCancelacion,
+        })
+      }
+    }
+
+    return serialize.withoutWrapping({
+      id: String(solicitud.id),
+      estado: solicitud.estado,
+      viajeId: String(viaje.id),
+      viajeEstado: viaje.estado,
+    })
+  }
+
+  async rejectCancellation({ params, response, serialize }: HttpContext) {
+    const solicitud = await SolicitudCancelacion.query()
+      .where('id', params.id)
+      .where('estado', 'pendiente')
+      .first()
+
+    if (!solicitud) {
+      return response.status(404).send({ error: 'Solicitud de cancelación no encontrada o ya fue procesada' })
+    }
+
+    solicitud.estado = 'rechazado'
+    solicitud.resueltoAt = DateTime.now()
+    await solicitud.save()
+
+    return serialize.withoutWrapping({
+      id: String(solicitud.id),
+      estado: solicitud.estado,
+    })
   }
 }

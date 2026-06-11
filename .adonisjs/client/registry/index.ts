@@ -192,6 +192,12 @@ const routes = {
     tokens: [{"old":"/api/trips/:id/cancel","type":0,"val":"api","end":""},{"old":"/api/trips/:id/cancel","type":0,"val":"trips","end":""},{"old":"/api/trips/:id/cancel","type":1,"val":"id","end":""},{"old":"/api/trips/:id/cancel","type":0,"val":"cancel","end":""}],
     types: placeholder as Registry['trips.trip.cancel']['types'],
   },
+  'trips.trip.request_cancellation': {
+    methods: ["POST"],
+    pattern: '/api/trips/:id/request-cancellation',
+    tokens: [{"old":"/api/trips/:id/request-cancellation","type":0,"val":"api","end":""},{"old":"/api/trips/:id/request-cancellation","type":0,"val":"trips","end":""},{"old":"/api/trips/:id/request-cancellation","type":1,"val":"id","end":""},{"old":"/api/trips/:id/request-cancellation","type":0,"val":"request-cancellation","end":""}],
+    types: placeholder as Registry['trips.trip.request_cancellation']['types'],
+  },
   'trips.trip.rate': {
     methods: ["POST"],
     pattern: '/api/trips/:id/rate',
@@ -503,6 +509,24 @@ const routes = {
     pattern: '/api/admin/backups/run',
     tokens: [{"old":"/api/admin/backups/run","type":0,"val":"api","end":""},{"old":"/api/admin/backups/run","type":0,"val":"admin","end":""},{"old":"/api/admin/backups/run","type":0,"val":"backups","end":""},{"old":"/api/admin/backups/run","type":0,"val":"run","end":""}],
     types: placeholder as Registry['admin.admin.manual_backup']['types'],
+  },
+  'admin.admin.cancellation_requests': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/admin/cancellation-requests',
+    tokens: [{"old":"/api/admin/cancellation-requests","type":0,"val":"api","end":""},{"old":"/api/admin/cancellation-requests","type":0,"val":"admin","end":""},{"old":"/api/admin/cancellation-requests","type":0,"val":"cancellation-requests","end":""}],
+    types: placeholder as Registry['admin.admin.cancellation_requests']['types'],
+  },
+  'admin.admin.approve_cancellation': {
+    methods: ["POST"],
+    pattern: '/api/admin/cancellation-requests/:id/approve',
+    tokens: [{"old":"/api/admin/cancellation-requests/:id/approve","type":0,"val":"api","end":""},{"old":"/api/admin/cancellation-requests/:id/approve","type":0,"val":"admin","end":""},{"old":"/api/admin/cancellation-requests/:id/approve","type":0,"val":"cancellation-requests","end":""},{"old":"/api/admin/cancellation-requests/:id/approve","type":1,"val":"id","end":""},{"old":"/api/admin/cancellation-requests/:id/approve","type":0,"val":"approve","end":""}],
+    types: placeholder as Registry['admin.admin.approve_cancellation']['types'],
+  },
+  'admin.admin.reject_cancellation': {
+    methods: ["POST"],
+    pattern: '/api/admin/cancellation-requests/:id/reject',
+    tokens: [{"old":"/api/admin/cancellation-requests/:id/reject","type":0,"val":"api","end":""},{"old":"/api/admin/cancellation-requests/:id/reject","type":0,"val":"admin","end":""},{"old":"/api/admin/cancellation-requests/:id/reject","type":0,"val":"cancellation-requests","end":""},{"old":"/api/admin/cancellation-requests/:id/reject","type":1,"val":"id","end":""},{"old":"/api/admin/cancellation-requests/:id/reject","type":0,"val":"reject","end":""}],
+    types: placeholder as Registry['admin.admin.reject_cancellation']['types'],
   },
   'favorites.favorite_route.index': {
     methods: ["GET","HEAD"],

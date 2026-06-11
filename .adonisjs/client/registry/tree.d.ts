@@ -47,6 +47,7 @@ export interface ApiDefinition {
       complete: typeof routes['trips.trip.complete']
       finalize: typeof routes['trips.trip.finalize']
       cancel: typeof routes['trips.trip.cancel']
+      requestCancellation: typeof routes['trips.trip.request_cancellation']
       rate: typeof routes['trips.trip.rate']
       deliveryPhoto: typeof routes['trips.trip.delivery_photo']
     }
@@ -115,6 +116,9 @@ export interface ApiDefinition {
       moderatorReports: typeof routes['admin.admin.moderator_reports']
       backupLogs: typeof routes['admin.admin.backup_logs']
       manualBackup: typeof routes['admin.admin.manual_backup']
+      cancellationRequests: typeof routes['admin.admin.cancellation_requests']
+      approveCancellation: typeof routes['admin.admin.approve_cancellation']
+      rejectCancellation: typeof routes['admin.admin.reject_cancellation']
     }
   }
   favorites: {

@@ -420,6 +420,25 @@ export class RutasFavoritaSchema extends BaseModel {
   declare userId: number
 }
 
+export class SolicitudesCancelacionSchema extends BaseModel {
+  static $columns = ['conductorId', 'createdAt', 'estado', 'id', 'motivo', 'resueltoAt', 'viajeId'] as const
+  $columns = SolicitudesCancelacionSchema.$columns
+  @column()
+  declare conductorId: number
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column()
+  declare estado: string
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare motivo: string
+  @column.dateTime()
+  declare resueltoAt: DateTime | null
+  @column()
+  declare viajeId: number
+}
+
 export class UbicacionesDriverSchema extends BaseModel {
   static $columns = ['conductorId', 'createdAt', 'id', 'lat', 'lng'] as const
   $columns = UbicacionesDriverSchema.$columns

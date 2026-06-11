@@ -379,6 +379,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['cancel']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
+  'trips.trip.request_cancellation': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/request-cancellation'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['requestCancellation']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['requestCancellation']>>>
+    }
+  }
   'trips.trip.rate': {
     methods: ["POST"]
     pattern: '/api/trips/:id/rate'
@@ -1001,6 +1013,42 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['manualBackup']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['manualBackup']>>>
+    }
+  }
+  'admin.admin.cancellation_requests': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/cancellation-requests'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['cancellationRequests']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['cancellationRequests']>>>
+    }
+  }
+  'admin.admin.approve_cancellation': {
+    methods: ["POST"]
+    pattern: '/api/admin/cancellation-requests/:id/approve'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['approveCancellation']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['approveCancellation']>>>
+    }
+  }
+  'admin.admin.reject_cancellation': {
+    methods: ["POST"]
+    pattern: '/api/admin/cancellation-requests/:id/reject'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['rejectCancellation']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['rejectCancellation']>>>
     }
   }
   'favorites.favorite_route.index': {
