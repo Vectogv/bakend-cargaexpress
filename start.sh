@@ -27,7 +27,7 @@ fi
 
 # ── Migraciones ───────────────────────────────────────────────────
 echo "Ejecutando migraciones..."
-node ace migration:run --force
+node ace.js migration:run --force 2>&1
 echo "✓ Migraciones ejecutadas"
 
 # ── Iniciar servidor ──────────────────────────────────────────────
