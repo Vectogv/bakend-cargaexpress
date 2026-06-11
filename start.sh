@@ -4,6 +4,11 @@ set -e
 echo "=== Iniciando despliegue de CargaExpress Backend ==="
 cd /app/build
 
+# ── Instalar dependencias de producción ───────────────────────────
+echo "Instalando dependencias de producción..."
+npm ci --omit=dev
+echo "✓ Dependencias instaladas"
+
 # ── Firebase credentials ──────────────────────────────────────────
 if [ -n "$FIREBASE_CREDENTIALS_JSON" ]; then
   echo "Configurando Firebase desde FIREBASE_CREDENTIALS_JSON..."
