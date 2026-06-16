@@ -32,8 +32,9 @@ export default class DisputeController {
         .send(serialize.withoutWrapping({ error: 'Ya existe una disputa para este viaje' }))
     }
 
-    const { version } = request.only(['version'])
-    if (!version) {
+    const { version, motivo, descripcion } = request.only(['version', 'motivo', 'descripcion'])
+    const description = version || motivo || descripcion
+    if (!description) {
       return response
         .status(422)
         .send(serialize.withoutWrapping({ error: 'Debes describir tu versión de los hechos' }))
@@ -51,7 +52,7 @@ export default class DisputeController {
         viajeId: viaje.id,
         conductorId: conductor.id,
         clienteId: viaje.clienteId,
-        versionConductor: version,
+        versionConductor: description,
         estado: 'abierta',
       })
 
@@ -97,7 +98,7 @@ export default class DisputeController {
       viajeId: viaje.id,
       conductorId: conductor.id,
       clienteId: viaje.clienteId,
-      versionCliente: version,
+      versionCliente: description,
       estado: 'abierta',
     })
 
@@ -138,14 +139,15 @@ export default class DisputeController {
         .send(serialize.withoutWrapping({ error: 'La disputa no está en estado abierta' }))
     }
 
-    const { version } = request.only(['version'])
-    if (!version) {
+    const { version, motivo, descripcion } = request.only(['version', 'motivo', 'descripcion'])
+    const description = version || motivo || descripcion
+    if (!description) {
       return response
         .status(422)
         .send(serialize.withoutWrapping({ error: 'Debes describir tu versión' }))
     }
 
-    disputa.versionCliente = version
+    disputa.versionCliente = description
     disputa.estado = 'en_revision'
     await disputa.save()
 
