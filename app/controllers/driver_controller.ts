@@ -11,6 +11,9 @@ import { DateTime } from 'luxon'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import { emitToClient } from '#start/socket'
 
+const lastGpsUpdate = new Map<number, number>()
+const GPS_MIN_INTERVAL_MS = 8_000
+
 export default class DriverController {
   @ApiOperation({
     summary: 'Update driver status',
@@ -153,11 +156,20 @@ export default class DriverController {
   })
   @ApiBody({ type: () => driverLocationValidator })
   @ApiResponse({ type: 'object' })
-  async location({ auth, request, serialize }: HttpContext) {
+  async location({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     const data = await request.validateUsing(driverLocationValidator)
 
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+
+    const now = Date.now()
+    const last = lastGpsUpdate.get(conductor.id)
+    if (last && now - last < GPS_MIN_INTERVAL_MS) {
+      return response
+        .status(429)
+        .send({ error: 'Espera antes de actualizar ubicación' })
+    }
+    lastGpsUpdate.set(conductor.id, now)
     conductor.ultimaUbicacionLat = data.lat
     conductor.ultimaUbicacionLng = data.lng
     await conductor.save()
@@ -174,6 +186,20 @@ export default class DriverController {
       .first()
 
     if (viajeActivo) {
+      const ultimaUbic = await UbicacionDriver.query()
+        .where('conductor_id', conductor.id)
+        .orderBy('created_at', 'desc')
+        .offset(1)
+        .first()
+      if (ultimaUbic) {
+        const segundosDesdeUltima = DateTime.now().diff(ultimaUbic.createdAt, 'seconds').seconds
+        if (segundosDesdeUltima > 30) {
+          emitToClient(viajeActivo.clienteId, 'trip:gps_frozen', {
+            mensaje: 'El conductor no está enviando su ubicación',
+          })
+        }
+      }
+
       emitToClient(viajeActivo.clienteId, 'driver:location', {
         lat: data.lat,
         lng: data.lng,

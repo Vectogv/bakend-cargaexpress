@@ -1,16 +1,16 @@
 import User from '#models/user'
 import Conductor from '#models/conductor'
 import Comunicado from '#models/comunicado'
-import ForoMensaje from '#models/foro_mensaje'
+import Aviso from '#models/aviso'
 import ReporteModerador from '#models/reporte_moderador'
 import type { HttpContext } from '@adonisjs/core/http'
 import { sendToMultiple } from '#services/push_notification_service'
 import { emitToAdmin, getIO } from '#start/socket'
 
 export default class LeaderController {
-  // ──────────────────────── FORO ────────────────────────
-  async foroIndex({ serialize }: HttpContext) {
-    const posts = await ForoMensaje.query()
+  // ──────────────────────── AVISOS ────────────────────────
+  async avisosIndex({ serialize }: HttpContext) {
+    const posts = await Aviso.query()
       .preload('autor')
       .orderBy('fijado', 'desc')
       .orderBy('created_at', 'desc')
@@ -26,7 +26,7 @@ export default class LeaderController {
     )
   }
 
-  async foroStore({ auth, request, response, serialize }: HttpContext) {
+  async avisosStore({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     const { contenido } = request.only(['contenido'])
 
@@ -34,7 +34,7 @@ export default class LeaderController {
       return response.status(422).send(serialize.withoutWrapping({ error: 'contenido es requerido' }))
     }
 
-    const post = await ForoMensaje.create({
+    const post = await Aviso.create({
       autorId: user.id,
       zona: user.zonaModerador || '',
       contenido,
@@ -48,8 +48,8 @@ export default class LeaderController {
     })
   }
 
-  async foroPin({ params, response, serialize }: HttpContext) {
-    const post = await ForoMensaje.find(params.id)
+  async avisosPin({ params, response, serialize }: HttpContext) {
+    const post = await Aviso.find(params.id)
 
     if (!post) {
       return response.status(404).send(serialize.withoutWrapping({ error: 'Post no encontrado' }))
@@ -61,9 +61,9 @@ export default class LeaderController {
     return serialize.withoutWrapping({ id: post.id, fijado: post.fijado })
   }
 
-  async foroDelete({ params, auth, response, serialize }: HttpContext) {
+  async avisosDelete({ params, auth, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const post = await ForoMensaje.find(params.id)
+    const post = await Aviso.find(params.id)
 
     if (!post) {
       return response.status(404).send(serialize.withoutWrapping({ error: 'Post no encontrado' }))

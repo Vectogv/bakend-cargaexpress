@@ -427,6 +427,10 @@ export default class TripController {
       completadoAt: viaje.completadoAt.toISO(),
     })
 
+    emitToDriver(conductor.usuarioId, 'driver:stop_gps', {
+      viajeId: String(viaje.id),
+    })
+
     return serialize.withoutWrapping({
       id: String(viaje.id),
       estado: viaje.estado,
@@ -496,6 +500,10 @@ export default class TripController {
         if (viaje.conductorId) {
           const conductor = await Conductor.find(viaje.conductorId)
           if (conductor) {
+            emitToDriver(conductor.usuarioId, 'driver:stop_gps', {
+              viajeId: String(viaje.id),
+            })
+
             const conductorUser = await User.find(conductor.usuarioId)
             if (conductorUser?.fcmToken && conductorUser.montoDeuda && conductorUser.deudaFechaLimite) {
               const diasRestantes = Math.ceil(
@@ -585,6 +593,10 @@ export default class TripController {
           id: String(viaje.id),
           estado: viaje.estado,
           motivo: viaje.motivoCancelacion,
+        })
+
+        emitToDriver(conductor.usuarioId, 'driver:stop_gps', {
+          viajeId: String(viaje.id),
         })
       }
     }

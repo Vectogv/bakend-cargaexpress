@@ -3,8 +3,8 @@ import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 
-export default class ForoMensaje extends BaseModel {
-  static table = 'foro_mensajes'
+export default class Aviso extends BaseModel {
+  static table = 'avisos'
 
   @column({ isPrimary: true })
   declare id: number

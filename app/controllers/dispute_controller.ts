@@ -9,10 +9,10 @@ import { emitToAdmin } from '#start/socket'
 export default class DisputeController {
   async store({ auth, params, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    if (user.rol !== 'conductor') {
+    if (user.rol !== 'conductor' && user.rol !== 'cliente') {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Solo conductores pueden abrir disputas' }))
+        .send(serialize.withoutWrapping({ error: 'Solo conductores o clientes pueden abrir disputas' }))
     }
 
     const viaje = await Viaje.find(params.id)
@@ -23,13 +23,6 @@ export default class DisputeController {
       return response
         .status(422)
         .send(serialize.withoutWrapping({ error: 'Solo puedes disputar viajes finalizados' }))
-    }
-
-    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
-    if (viaje.conductorId !== conductor.id) {
-      return response
-        .status(403)
-        .send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
     }
 
     const existe = await Disputa.query().where('viaje_id', viaje.id).first()
@@ -46,11 +39,65 @@ export default class DisputeController {
         .send(serialize.withoutWrapping({ error: 'Debes describir tu versión de los hechos' }))
     }
 
+    if (user.rol === 'conductor') {
+      const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+      if (viaje.conductorId !== conductor.id) {
+        return response
+          .status(403)
+          .send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
+      }
+
+      const disputa = await Disputa.create({
+        viajeId: viaje.id,
+        conductorId: conductor.id,
+        clienteId: viaje.clienteId,
+        versionConductor: version,
+        estado: 'abierta',
+      })
+
+      emitToAdmin('admin:new_dispute', {
+        id: String(disputa.id),
+        viajeId: String(viaje.id),
+        conductorId: String(conductor.id),
+        clienteId: String(viaje.clienteId),
+        estado: disputa.estado,
+        createdAt: disputa.createdAt.toISO(),
+      })
+
+      return response.status(201).send(
+        serialize.withoutWrapping({
+          id: String(disputa.id),
+          estado: disputa.estado,
+          message: 'Disputa creada. El administrador revisará el caso.',
+        })
+      )
+    }
+
+    // cliente
+    if (viaje.clienteId !== user.id) {
+      return response
+        .status(403)
+        .send(serialize.withoutWrapping({ error: 'Este viaje no te pertenece' }))
+    }
+
+    if (!viaje.conductorId) {
+      return response
+        .status(422)
+        .send(serialize.withoutWrapping({ error: 'El viaje no tiene conductor asignado' }))
+    }
+
+    const conductor = await Conductor.find(viaje.conductorId)
+    if (!conductor) {
+      return response
+        .status(422)
+        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+    }
+
     const disputa = await Disputa.create({
       viajeId: viaje.id,
       conductorId: conductor.id,
       clienteId: viaje.clienteId,
-      versionConductor: version,
+      versionCliente: version,
       estado: 'abierta',
     })
 

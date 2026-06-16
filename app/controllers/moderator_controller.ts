@@ -4,7 +4,7 @@ import Comunicado from '#models/comunicado'
 import Encuesta from '#models/encuesta'
 import RespuestaEncuesta from '#models/respuesta_encuesta'
 import ReporteModerador from '#models/reporte_moderador'
-import ForoMensaje from '#models/foro_mensaje'
+import Aviso from '#models/aviso'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import { sendToMultiple } from '#services/push_notification_service'
@@ -307,8 +307,8 @@ export default class ModeratorController {
     })
   }
 
-  async foroIndex({ serialize }: HttpContext) {
-    const mensajes = await ForoMensaje.query()
+  async avisosIndex({ serialize }: HttpContext) {
+    const mensajes = await Aviso.query()
       .where('eliminado', false)
       .preload('autor', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('fijado', 'desc')
@@ -329,12 +329,12 @@ export default class ModeratorController {
     )
   }
 
-  async foroStore({ auth, request, response, serialize }: HttpContext) {
+  async avisosStore({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     if (user.rol !== 'conductor' && !user.esModerador) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Solo conductores pueden publicar en el foro' }))
+        .send(serialize.withoutWrapping({ error: 'Solo conductores pueden publicar avisos' }))
     }
 
     const { contenido } = request.only(['contenido'])
@@ -344,7 +344,7 @@ export default class ModeratorController {
         .send(serialize.withoutWrapping({ error: 'El contenido no puede estar vacío' }))
     }
 
-    const msg = await ForoMensaje.create({
+    const msg = await Aviso.create({
       autorId: user.id,
       zona: 'general',
       contenido: contenido.trim(),
@@ -353,7 +353,7 @@ export default class ModeratorController {
     await msg.load('autor', (q) => q.select('id', 'nombre', 'apellido'))
 
     const io = getIO()
-    io.emit('foro:new_message', {
+    io.emit('avisos:new_message', {
       id: msg.id,
       autor: {
         id: msg.autor.id,
@@ -378,15 +378,15 @@ export default class ModeratorController {
     })
   }
 
-  async foroPin({ auth, params, response, serialize }: HttpContext) {
+  async avisosPin({ auth, params, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     if (!user.esModerador) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Solo moderadores pueden fijar mensajes' }))
+        .send(serialize.withoutWrapping({ error: 'Solo moderadores pueden fijar avisos' }))
     }
 
-    const msg = await ForoMensaje.find(params.id)
+    const msg = await Aviso.find(params.id)
     if (!msg) {
       return response
         .status(404)
@@ -402,15 +402,15 @@ export default class ModeratorController {
     })
   }
 
-  async foroDelete({ auth, params, response, serialize }: HttpContext) {
+  async avisosDelete({ auth, params, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     if (!user.esModerador) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Solo moderadores pueden eliminar mensajes' }))
+        .send(serialize.withoutWrapping({ error: 'Solo moderadores pueden eliminar avisos' }))
     }
 
-    const msg = await ForoMensaje.find(params.id)
+    const msg = await Aviso.find(params.id)
     if (!msg) {
       return response
         .status(404)
@@ -424,8 +424,8 @@ export default class ModeratorController {
     if (autor?.fcmToken) {
       await sendToMultiple(
         [autor.fcmToken],
-        'Mensaje eliminado del foro',
-        'Uno de tus mensajes en el foro ha sido eliminado por un moderador.'
+        'Aviso eliminado',
+        'Uno de tus avisos ha sido eliminado por un moderador.'
       )
     }
 

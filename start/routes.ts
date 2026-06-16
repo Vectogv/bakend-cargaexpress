@@ -228,13 +228,13 @@ router
 
 router
   .group(() => {
-    router.get('', [controllers.Moderator, 'foroIndex'])
-    router.post('', [controllers.Moderator, 'foroStore'])
-    router.put(':id/pin', [controllers.Moderator, 'foroPin'])
-    router.delete(':id', [controllers.Moderator, 'foroDelete'])
+    router.get('', [controllers.Moderator, 'avisosIndex'])
+    router.post('', [controllers.Moderator, 'avisosStore'])
+    router.put(':id/pin', [controllers.Moderator, 'avisosPin'])
+    router.delete(':id', [controllers.Moderator, 'avisosDelete'])
   })
-  .prefix('/api/foro')
-  .as('foro')
+  .prefix('/api/avisos')
+  .as('avisos')
   .use(middleware.auth())
 
 router
@@ -262,25 +262,25 @@ router.get('/docs', async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 router
   .group(() => {
-    // Foro — ver todos los posts
+    // Avisos — ver todos los posts
     router
-      .get('foro', [controllers.Leader, 'foroIndex'])
-      .use(middleware.leaderPermission({ permission: 'foro.read' }))
+      .get('avisos', [controllers.Leader, 'avisosIndex'])
+      .use(middleware.leaderPermission({ permission: 'avisos.read' }))
 
-    // Foro — crear post propio
+    // Avisos — crear post propio
     router
-      .post('foro', [controllers.Leader, 'foroStore'])
-      .use(middleware.leaderPermission({ permission: 'foro.write' }))
+      .post('avisos', [controllers.Leader, 'avisosStore'])
+      .use(middleware.leaderPermission({ permission: 'avisos.write' }))
 
-    // Foro — fijar/desfijar post
+    // Avisos — fijar/desfijar post
     router
-      .put('foro/:id/pin', [controllers.Leader, 'foroPin'])
-      .use(middleware.leaderPermission({ permission: 'foro.pin' }))
+      .put('avisos/:id/pin', [controllers.Leader, 'avisosPin'])
+      .use(middleware.leaderPermission({ permission: 'avisos.pin' }))
 
-    // Foro — eliminar post propio únicamente
+    // Avisos — eliminar post propio únicamente
     router
-      .delete('foro/:id', [controllers.Leader, 'foroDelete'])
-      .use(middleware.leaderPermission({ permission: 'foro.delete' }))
+      .delete('avisos/:id', [controllers.Leader, 'avisosDelete'])
+      .use(middleware.leaderPermission({ permission: 'avisos.delete' }))
 
     // Comunicados — crear (queda "pendiente", requiere aprobación de admin)
     router

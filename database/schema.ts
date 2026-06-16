@@ -211,9 +211,9 @@ export class EncuestaSchema extends BaseModel {
   declare zona: string
 }
 
-export class ForoMensajeSchema extends BaseModel {
+export class AvisoSchema extends BaseModel {
   static $columns = ['autorId', 'contenido', 'createdAt', 'eliminado', 'fijado', 'id', 'zona'] as const
-  $columns = ForoMensajeSchema.$columns
+  $columns = AvisoSchema.$columns
   @column()
   declare autorId: number
   @column()
