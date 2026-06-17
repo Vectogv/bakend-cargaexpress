@@ -52,8 +52,6 @@ export default class OfferController {
       estado: 'pendiente',
     })
 
-    await conductor.load('usuario')
-
     const io = getIO()
     io.to(`client:${viaje.clienteId}`).emit('offer:new', {
       id: String(oferta.id),
@@ -61,7 +59,7 @@ export default class OfferController {
       monto: oferta.monto,
       conductor: {
         id: String(conductor.id),
-        nombre: `${conductor.usuario?.nombre || ''} ${conductor.usuario?.apellido || ''}`.trim(),
+        nombre: `${user.nombre || ''} ${user.apellido || ''}`.trim(),
         foto: conductor.fotoConductor,
         calificacion: conductor.calificacion,
         placa: conductor.placa,
