@@ -52,22 +52,25 @@ export default class OfferController {
       estado: 'pendiente',
     })
 
-    await oferta.load('conductor', (q) => q.preload('usuario'))
+    const ofertaConRelaciones = await Oferta.query()
+      .where('id', oferta.id)
+      .preload('conductor', (q) => q.preload('usuario'))
+      .firstOrFail()
 
     const io = getIO()
     io.to(`client:${viaje.clienteId}`).emit('offer:new', {
-      id: String(oferta.id),
-      viajeId: String(oferta.viajeId),
-      monto: oferta.monto,
+      id: String(ofertaConRelaciones.id),
+      viajeId: String(ofertaConRelaciones.viajeId),
+      monto: ofertaConRelaciones.monto,
       conductor: {
-        id: String(oferta.conductor.id),
-        nombre: `${oferta.conductor.usuario?.nombre || ''} ${oferta.conductor.usuario?.apellido || ''}`.trim(),
-        foto: oferta.conductor.fotoConductor,
-        calificacion: oferta.conductor.calificacion,
-        placa: oferta.conductor.placa,
-        tipoVehiculo: oferta.conductor.tipoVehiculo,
+        id: String(ofertaConRelaciones.conductor.id),
+        nombre: `${ofertaConRelaciones.conductor.usuario?.nombre || ''} ${ofertaConRelaciones.conductor.usuario?.apellido || ''}`.trim(),
+        foto: ofertaConRelaciones.conductor.fotoConductor,
+        calificacion: ofertaConRelaciones.conductor.calificacion,
+        placa: ofertaConRelaciones.conductor.placa,
+        tipoVehiculo: ofertaConRelaciones.conductor.tipoVehiculo,
       },
-      createdAt: oferta.createdAt.toISO(),
+      createdAt: ofertaConRelaciones.createdAt.toISO(),
     })
 
     const cliente = await User.find(viaje.clienteId)
@@ -75,16 +78,16 @@ export default class OfferController {
       await sendToToken(
         cliente.fcmToken,
         'Nueva oferta recibida',
-        `Conductor ofrece $${oferta.monto} para tu viaje`
+        `Conductor ofrece $${ofertaConRelaciones.monto} para tu viaje`
       )
     }
 
     return response.status(201).send({
-      id: String(oferta.id),
-      viajeId: String(oferta.viajeId),
-      monto: oferta.monto,
-      estado: oferta.estado,
-      createdAt: oferta.createdAt.toISO(),
+      id: String(ofertaConRelaciones.id),
+      viajeId: String(ofertaConRelaciones.viajeId),
+      monto: ofertaConRelaciones.monto,
+      estado: ofertaConRelaciones.estado,
+      createdAt: ofertaConRelaciones.createdAt.toISO(),
     })
   }
 
