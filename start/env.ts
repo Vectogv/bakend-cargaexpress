@@ -25,4 +25,5 @@ export default await Env.create(new URL('../', import.meta.url), {
   GOOGLE_DRIVE_FOLDER_ID: Env.schema.string.optional(),
   GOOGLE_SERVICE_ACCOUNT_KEY: Env.schema.string.optional(),
   BACKUP_EMAIL: Env.schema.string.optional(),
+  MAPBOX_ACCESS_TOKEN: Env.schema.string.optional(),
 })

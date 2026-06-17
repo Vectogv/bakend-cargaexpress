@@ -210,6 +210,8 @@ router.get('/api/config/banner', async ({ serialize }) => {
   })
 })
 
+router.get('/api/config/mapbox', [controllers.Mapbox, 'token']).use(middleware.auth())
+
 router
   .group(() => {
     router.post('comunicados', [controllers.Moderator, 'storeComunicado'])
