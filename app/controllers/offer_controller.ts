@@ -14,9 +14,11 @@ export default class OfferController {
       return response.status(403).send({ error: 'Solo los conductores pueden hacer ofertas' })
     }
 
-    const conductor = await Conductor.findBy('usuario_id', user.id)
+    const conductor = await user.related('conductor').query().first()
     if (!conductor) {
-      return response.status(400).send({ error: 'Debes completar tu registro como conductor primero' })
+      return response.status(400).json({
+        message: 'Debes completar tu registro como conductor primero',
+      })
     }
 
     const viaje = await Viaje.find(params.id)

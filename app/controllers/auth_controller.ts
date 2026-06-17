@@ -28,35 +28,26 @@ export default class AuthController {
       })
     }
 
-    const user = await db.transaction(async (trx) => {
-      const newUser = await User.create(
-        {
-          nombre: data.nombre,
-          apellido: data.apellido,
-          email: data.email,
-          password: data.password,
-          telefono: data.telefono || null,
-          rol: data.rol,
-          edad: data.edad || null,
-        },
-        { client: trx }
-      )
-
-      if (data.rol === 'conductor') {
-        await Conductor.create(
-          {
-            usuarioId: newUser.id,
-            cedula: data.cedula || '',
-            placa: data.placa || '',
-            tipoVehiculo: data.tipoVehiculo || null,
-            capacidad: data.capacidad || null,
-          },
-          { client: trx }
-        )
-      }
-
-      return newUser
+    const user = await User.create({
+      nombre: data.nombre,
+      apellido: data.apellido,
+      email: data.email,
+      password: data.password,
+      telefono: data.telefono || null,
+      rol: data.rol,
+      edad: data.edad || null,
     })
+
+    if (user.rol === 'conductor') {
+      await Conductor.create({
+        usuarioId: user.id,
+        cedula: data.cedula!,
+        placa: data.placa!,
+        tipoVehiculo: data.tipoVehiculo || null,
+        capacidad: data.capacidad || null,
+        estadoVerificacion: 'pendiente',
+      })
+    }
 
     const token = await User.accessTokens.create(user, [], { expiresIn: '7 days' })
     const refreshTokenValue = randomUUID()
