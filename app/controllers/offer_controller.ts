@@ -61,7 +61,7 @@ export default class OfferController {
       monto: oferta.monto,
       conductor: {
         id: String(oferta.conductor.id),
-        nombre: `${oferta.conductor.usuario.nombre || ''} ${oferta.conductor.usuario.apellido || ''}`.trim(),
+        nombre: `${oferta.conductor.usuario?.nombre || ''} ${oferta.conductor.usuario?.apellido || ''}`.trim(),
         foto: oferta.conductor.fotoConductor,
         calificacion: oferta.conductor.calificacion,
         placa: oferta.conductor.placa,
@@ -110,7 +110,7 @@ export default class OfferController {
       monto: o.monto,
       conductor: {
         id: String(o.conductor.id),
-        nombre: `${o.conductor.usuario.nombre || ''} ${o.conductor.usuario.apellido || ''}`.trim(),
+        nombre: `${o.conductor.usuario?.nombre || ''} ${o.conductor.usuario?.apellido || ''}`.trim(),
         foto: o.conductor.fotoConductor,
         calificacion: o.conductor.calificacion,
         placa: o.conductor.placa,
