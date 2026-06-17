@@ -14,7 +14,11 @@ export default class OfferController {
       return response.status(403).send({ error: 'Solo los conductores pueden hacer ofertas' })
     }
 
-    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    const conductor = await Conductor.findBy('usuario_id', user.id)
+    if (!conductor) {
+      return response.status(400).send({ error: 'Debes completar tu registro como conductor primero' })
+    }
+
     const viaje = await Viaje.find(params.id)
 
     if (!viaje) {
@@ -56,12 +60,12 @@ export default class OfferController {
       viajeId: String(oferta.viajeId),
       monto: oferta.monto,
       conductor: {
-        id: String(conductor.id),
-        nombre: `${conductor.usuario.nombre || ''} ${conductor.usuario.apellido || ''}`.trim(),
-        foto: conductor.fotoConductor,
-        calificacion: conductor.calificacion,
-        placa: conductor.placa,
-        tipoVehiculo: conductor.tipoVehiculo,
+        id: String(oferta.conductor.id),
+        nombre: `${oferta.conductor.usuario.nombre || ''} ${oferta.conductor.usuario.apellido || ''}`.trim(),
+        foto: oferta.conductor.fotoConductor,
+        calificacion: oferta.conductor.calificacion,
+        placa: oferta.conductor.placa,
+        tipoVehiculo: oferta.conductor.tipoVehiculo,
       },
       createdAt: oferta.createdAt.toISO(),
     })

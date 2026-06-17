@@ -136,6 +136,18 @@ export default class AuthController {
     })
   }
 
+  async logout({ auth, response }: HttpContext) {
+    try {
+      const user = auth.getUserOrFail()
+      if (user.currentAccessToken) {
+        await User.accessTokens.delete(user, user.currentAccessToken.identifier)
+      }
+    } catch {
+      // El token puede ya estar expirado o inválido
+    }
+    return response.json({ message: 'Sesión cerrada' })
+  }
+
   @ApiOperation({
     summary: 'Refresh access token',
     description: 'Refreshes an expired access token using a refresh token',
