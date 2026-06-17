@@ -1,5 +1,6 @@
 export type EstadoViaje =
   | 'buscando_conductor'
+  | 'pendiente'
   | 'aceptado'
   | 'en_curso'
   | 'completado'
@@ -8,7 +9,8 @@ export type EstadoViaje =
   | 'rechazado'
 
 const transiciones: Record<EstadoViaje, EstadoViaje[]> = {
-  buscando_conductor: ['aceptado', 'cancelado', 'rechazado'],
+  buscando_conductor: ['pendiente', 'aceptado', 'cancelado', 'rechazado'],
+  pendiente: ['aceptado', 'cancelado', 'rechazado'],
   aceptado: ['en_curso', 'cancelado'],
   en_curso: ['completado', 'cancelado'],
   completado: ['finalizado'],

@@ -1,5 +1,6 @@
 import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
+import Oferta from '#models/oferta'
 
 interface Coord {
   lat: number
@@ -20,30 +21,52 @@ function haversine(a: Coord, b: Coord): number {
 
 export default class GeoService {
   static async obtenerViajesCercanos(lat: number, lng: number, radioKm: number = 5) {
-    const viajes = await Viaje.query().where('estado', 'buscando_conductor').preload('cliente')
+    const ofertasAceptadas = await Oferta.query()
+      .where('estado', 'aceptada')
+      .select('viaje_id')
+
+    const idsConOfertaAceptada = ofertasAceptadas.map((o) => o.viajeId)
+
+    const viajes = await Viaje.query()
+      .whereIn('estado', ['buscando_conductor', 'pendiente'])
+      .whereNotIn('id', idsConOfertaAceptada)
+      .preload('cliente')
+
     return viajes
       .filter((v) => {
         if (v.origenLat == null || v.origenLng == null) return false
         return haversine({ lat, lng }, { lat: v.origenLat, lng: v.origenLng }) <= radioKm
       })
-      .map((v) => ({
-        id: String(v.id),
-        cliente: {
-          nombre: `${v.cliente.nombre || ''} ${v.cliente.apellido || ''}`.trim(),
-          reputacion: v.cliente.reputacion,
-          visibilidad: v.cliente.visibilidad,
-          totalViajes: v.cliente.totalViajes,
-          calificacion: v.cliente.calificacion,
-        },
-        origen: { direccion: v.origenDireccion, lat: v.origenLat, lng: v.origenLng },
-        destino: { direccion: v.destinoDireccion, lat: v.destinoLat, lng: v.destinoLng },
-        carga: v.carga,
-        precioEstimado: v.precioEstimado,
-        distancia: v.origenLat != null && v.origenLng != null
+      .map((v) => {
+        const dist = v.origenLat != null && v.origenLng != null
           ? Math.round(haversine({ lat, lng }, { lat: v.origenLat, lng: v.origenLng }) * 100) / 100
-          : 0,
-        createdAt: v.createdAt.toISO(),
-      }))
+          : 0
+        return {
+          id: Number(v.id),
+          estado: v.estado,
+          precioEstimado: Number(v.precioEstimado),
+          distancia: dist,
+          tiempoEstimado: Number(v.tiempoEstimadoMinutos),
+          carga: v.carga,
+          descripcion: v.carga,
+          createdAt: v.createdAt.toISO(),
+          cliente: {
+            id: Number(v.cliente.id),
+            nombre: `${v.cliente.nombre || ''} ${v.cliente.apellido || ''}`.trim(),
+            calificacion: Number(v.cliente.calificacion ?? 5.0),
+          },
+          origen: {
+            direccion: v.origenDireccion,
+            lat: Number(v.origenLat),
+            lng: Number(v.origenLng),
+          },
+          destino: {
+            direccion: v.destinoDireccion,
+            lat: Number(v.destinoLat),
+            lng: Number(v.destinoLng),
+          },
+        }
+      })
   }
 
   static async obtenerConductoresCercanos(lat: number, lng: number, radioKm: number = 20) {

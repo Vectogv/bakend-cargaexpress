@@ -1,7 +1,6 @@
 import User from '#models/user'
 import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
-import Ganancia from '#models/ganancia'
 import Calificacion from '#models/calificacion'
 import SolicitudCancelacion from '#models/solicitud_cancelacion'
 import ConfiguracionPlataforma from '#models/configuracion_plataforma'
@@ -104,37 +103,35 @@ export default class TripController {
         .preload('usuario')
     }
 
-    const tripPayload = {
-      id: String(viaje.id),
-      clienteId: String(viaje.clienteId),
-      estado: viaje.estado,
-      origen: {
-        direccion: viaje.origenDireccion,
-        lat: viaje.origenLat,
-        lng: viaje.origenLng,
-      },
-      destino: {
-        direccion: viaje.destinoDireccion,
-        lat: viaje.destinoLat,
-        lng: viaje.destinoLng,
-      },
-      carga: viaje.carga,
-      precioCliente: viaje.precioCliente,
-      precioEstimado: viaje.precioEstimado,
-      createdAt: viaje.createdAt.toISO(),
+    const tripSocketPayload = {
+      event: 'trip:nearby',
+      tripId: Number(viaje.id),
+      origen: viaje.origenDireccion,
+      precioEstimado: Number(viaje.precioEstimado),
+      type: 'new_trip',
+    }
+
+    const tripFcmData: Record<string, string> = {
+      type: 'new_trip',
+      event: 'trip:nearby',
+      tripId: String(viaje.id),
+      origen: viaje.origenDireccion,
     }
 
     // Emitir solo a conductores online en lugar de broadcast global
     for (const c of conductoresCercanos) {
-      emitToDriver(c.usuarioId, 'trip:new', tripPayload)
+      emitToDriver(c.usuarioId, 'trip:nearby', tripSocketPayload)
     }
 
     const tokens = conductoresCercanos.map((c) => c.usuario.fcmToken).filter(Boolean) as string[]
     if (tokens.length > 0) {
+      const precioFormateado = Number(viaje.precioEstimado).toLocaleString('es-CO')
       await sendToMultiple(
         tokens,
         'Nuevo viaje disponible',
-        `Viaje de ${data.origen.direccion} a ${data.destino.direccion}`
+        `Cerca de tu ubicación — $${precioFormateado}`,
+        tripFcmData,
+        'default'
       )
     }
 
@@ -159,15 +156,23 @@ export default class TripController {
 
   @ApiOperation({
     summary: 'Get nearby trips',
-    description: 'Returns trips near a given location within a radius. Uses DB-level Haversine — no in-memory filtering.',
+    description: 'Returns trips near a given location within a radius. Uses Haversine formula with in-memory filtering.',
   })
   @ApiResponse({ type: 'array' })
-  async nearby({ request, serialize, response }: HttpContext) {
-    const lat = Number.parseFloat(request.input('lat', ''))
-    const lng = Number.parseFloat(request.input('lng', ''))
-    const radio = Number.parseFloat(request.input('radio', '5'))
+  async nearby({ auth, request, serialize, response }: HttpContext) {
+    let lat = Number.parseFloat(request.input('lat', ''))
+    let lng = Number.parseFloat(request.input('lng', ''))
+    const radio = Number.parseFloat(request.input('radio', '20'))
 
-    // Validar coordenadas antes de cualquier operación
+    // Si el usuario es conductor y no envió coordenadas, usar su última ubicación guardada
+    if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && auth.user?.rol === 'conductor') {
+      const conductor = await Conductor.findBy('usuario_id', auth.user.id)
+      if (conductor?.ultimaUbicacionLat && conductor?.ultimaUbicacionLng) {
+        lat = Number(conductor.ultimaUbicacionLat)
+        lng = Number(conductor.ultimaUbicacionLng)
+      }
+    }
+
     if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
       return response.status(422).send({ error: 'lat inválida. Debe ser un número entre -90 y 90.' })
     }
@@ -178,28 +183,9 @@ export default class TripController {
       return response.status(422).send({ error: 'radio inválido. Debe ser un número entre 0 y 200.' })
     }
 
-    // Delegar el filtrado geográfico al motor de DB (Haversine en SQL)
-    // Evita traer todos los viajes a memoria del servidor para luego filtrarlos.
     const viajes = await GeoService.obtenerViajesCercanos(lat, lng, radio)
 
-    const result = viajes.map((v: any) => ({
-      id: String(v.id),
-      cliente: {
-        nombre: `${v.nombre || ''} ${v.apellido || ''}`.trim(),
-        reputacion: v.reputacion,
-        visibilidad: v.visibilidad,
-        totalViajes: v.totalViajes,
-        calificacion: v.calificacion ?? 5.0,
-      },
-      origen: { direccion: v.origenDireccion, lat: v.origenLat, lng: v.origenLng },
-      destino: { direccion: v.destinoDireccion, lat: v.destinoLat, lng: v.destinoLng },
-      carga: v.carga,
-      precioEstimado: v.precioEstimado,
-      distancia: Math.round(Number(v.distancia_km) * 100) / 100,
-      createdAt: v.createdAt,
-    }))
-
-    return serialize.withoutWrapping(result)
+    return serialize.withoutWrapping(viajes)
   }
 
   @ApiOperation({
@@ -222,7 +208,7 @@ export default class TripController {
     } else {
       viaje = await Viaje.query()
         .where('cliente_id', user.id)
-        .whereIn('estado', ['buscando_conductor', 'aceptado', 'en_curso'])
+        .whereIn('estado', ['buscando_conductor', 'pendiente', 'aceptado', 'en_curso'])
         .preload('cliente')
         .preload('conductor', (q) => q.preload('usuario'))
         .first()
@@ -311,6 +297,19 @@ export default class TripController {
       tiempoEstimadoMinutos: viaje.tiempoEstimadoMinutos,
       aceptadoAt: viaje.aceptadoAt.toISO(),
     })
+
+    // Emitir trip:accepted a TODOS los conductores online (excepto el que aceptó)
+    const tripAcceptedPayload = {
+      event: 'trip:accepted',
+      tripId: Number(viaje.id),
+      conductorId: Number(conductor.id),
+    }
+    const todosConductores = await Conductor.query()
+      .where('online', true)
+      .where('id', '!=', conductor.id)
+    for (const c of todosConductores) {
+      emitToDriver(c.usuarioId, 'trip:accepted', tripAcceptedPayload)
+    }
 
     return serialize.withoutWrapping({
       id: String(viaje.id),
@@ -460,7 +459,7 @@ export default class TripController {
       viajeId: params.id,
       montoFinal: data.montoFinal,
       actorUserId: user.id,
-      actorRol: user.rol,
+      actorRol: user.rol ?? 'cliente',
     })
 
     if (!result.ok) {

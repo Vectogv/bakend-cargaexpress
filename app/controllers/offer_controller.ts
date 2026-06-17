@@ -4,7 +4,7 @@ import Conductor from '#models/conductor'
 import User from '#models/user'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
-import { getIO } from '#start/socket'
+import { getIO, emitToDriver } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 
 export default class OfferController {
@@ -187,6 +187,19 @@ export default class OfferController {
           'Tu oferta para un viaje no fue seleccionada'
         )
       }
+    }
+
+    // Emitir trip:accepted a TODOS los conductores online (excepto el que aceptó)
+    const tripAcceptedPayload = {
+      event: 'trip:accepted',
+      tripId: Number(viaje.id),
+      conductorId: Number(oferta.conductorId),
+    }
+    const todosConductores = await Conductor.query()
+      .where('online', true)
+      .where('id', '!=', oferta.conductorId)
+    for (const c of todosConductores) {
+      emitToDriver(c.usuarioId, 'trip:accepted', tripAcceptedPayload)
     }
 
     return {

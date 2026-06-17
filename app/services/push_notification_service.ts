@@ -33,13 +33,20 @@ export async function sendToToken(
   token: string,
   title: string,
   body: string,
-  data?: Record<string, string>
+  data?: Record<string, string>,
+  sound?: string
 ) {
   ensureInit()
   if (!messaging) return
 
+  const message: any = { token, notification: { title, body }, data }
+  if (sound) {
+    message.android = { notification: { sound } }
+    message.apns = { payload: { aps: { sound } } }
+  }
+
   try {
-    await messaging.send({ token, notification: { title, body }, data })
+    await messaging.send(message)
   } catch (err: any) {
     if (err.code === 'messaging/registration-token-not-registered') return
     logger.error(`FCM send error: ${err.message}`)
@@ -50,7 +57,8 @@ export async function sendToMultiple(
   tokens: string[],
   title: string,
   body: string,
-  data?: Record<string, string>
+  data?: Record<string, string>,
+  sound?: string
 ) {
   if (tokens.length === 0) return
   ensureInit()
@@ -58,7 +66,14 @@ export async function sendToMultiple(
 
   try {
     await messaging.sendEach(
-      tokens.map((token) => ({ token, notification: { title, body }, data }))
+      tokens.map((token) => {
+        const message: any = { token, notification: { title, body }, data }
+        if (sound) {
+          message.android = { notification: { sound } }
+          message.apns = { payload: { aps: { sound } } }
+        }
+        return message
+      })
     )
   } catch (err: any) {
     logger.error(`FCM sendEach error: ${err.message}`)
