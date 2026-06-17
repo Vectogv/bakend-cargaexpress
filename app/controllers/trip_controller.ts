@@ -278,9 +278,7 @@ export default class TripController {
 
     await viaje.save()
 
-    await viaje.load((loader) => {
-      loader.load('conductor', (q) => q.preload('usuario'))
-    })
+    await viaje.load('conductor', (q) => q.preload('usuario'))
 
     emitToClient(viaje.clienteId, 'trip:accepted', {
       id: String(viaje.id),

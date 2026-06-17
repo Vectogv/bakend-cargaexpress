@@ -52,9 +52,7 @@ export default class OfferController {
       estado: 'pendiente',
     })
 
-    await oferta.load((loader) => {
-      loader.load('conductor', (q) => q.preload('usuario'))
-    })
+    await oferta.load('conductor', (q) => q.preload('usuario'))
 
     const io = getIO()
     io.to(`client:${viaje.clienteId}`).emit('offer:new', {
