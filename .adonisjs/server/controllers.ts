@@ -13,6 +13,7 @@ export const controllers = {
   Emergency: () => import('#controllers/emergency_controller'),
   FavoriteRoute: () => import('#controllers/favorite_route_controller'),
   Leader: () => import('#controllers/leader_controller'),
+  Mapbox: () => import('#controllers/mapbox_controller'),
   Moderator: () => import('#controllers/moderator_controller'),
   NewAccount: () => import('#controllers/new_account_controller'),
   Notification: () => import('#controllers/notification_controller'),
