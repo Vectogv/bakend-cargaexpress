@@ -605,22 +605,37 @@ export default class TripController {
     })
   }
 
-  @ApiOperation({ summary: 'Request cancellation', description: 'Conductor requests trip cancellation when en_curso. Admin must approve.' })
+  @ApiOperation({ summary: 'Request cancellation', description: 'Conductor or client requests trip cancellation when en_curso. Admin must approve.' })
   @ApiResponse({ type: 'object' })
   async requestCancellation({ auth, params, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    if (user.rol !== 'conductor') {
-      return response.status(403).send({ error: 'Solo los conductores pueden solicitar cancelación' })
-    }
-
     const viaje = await Viaje.findOrFail(params.id)
+
     if (viaje.estado !== 'en_curso') {
       return response.status(422).send({ error: `Solo puedes solicitar cancelación cuando el viaje está en curso (estado actual: ${viaje.estado})` })
     }
 
-    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
-    if (viaje.conductorId !== conductor.id) {
-      return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
+    let conductorId: number
+    let solicitanteRol: 'conductor' | 'cliente'
+
+    if (user.rol === 'conductor') {
+      const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+      if (viaje.conductorId !== conductor.id) {
+        return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
+      }
+      conductorId = conductor.id
+      solicitanteRol = 'conductor'
+    } else if (user.rol === 'cliente') {
+      if (viaje.clienteId !== user.id) {
+        return response.status(403).send({ error: 'Este viaje no te pertenece' })
+      }
+      if (!viaje.conductorId) {
+        return response.status(422).send({ error: 'El viaje no tiene un conductor asignado' })
+      }
+      conductorId = viaje.conductorId
+      solicitanteRol = 'cliente'
+    } else {
+      return response.status(403).send({ error: 'No tienes permisos para solicitar cancelación' })
     }
 
     // Verificar que no exista ya una solicitud pendiente
@@ -636,7 +651,7 @@ export default class TripController {
 
     const solicitud = await SolicitudCancelacion.create({
       viajeId: viaje.id,
-      conductorId: conductor.id,
+      conductorId,
       motivo: motivo || 'Sin motivo especificado',
       estado: 'pendiente',
     })
@@ -644,7 +659,8 @@ export default class TripController {
     emitToAdmin('admin:cancellation_requested', {
       id: String(solicitud.id),
       viajeId: String(viaje.id),
-      conductorId: String(conductor.id),
+      conductorId: String(conductorId),
+      solicitanteRol,
       motivo: solicitud.motivo,
       createdAt: solicitud.createdAt.toISO(),
     })
