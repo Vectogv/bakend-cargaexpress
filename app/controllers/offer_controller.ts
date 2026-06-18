@@ -10,9 +10,9 @@ import { sendToToken } from '#services/push_notification_service'
 export default class OfferController {
   async store({ auth, request, response, params }: HttpContext) {
     try {
-      const user = await auth.authenticate()
+      const user = auth.user!
       if (!user) {
-        return response.status(401).send({ error: 'Usuario no autenticado' })
+        return response.status(401).send({ error: 'No autenticado' })
       }
       if (user.rol !== 'conductor') {
         return response.status(403).send({ error: 'Solo los conductores pueden hacer ofertas' })
@@ -57,15 +57,13 @@ export default class OfferController {
       })
 
       const io = getIO()
-      const nombreConductor = user?.nombre || ''
-      const apellidoConductor = user?.apellido || ''
       io.to(`client:${viaje.clienteId}`).emit('offer:new', {
         id: String(oferta.id),
         viajeId: String(oferta.viajeId),
         monto: oferta.monto,
         conductor: {
           id: String(conductor.id),
-          nombre: `${nombreConductor} ${apellidoConductor}`.trim() || 'Sin nombre',
+          nombre: `${user.nombre || ''} ${user.apellido || ''}`.trim() || 'Sin nombre',
           foto: conductor.fotoConductor,
           calificacion: conductor.calificacion,
           placa: conductor.placa,
@@ -113,19 +111,21 @@ export default class OfferController {
       .preload('conductor', (q) => q.preload('usuario'))
       .orderBy('createdAt', 'asc')
 
-    return ofertas.map((o) => ({
-      id: String(o.id),
-      monto: o.monto,
-      conductor: {
-        id: String(o.conductor.id),
-        nombre: `${o.conductor.usuario?.nombre || ''} ${o.conductor.usuario?.apellido || ''}`.trim(),
-        foto: o.conductor.fotoConductor,
-        calificacion: o.conductor.calificacion,
-        placa: o.conductor.placa,
-        tipoVehiculo: o.conductor.tipoVehiculo,
-      },
-      createdAt: o.createdAt.toISO(),
-    }))
+    return response.json(
+      ofertas.map((o) => ({
+        id: String(o.id),
+        monto: o.monto,
+        conductor: {
+          id: String(o.conductor.id),
+          nombre: `${o.conductor.usuario?.nombre || ''} ${o.conductor.usuario?.apellido || ''}`.trim(),
+          foto: o.conductor.fotoConductor,
+          calificacion: o.conductor.calificacion,
+          placa: o.conductor.placa,
+          tipoVehiculo: o.conductor.tipoVehiculo,
+        },
+        createdAt: o.createdAt.toISO(),
+      }))
+    )
   }
 
   async accept({ auth, params, response }: HttpContext) {
