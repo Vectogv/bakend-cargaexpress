@@ -53,50 +53,6 @@ export default class OfferController {
         estado: 'pendiente',
       })
 
-      // Obtener datos del conductor desde DB directamente
-      const usuarioConductor = await Conductor.query()
-        .where('id', conductor.id)
-        .preload('usuario')
-        .first()
-
-      let nombreConductor = 'Sin nombre'
-      if (usuarioConductor?.usuario) {
-        nombreConductor = `${usuarioConductor.usuario.nombre || ''} ${usuarioConductor.usuario.apellido || ''}`.trim() || 'Sin nombre'
-      }
-
-      try {
-        const io = getIO()
-        io.to(`client:${viaje.clienteId}`).emit('offer:new', {
-          id: String(oferta.id),
-          viajeId: String(oferta.viajeId),
-          monto: oferta.monto,
-          conductor: {
-            id: String(conductor.id),
-            nombre: nombreConductor,
-            foto: conductor.fotoConductor,
-            calificacion: conductor.calificacion,
-            placa: conductor.placa,
-            tipoVehiculo: conductor.tipoVehiculo,
-          },
-          createdAt: oferta.createdAt ? oferta.createdAt.toISO() : new Date().toISOString(),
-        })
-      } catch (e) {
-        console.error('Socket emit error (no crítico):', e)
-      }
-
-      try {
-        const cliente = await User.find(viaje.clienteId)
-        if (cliente?.fcmToken) {
-          await sendToToken(
-            cliente.fcmToken,
-            'Nueva oferta recibida',
-            `Conductor ofrece $${oferta.monto} para tu viaje`
-          )
-        }
-      } catch (e) {
-        console.error('Push notification error (no crítico):', e)
-      }
-
       return response.status(201).send({
         id: String(oferta.id),
         viajeId: String(oferta.viajeId),
