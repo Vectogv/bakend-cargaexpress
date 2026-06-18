@@ -12,9 +12,11 @@ router.get('/', () => {
 
 
 router.get('/health', async ({ response }) => {
-  // Endpoint de health check para load balancers, k8s, etc.
-  // Retorna 200 si el servidor está operativo.
-  return response.status(200).send({ status: 'ok', timestamp: new Date().toISOString() })
+  return response.status(200).send({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    commit: '3bf1a1c',
+  })
 })
 
 router.get('/storage/uploads/:fileName', async ({ params, response }) => {
