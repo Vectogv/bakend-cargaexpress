@@ -10,7 +10,7 @@
   },
   "scripts": {
     "start": "node bin/server.js",
-    "build": "npx tsx bin/console.ts build --ignore-ts-errors",
+    "build": "rm -rf build && npx tsx bin/console.ts build --ignore-ts-errors",
     "dev": "node ace serve --hmr",
     "test": "node ace test",
     "lint": "eslint .",
