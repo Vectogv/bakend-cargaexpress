@@ -9,106 +9,109 @@ import { sendToToken } from '#services/push_notification_service'
 
 export default class OfferController {
   async store({ auth, request, response, params }: HttpContext) {
-    let user: User | null = null
     try {
-      user = auth.user || await auth.authenticate()
-    } catch {
-      return response.status(401).send({ error: 'No autenticado' })
-    }
-    if (!user) {
-      return response.status(401).send({ error: 'No autenticado' })
-    }
+      let user: User | null = null
+      try {
+        user = auth.user || await auth.authenticate()
+      } catch {
+        return response.status(401).send({ error: 'No autenticado' })
+      }
+      if (!user) {
+        return response.status(401).send({ error: 'No autenticado' })
+      }
 
-    const datosConductor = {
-      nombre: String(user.nombre || ''),
-      apellido: String(user.apellido || ''),
-      rol: String(user.rol || ''),
-    }
+      const datosConductor = {
+        nombre: String(user.nombre || ''),
+        apellido: String(user.apellido || ''),
+        rol: String(user.rol || ''),
+      }
 
-    if (datosConductor.rol !== 'conductor') {
-      return response.status(403).send({ error: 'Solo los conductores pueden hacer ofertas' })
-    }
+      if (datosConductor.rol !== 'conductor') {
+        return response.status(403).send({ error: 'Solo los conductores pueden hacer ofertas' })
+      }
 
-    const conductor = await user.related('conductor').query().first()
-    if (!conductor) {
-      return response.status(400).json({
-        message: 'Debes completar tu registro como conductor primero',
+      const conductor = await user.related('conductor').query().first()
+      if (!conductor) {
+        return response.status(400).json({
+          message: 'Debes completar tu registro como conductor primero',
+        })
+      }
+
+      const viaje = await Viaje.find(params.id)
+
+      if (!viaje) {
+        return response.status(404).send({ error: 'Viaje no encontrado' })
+      }
+      if (viaje.estado !== 'buscando_conductor') {
+        return response.status(400).send({ error: 'El viaje ya no acepta ofertas' })
+      }
+
+      const monto = Number.parseFloat(request.input('monto'))
+      if (!monto || monto < 0) {
+        return response.status(422).send({ error: 'Monto inválido' })
+      }
+
+      const existeOferta = await Oferta.query()
+        .where('viaje_id', viaje.id)
+        .where('conductor_id', conductor.id)
+        .where('estado', 'pendiente')
+        .first()
+
+      if (existeOferta) {
+        return response.status(400).send({ error: 'Ya has hecho una oferta para este viaje' })
+      }
+
+      const oferta = await Oferta.create({
+        viajeId: viaje.id,
+        conductorId: conductor.id,
+        monto,
+        estado: 'pendiente',
       })
-    }
 
-    const viaje = await Viaje.find(params.id)
+      try {
+        const io = getIO()
+        io.to(`client:${viaje.clienteId}`).emit('offer:new', {
+          id: String(oferta.id),
+          viajeId: String(oferta.viajeId),
+          monto: oferta.monto,
+          conductor: {
+            id: String(conductor.id),
+            nombre: `${datosConductor.nombre} ${datosConductor.apellido}`.trim() || 'Sin nombre',
+            foto: conductor.fotoConductor,
+            calificacion: conductor.calificacion,
+            placa: conductor.placa,
+            tipoVehiculo: conductor.tipoVehiculo,
+          },
+          createdAt: oferta.createdAt ? oferta.createdAt.toISO() : new Date().toISOString(),
+        })
+      } catch (e) {
+        console.error('Socket emit error (no crítico):', e)
+      }
 
-    if (!viaje) {
-      return response.status(404).send({ error: 'Viaje no encontrado' })
-    }
-    if (viaje.estado !== 'buscando_conductor') {
-      return response.status(400).send({ error: 'El viaje ya no acepta ofertas' })
-    }
+      try {
+        const cliente = await User.find(viaje.clienteId)
+        if (cliente?.fcmToken) {
+          await sendToToken(
+            cliente.fcmToken,
+            'Nueva oferta recibida',
+            `Conductor ofrece $${oferta.monto} para tu viaje`
+          )
+        }
+      } catch (e) {
+        console.error('Push notification error (no crítico):', e)
+      }
 
-    const monto = Number.parseFloat(request.input('monto'))
-    if (!monto || monto < 0) {
-      return response.status(422).send({ error: 'Monto inválido' })
-    }
-
-    const existeOferta = await Oferta.query()
-      .where('viaje_id', viaje.id)
-      .where('conductor_id', conductor.id)
-      .where('estado', 'pendiente')
-      .first()
-
-    if (existeOferta) {
-      return response.status(400).send({ error: 'Ya has hecho una oferta para este viaje' })
-    }
-
-    const oferta = await Oferta.create({
-      viajeId: viaje.id,
-      conductorId: conductor.id,
-      monto,
-      estado: 'pendiente',
-    })
-
-    // Socket emit aislado para evitar que任何 error aquí rompa la respuesta
-    try {
-      const io = getIO()
-      io.to(`client:${viaje.clienteId}`).emit('offer:new', {
+      return response.status(201).send({
         id: String(oferta.id),
         viajeId: String(oferta.viajeId),
         monto: oferta.monto,
-        conductor: {
-          id: String(conductor.id),
-          nombre: `${datosConductor.nombre} ${datosConductor.apellido}`.trim() || 'Sin nombre',
-          foto: conductor.fotoConductor,
-          calificacion: conductor.calificacion,
-          placa: conductor.placa,
-          tipoVehiculo: conductor.tipoVehiculo,
-        },
+        estado: oferta.estado,
         createdAt: oferta.createdAt ? oferta.createdAt.toISO() : new Date().toISOString(),
       })
-    } catch (e) {
-      console.error('Socket emit error (no crítico):', e)
+    } catch (error) {
+      console.error('Error en OfferController.store:', error)
+      return response.status(500).send({ error: 'Error interno al crear la oferta' })
     }
-
-    // Push notification aislado
-    try {
-      const cliente = await User.find(viaje.clienteId)
-      if (cliente?.fcmToken) {
-        await sendToToken(
-          cliente.fcmToken,
-          'Nueva oferta recibida',
-          `Conductor ofrece $${oferta.monto} para tu viaje`
-        )
-      }
-    } catch (e) {
-      console.error('Push notification error (no crítico):', e)
-    }
-
-    return response.status(201).send({
-      id: String(oferta.id),
-      viajeId: String(oferta.viajeId),
-      monto: oferta.monto,
-      estado: oferta.estado,
-      createdAt: oferta.createdAt ? oferta.createdAt.toISO() : new Date().toISOString(),
-    })
   }
 
   async index({ auth, params, response }: HttpContext) {
