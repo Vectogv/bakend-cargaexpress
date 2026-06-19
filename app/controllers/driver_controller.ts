@@ -172,13 +172,7 @@ export default class DriverController {
     await conductor.save()
 
     // GPS fraud detection (non-blocking — logs only, no rejection)
-    FraudDetectionService.analyzeLocation({
-      conductorId: conductor.id,
-      userId: user.id,
-      lat: data.lat,
-      lng: data.lng,
-      speed: null,
-    })
+    FraudDetectionService.analyzeLocation(conductor.id, data.lat, data.lng)
 
     await UbicacionDriver.create({
       conductorId: conductor.id,

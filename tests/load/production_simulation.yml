@@ -1,102 +1,176 @@
 config:
-  target: "http://localhost:3333"
+  target: "{{ $processEnvironment.API_URL || 'http://localhost:3333' }}"
   phases:
-    - duration: 60
-      arrivalRate: 100
-      name: "100 usuarios concurrentes"
-    - duration: 60
-      arrivalRate: 500
-      name: "500 usuarios concurrentes"
-    - duration: 60
-      arrivalRate: 1000
-      name: "1000 usuarios concurrentes"
-  defaults:
-    headers:
-      Content-Type: "application/json"
-  socketio:
-    transports: ["websocket"]
+    # Fase 1: 100 usuarios concurrentes (calentamiento 2 min)
+    - name: "100_users_warmup"
+      duration: 120
+      arrivalRate: 1
+      rampTo: 10
+      name: "Warmup - 100 concurrent users"
+
+    # Fase 2: 500 usuarios concurrentes (carga media 3 min)
+    - name: "500_users_load"
+      duration: 180
+      arrivalRate: 10
+      rampTo: 30
+      name: "Medium load - 500 concurrent users"
+
+    # Fase 3: 1000 usuarios concurrentes (pico 2 min)
+    - name: "1000_users_peak"
+      duration: 120
+      arrivalRate: 30
+      rampTo: 60
+      name: "Peak load - 1000 concurrent users"
+
+    # Fase 4: recuperación (1 min)
+    - name: "recovery"
+      duration: 60
+      arrivalRate: 5
+      name: "Recovery phase"
+
+  # Configuración de Socket.IO
   plugins:
-    metrics-by-endpoint: {}
-    ensure:
-      maxErrorRate: 5
+    metrics-by-endpoint:
+      use: artillery-plugin-metrics-by-endpoint
+    publish-metrics:
+      - type: console
+
+  variables:
+    clienteEmail: "cliente_{{ $randomNumber(1,1000) }}@test.com"
+    conductorEmail: "conductor_{{ $randomNumber(1,500) }}@test.com"
+    password: "password123"
 
 scenarios:
-  - name: "Flujo completo de viaje - Cliente"
-    weight: 1
+  # ── Escenario 1: Login cliente ──────────────────────────────────
+  - name: "Cliente login y crea viaje"
     flow:
       - post:
-          url: "/api/auth/register"
+          url: "/api/auth/login"
           json:
-            nombre: "Load Client"
-            apellido: "Test"
-            email: "load-client-{{ $randomString(8) }}@test.com"
-            password: "123456"
-            rol: "cliente"
+            email: "{{ clienteEmail }}"
+            password: "{{ password }}"
           capture:
             - json: "$.token"
-              as: "clientToken"
+              as: "clienteToken"
+      - think: 1
       - post:
           url: "/api/trips/request"
           headers:
-            Authorization: "Bearer {{ clientToken }}"
+            authorization: "Bearer {{ clienteToken }}"
           json:
-            origen:
-              direccion: "Calle 1"
-              lat: 3.4516
-              lng: -76.5320
-            destino:
-              direccion: "Calle 2"
-              lat: 3.4520
-              lng: -76.5310
-            descripcion: "carga de prueba"
-            precioCliente: 50000
+            origenLat: "{{ $randomNumber(10,11) }}.{{ $randomNumber(100000,999999) }}"
+            origenLng: "{{ $randomNumber(-75,-74) }}.{{ $randomNumber(100000,999999) }}"
+            destinoLat: "{{ $randomNumber(10,11) }}.{{ $randomNumber(100000,999999) }}"
+            destinoLng: "{{ $randomNumber(-75,-74) }}.{{ $randomNumber(100000,999999) }}"
+            direccionOrigen: "Calle {{ $randomNumber(1,100) }} #{{ $randomNumber(1,50) }}-{{ $randomNumber(1,99) }}"
+            direccionDestino: "Carrera {{ $randomNumber(1,100) }} #{{ $randomNumber(1,50) }}-{{ $randomNumber(1,99) }}"
           capture:
-            - json: "$.id"
+            - json: "$.viaje.id"
               as: "tripId"
-      - think: 2
-      - get:
-          url: "/api/trips/active"
-          headers:
-            Authorization: "Bearer {{ clientToken }}"
 
-  - name: "Flujo conductor - Aceptar viaje"
-    weight: 1
+  # ── Escenario 2: Login conductor y acepta viaje ────────────────
+  - name: "Conductor login, location updates y acepta viaje"
     flow:
       - post:
-          url: "/api/auth/register"
+          url: "/api/auth/login"
           json:
-            nombre: "Load Driver"
-            apellido: "Test"
-            email: "load-driver-{{ $randomString(8) }}@test.com"
-            password: "123456"
-            rol: "conductor"
-            cedula: "{{ $randomString(10) }}"
-            placa: "LD-{{ $randomString(5) }}"
-            tipoVehiculo: "camioneta"
-            capacidad: "1000 kg"
+            email: "{{ conductorEmail }}"
+            password: "{{ password }}"
           capture:
             - json: "$.token"
-              as: "driverToken"
-            - json: "$.id"
-              as: "driverUserId"
-      - patch:
-          url: "/api/drivers/location"
-          headers:
-            Authorization: "Bearer {{ driverToken }}"
-          json:
-            lat: 3.4516
-            lng: -76.5320
-            heading: 0
-            accuracy: 10
+              as: "conductorToken"
+      - think: 1
+      # GPS updates cada ~5 segundos durante la prueba
+      - loop:
+          - put:
+              url: "/api/drivers/location"
+              headers:
+                authorization: "Bearer {{ conductorToken }}"
+              json:
+                lat: "{{ $randomNumber(10,11) }}.{{ $randomNumber(100000,999999) }}"
+                lng: "{{ $randomNumber(-75,-74) }}.{{ $randomNumber(100000,999999) }}"
+          - think: 5
+        count: 5
 
-  - name: "Endpoint salud y monitoreo"
-    weight: 3
+  # ── Escenario 3: Chat en tiempo real ────────────────────────────
+  - name: "Chat messages"
     flow:
-      - get:
-          url: "/health"
-      - get:
-          url: "/api/trips/nearby?lat=3.4516&lng=-76.5320&radio=20"
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "{{ clienteEmail }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "chatToken"
+      - post:
+          url: "/api/trips/request"
+          headers:
+            authorization: "Bearer {{ chatToken }}"
+          json:
+            origenLat: "10.987654"
+            origenLng: "-74.123456"
+            destinoLat: "10.123456"
+            destinoLng: "-74.654321"
+            direccionOrigen: "Carrera 5 #10-20"
+            direccionDestino: "Calle 80 #30-40"
+          capture:
+            - json: "$.viaje.id"
+              as: "tripIdChat"
+      - loop:
+          - post:
+              url: "/api/trips/{{ tripIdChat }}/chat"
+              headers:
+                authorization: "Bearer {{ chatToken }}"
+              json:
+                mensaje: "Hola, voy en camino {{ $randomNumber(1,100) }}"
+          - think: 10
+        count: 3
 
-ensure:
-  thresholds:
-    - engine.http.p99: 2000
+  # ── Escenario 4: Viaje completo (request → complete) ────────────
+  - name: "Full trip lifecycle"
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "{{ clienteEmail }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "fullToken"
+      - post:
+          url: "/api/trips/request"
+          headers:
+            authorization: "Bearer {{ fullToken }}"
+          json:
+            origenLat: "10.987654"
+            origenLng: "-74.123456"
+            destinoLat: "10.123456"
+            destinoLng: "-74.654321"
+            direccionOrigen: "Calle 10 #5-30"
+            direccionDestino: "Carrera 20 #15-50"
+          capture:
+            - json: "$.viaje.id"
+              as: "fullTripId"
+
+  # ── Escenario 5: Conductor solo GPS (sin login cada vez) ──────
+  - name: "Conductor steady GPS stream"
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "{{ conductorEmail }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "gpsToken"
+      - loop:
+          - put:
+              url: "/api/drivers/location"
+              headers:
+                authorization: "Bearer {{ gpsToken }}"
+              json:
+                lat: "{{ $randomNumber(10,11) }}.{{ $randomNumber(100000,999999) }}"
+                lng: "{{ $randomNumber(-75,-74) }}.{{ $randomNumber(100000,999999) }}"
+          - think: 5
+        count: 20

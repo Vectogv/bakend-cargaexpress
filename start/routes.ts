@@ -11,11 +11,40 @@ router.get('/', () => {
 })
 
 
+import MetricsService from '#services/metrics_service'
+import db from '@adonisjs/lucid/services/db'
+import RedisService from '#services/redis_service'
+
+router.get('/metrics', async ({ response }) => {
+  response.header('Content-Type', MetricsService.getContentType())
+  return response.send(await MetricsService.getMetrics())
+})
+
 router.get('/health', async ({ response }) => {
-  return response.status(200).send({
-    status: 'ok',
+  const checks: Record<string, string> = {}
+
+  // DB check
+  try {
+    await db.rawQuery('SELECT 1')
+    checks.database = 'ok'
+  } catch {
+    checks.database = 'error'
+  }
+
+  // Redis check
+  try {
+    const redisOk = await RedisService.get('health:ping')
+    checks.redis = redisOk !== null || redisOk === null ? 'ok' : 'error'
+  } catch {
+    checks.redis = 'error'
+  }
+
+  const allOk = Object.values(checks).every((v) => v === 'ok')
+
+  return response.status(allOk ? 200 : 503).send({
+    status: allOk ? 'ok' : 'degraded',
     timestamp: new Date().toISOString(),
-    commit: '3bf1a1c',
+    checks,
   })
 })
 

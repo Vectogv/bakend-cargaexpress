@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
+import RedisService from '#services/redis_service'
 
 export interface RateLimitConfig {
   max: number
@@ -7,22 +8,16 @@ export interface RateLimitConfig {
 }
 
 export default class RateLimitMiddleware {
-  private store = new Map<string, { count: number; resetAt: number }>()
-
   async handle(ctx: HttpContext, next: NextFn, args: RateLimitConfig = { max: 10, windowMs: 60_000 }) {
-    const ip = ctx.request.ip()
-    const now = Date.now()
+    const key = `ratelimit:${ctx.request.ip()}:${Math.floor(Date.now() / args.windowMs)}`
 
-    let entry = this.store.get(ip)
-    if (!entry || now > entry.resetAt) {
-      entry = { count: 0, resetAt: now + args.windowMs }
-      this.store.set(ip, entry)
-    }
+    const result = await RedisService.checkRateLimit(key, args.max, args.windowMs)
 
-    entry.count++
-
-    if (entry.count > args.max) {
-      return ctx.response.status(429).send({ error: 'Demasiadas solicitudes. Intenta de nuevo más tarde.' })
+    if (!result.allowed) {
+      return ctx.response.status(429).send({
+        error: 'Demasiadas solicitudes. Intenta de nuevo más tarde.',
+        retryAfter: Math.ceil(result.resetMs / 1000),
+      })
     }
 
     return next()

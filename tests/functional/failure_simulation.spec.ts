@@ -101,29 +101,21 @@ test.group('Service Failure Simulation', (group) => {
     const conductorId = driverRecord.id
 
     const fraudService = (await import('#services/fraud_detection_service')).default
+    const RedisService = (await import('#services/redis_service')).default
+
+    // Reset any previous state
+    await RedisService.del(`fraud:prev_location:${conductorId}`)
+    await RedisService.del(`fraud:last_update:${conductorId}`)
 
     // Valid location in Cali, Colombia — no fraud expected
-    fraudService.reset(conductorId)
-    await fraudService.analyzeLocation({
-      conductorId,
-      userId: driverUserId,
-      lat: 3.4516,
-      lng: -76.5320,
-      speed: 40,
-    })
+    await fraudService.analyzeLocation(conductorId, 3.4516, -76.5320)
 
     // Check the logs_fraude table — no entries expected for valid movement
     const entries = await db.from('logs_fraude').where('conductor_id', conductorId)
     assert.lengthOf(entries, 0, 'Valid locations should not generate fraud logs')
 
     // Now test with invalid coordinates
-    await fraudService.analyzeLocation({
-      conductorId,
-      userId: driverUserId,
-      lat: 200,
-      lng: 500,
-      speed: null,
-    })
+    await fraudService.analyzeLocation(conductorId, 200, 500)
 
     const fraudEntries = await db.from('logs_fraude').where('conductor_id', conductorId)
     assert.isAtLeast(fraudEntries.length, 1, 'Invalid coordinates should generate fraud logs')

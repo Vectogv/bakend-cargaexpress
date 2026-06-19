@@ -4,6 +4,9 @@ set -e
 echo "=== Iniciando despliegue de CargaExpress Backend ==="
 cd /app
 
+# ── Create required directories ──────────────────────────────────
+mkdir -p /app/build/storage/logs
+
 # ── Firebase credentials ──────────────────────────────────────────
 if [ -n "$FIREBASE_CREDENTIALS_JSON" ]; then
   echo "Configurando Firebase desde FIREBASE_CREDENTIALS_JSON..."

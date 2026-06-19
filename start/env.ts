@@ -4,7 +4,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   NODE_ENV: Env.schema.enum(['development', 'production', 'test'] as const),
   PORT: Env.schema.number(),
   HOST: Env.schema.string({ format: 'host' }),
-  LOG_LEVEL: Env.schema.string(),
+  LOG_LEVEL: Env.schema.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const),
 
   APP_KEY: Env.schema.secret(),
   APP_URL: Env.schema.string({ format: 'url', tld: false }),
@@ -26,4 +26,10 @@ export default await Env.create(new URL('../', import.meta.url), {
   GOOGLE_SERVICE_ACCOUNT_KEY: Env.schema.string.optional(),
   BACKUP_EMAIL: Env.schema.string.optional(),
   MAPBOX_ACCESS_TOKEN: Env.schema.string.optional(),
+
+  REDIS_HOST: Env.schema.string.optional(),
+  REDIS_PORT: Env.schema.number.optional(),
+  REDIS_PASSWORD: Env.schema.string.optional(),
+
+  SENTRY_DSN: Env.schema.string.optional(),
 })

@@ -1,9 +1,10 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
+import RedisService from '#services/redis_service'
+
+const TTL_SECONDS = 60
 
 export default class IdempotencyMiddleware {
-  private store = new Map<string, { status: number; body: unknown }>()
-
   async handle(ctx: HttpContext, next: NextFn) {
     const key = ctx.request.header('X-Idempotency-Key') as string | undefined
 
@@ -11,20 +12,22 @@ export default class IdempotencyMiddleware {
       return next()
     }
 
-    const existing = this.store.get(key)
-    if (existing) {
-      return ctx.response.status(existing.status).send(existing.body)
+    const cached = await RedisService.get(`idempotency:${key}`)
+    if (cached) {
+      try {
+        const { status, body } = JSON.parse(cached)
+        return ctx.response.status(status).send(body)
+      } catch {
+        // ignore parse error, continue
+      }
     }
 
     const response = await next()
 
-    if (ctx.response.response.statusCode >= 200 && ctx.response.response.statusCode < 500) {
-      this.store.set(key, {
-        status: ctx.response.response.statusCode,
-        body: ctx.response.getBody(),
-      })
-
-      setTimeout(() => this.store.delete(key), 60_000)
+    const statusCode = ctx.response.response.statusCode
+    if (statusCode >= 200 && statusCode < 500) {
+      const body = ctx.response.getBody()
+      await RedisService.set(`idempotency:${key}`, JSON.stringify({ status: statusCode, body }), TTL_SECONDS)
     }
 
     return response

@@ -1,8 +1,10 @@
 import { Server as SocketServer } from 'socket.io'
+import { createAdapter } from '@socket.io/redis-adapter'
 import type { Server as NodeServer } from 'node:http'
 import logger from '@adonisjs/core/services/logger'
 import { Secret } from '@adonisjs/core/helpers'
 import User from '#models/user'
+import RedisService from '#services/redis_service'
 
 let io: SocketServer | null = null
 
@@ -29,6 +31,14 @@ export function emitToDriver(driverUserId: number | string, event: string, data:
   }
 }
 
+export function emitToTrip(tripId: number | string, event: string, data: unknown) {
+  try {
+    getIO().to(`trip:${tripId}`).emit(event, data)
+  } catch {
+    logger.warn(`Socket.io not available, skipping emitToTrip event: ${event}`)
+  }
+}
+
 export function emitToAdmin(event: string, data: unknown) {
   try {
     getIO().to('admin').emit(event, data)
@@ -37,7 +47,7 @@ export function emitToAdmin(event: string, data: unknown) {
   }
 }
 
-export function initSocket(nodeHttpServer: NodeServer | null) {
+export async function initSocket(nodeHttpServer: NodeServer | null) {
   if (!nodeHttpServer) {
     logger.warn('No Node HTTP server available for Socket.io')
     return
@@ -50,7 +60,29 @@ export function initSocket(nodeHttpServer: NodeServer | null) {
         : '*',
       methods: ['GET', 'POST'],
     },
+    pingInterval: 25000,
+    pingTimeout: 60000,
+    transports: ['websocket', 'polling'],
   })
+
+  // Redis adapter para multi-instancia
+  const pubClient = RedisService.getClient()
+  if (pubClient) {
+    try {
+      const subClient = pubClient.duplicate()
+      // Duplicate no hereda listeners — agregar error handler para evitar crash
+      subClient.on('error', (err: Error) => logger.warn({ err }, 'Redis sub client error'))
+      subClient.on('ready', () => logger.info('Redis sub client ready'))
+      subClient.on('end', () => logger.warn('Redis sub client ended'))
+      subClient.on('close', () => logger.warn('Redis sub client closed'))
+      io.adapter(createAdapter(pubClient, subClient))
+      logger.info('Socket.IO Redis adapter enabled')
+    } catch (err) {
+      logger.warn({ err }, 'Socket.IO Redis adapter failed — running in single-instance mode')
+    }
+  } else {
+    logger.warn('Socket.IO running without Redis adapter (single instance only)')
+  }
 
   io.use(async (socket, next) => {
     const tokenRaw = socket.handshake.query.token as string | undefined
@@ -84,7 +116,10 @@ export function initSocket(nodeHttpServer: NodeServer | null) {
     const user = (socket as any).user as User
     logger.info(`Socket connected: ${socket.id} (user: ${user.id}, rol: ${user.rol})`)
 
-    // Auto-join según el rol del usuario autenticado
+    // Track en Redis para estado distribuido
+    RedisService.setSocketConnection(user.id, socket.id)
+
+    // Unirse a rooms según rol
     if (user.rol === 'conductor') {
       socket.join(`driver:${user.id}`)
     } else if (user.rol === 'cliente') {
@@ -93,8 +128,17 @@ export function initSocket(nodeHttpServer: NodeServer | null) {
       socket.join('admin')
     }
 
+    socket.on('join:trip', (tripId: number | string) => {
+      socket.join(`trip:${tripId}`)
+    })
+
+    socket.on('leave:trip', (tripId: number | string) => {
+      socket.leave(`trip:${tripId}`)
+    })
+
     socket.on('disconnect', () => {
       logger.info(`Socket disconnected: ${socket.id}`)
+      RedisService.removeSocketConnection(user.id)
     })
   })
 

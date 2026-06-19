@@ -1,178 +1,85 @@
-import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
-import { DateTime } from 'luxon'
+import RedisService from '#services/redis_service'
+import LogFraude from '#models/log_fraude'
+
+type FraudType = 'COORDENADA_INVALIDA' | 'GPS_SOSPECHOSO' | 'VELOCIDAD_IMPÓSIBLE' | 'TELETRANSPORTE_GPS' | 'GPS_CONGELADO'
 
 const EARTH_RADIUS_KM = 6371
-const MAX_PLAUSIBLE_SPEED_KM_S = 0.45 // ~1600 km/h (supersonic jet)
+const MAX_SPEED_KMH = 180
+const MAX_SPEED_KMS = MAX_SPEED_KMH / 3600
+const FREEZE_THRESHOLD_MS = 60_000
+const FREEZE_DISTANCE_M = 5
 
-interface GpsFraudDetectionInput {
-  conductorId: number
-  userId: number
-  lat: number
-  lng: number
-  speed?: number | null
-}
-
-interface LastLocation {
-  lat: number
-  lng: number
-  timestamp: DateTime
-}
-
-const lastLocations = new Map<number, LastLocation>()
-
-function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const dLat = ((lat2 - lat1) * Math.PI) / 180
   const dLng = ((lng2 - lng1) * Math.PI) / 180
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return EARTH_RADIUS_KM * c
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-// Basic coordinate validity check
-function isValidCoordinate(lat: number, lng: number): boolean {
-  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
-}
+const PREVIOUS_LOCATION_PREFIX = 'fraud:prev_location:'
+const LAST_UPDATE_PREFIX = 'fraud:last_update:'
 
-// Suspicious locations: middle of ocean, Antarctica, etc.
-const SUSPICIOUS_ZONES: Array<{ minLat: number; maxLat: number; minLng: number; maxLng: number; name: string }> = [
-  { minLat: -90, maxLat: -80, minLng: -180, maxLng: 180, name: 'Antártida' },
-  { minLat: -60, maxLat: -50, minLng: -70, maxLng: -40, name: 'Océano Atlántico Sur (frente a Argentina)' },
-  { minLat: 0, maxLat: 10, minLng: -50, maxLng: -30, name: 'Océano Atlántico ecuatorial' },
-]
+const FraudDetectionService = {
+  async analyzeLocation(conductorId: number, lat: number, lng: number, tripId?: number) {
+    const frauds: FraudType[] = []
 
-// Bogotá reference location for teleport detection
-const COLOMBIA_BOUNDS = {
-  minLat: -4.5, maxLat: 13.5,
-  minLng: -80, maxLng: -66,
-}
-
-export default class FraudDetectionService {
-  static async analyzeLocation(input: GpsFraudDetectionInput): Promise<void> {
-    const { conductorId, userId, lat, lng, speed } = input
-
-    if (!isValidCoordinate(lat, lng)) {
-      await this.logFraud(conductorId, userId, 'COORDENADA_INVALIDA', {
-        descripcion: `Coordenada fuera de rango: (${lat}, ${lng})`,
-        latitud: lat, longitud: lng, velocidad: speed,
-      })
-      return
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      frauds.push('COORDENADA_INVALIDA')
     }
 
-    // Check suspicious zones
-    const inSuspiciousZone = SUSPICIOUS_ZONES.find(
-      (z) => lat >= z.minLat && lat <= z.maxLat && lng >= z.minLng && lng <= z.maxLng
-    )
-    if (inSuspiciousZone) {
-      await this.logFraud(conductorId, userId, 'GPS_SOSPECHOSO', {
-        descripcion: `Coordenada en zona sospechosa: ${inSuspiciousZone.name}`,
-        latitud: lat, longitud: lng, velocidad: speed,
-        metadata: { zona: inSuspiciousZone.name },
-      })
-      return
+    if (lat === 0 && lng === 0) {
+      frauds.push('GPS_SOSPECHOSO')
     }
 
-    // Speed check (if provided by device)
-    if (speed !== null && speed !== undefined && !isNaN(speed)) {
-      if (speed > 500) {
-        await this.logFraud(conductorId, userId, 'VELOCIDAD_IMPÓSIBLE', {
-          descripcion: `Velocidad reportada: ${Math.round(speed)} km/h`,
-          latitud: lat, longitud: lng, velocidad: speed,
-        })
-        return
+    const prevLocationRaw = await RedisService.get(`${PREVIOUS_LOCATION_PREFIX}${conductorId}`)
+    const lastTimeRaw = await RedisService.get(`${LAST_UPDATE_PREFIX}${conductorId}`)
+
+    if (prevLocationRaw && lastTimeRaw) {
+      const [prevLat, prevLng] = prevLocationRaw.split(',').map(Number)
+      const prevTime = Number(lastTimeRaw)
+      const now = Date.now()
+      const elapsed = (now - prevTime) / 1000
+
+      if (elapsed > 0) {
+        const distKm = haversineKm(prevLat, prevLng, lat, lng)
+        const speedKms = distKm / elapsed
+
+        if (speedKms > MAX_SPEED_KMS) {
+          frauds.push('VELOCIDAD_IMPÓSIBLE')
+        }
+
+        if (speedKms > 0.5 && elapsed < 5) {
+          frauds.push('TELETRANSPORTE_GPS')
+        }
       }
-    }
 
-    // Check last location for impossible movements
-    const last = lastLocations.get(conductorId)
-    if (last) {
-      const now = DateTime.now()
-      const secondsSinceLast = now.diff(last.timestamp, 'seconds').seconds
-      if (secondsSinceLast > 0) {
-        const distanceKm = haversineDistanceKm(last.lat, last.lng, lat, lng)
-        const speedKmS = distanceKm / secondsSinceLast
-
-        // Speed above MAX_PLAUSIBLE_SPEED_KM_S (~1600 km/h) is teleportation
-        if (speedKmS > MAX_PLAUSIBLE_SPEED_KM_S) {
-          await this.logFraud(conductorId, userId, 'TELETRANSPORTE_GPS', {
-            descripcion: `Salto de ${distanceKm.toFixed(0)} km en ${secondsSinceLast.toFixed(0)}s (${(speedKmS * 3600).toFixed(0)} km/h)`,
-            latitud: lat, longitud: lng, velocidad: speedKmS * 3600,
-            metadata: {
-              distanciaKm: Math.round(distanceKm * 100) / 100,
-              segundos: Math.round(secondsSinceLast),
-              origen: { lat: last.lat, lng: last.lng },
-              destino: { lat, lng },
-            },
-          })
-        }
-
-        // GPS frozen: same coordinates for more than 5 minutes
-        const distanceFromLast = haversineDistanceKm(last.lat, last.lng, lat, lng)
-        if (distanceFromLast < 0.001 && secondsSinceLast > 300) {
-          await this.logFraud(conductorId, userId, 'GPS_CONGELADO', {
-            descripcion: `Misma ubicación por ${secondsSinceLast.toFixed(0)} segundos`,
-            latitud: lat, longitud: lng, velocidad: speed ?? 0,
-            metadata: { segundosCongelado: Math.round(secondsSinceLast) },
-          })
-        }
-
-        // Driver outside Colombia entirely
-        if (
-          lat < COLOMBIA_BOUNDS.minLat || lat > COLOMBIA_BOUNDS.maxLat ||
-          lng < COLOMBIA_BOUNDS.minLng || lng > COLOMBIA_BOUNDS.maxLng
-        ) {
-          await this.logFraud(conductorId, userId, 'GPS_SOSPECHOSO', {
-            descripcion: `Conductor fuera de Colombia: (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-            latitud: lat, longitud: lng, velocidad: speed ?? 0,
-            metadata: { fueraDeColombia: true },
-          })
+      if (elapsed > FREEZE_THRESHOLD_MS / 1000) {
+        const distM = haversineKm(prevLat, prevLng, lat, lng) * 1000
+        if (distM < FREEZE_DISTANCE_M) {
+          frauds.push('GPS_CONGELADO')
         }
       }
     }
 
-    // Update last location
-    lastLocations.set(conductorId, { lat, lng, timestamp: DateTime.now() })
-  }
+    await RedisService.set(`${PREVIOUS_LOCATION_PREFIX}${conductorId}`, `${lat},${lng}`, 300)
+    await RedisService.set(`${LAST_UPDATE_PREFIX}${conductorId}`, String(Date.now()), 300)
 
-  private static async logFraud(
-    conductorId: number,
-    userId: number,
-    tipo: string,
-    data: {
-      descripcion?: string
-      latitud?: number
-      longitud?: number
-      velocidad?: number | null
-      metadata?: Record<string, any>
-    }
-  ): Promise<void> {
-    try {
-      await db.table('logs_fraude').insert({
-        user_id: userId,
-        conductor_id: conductorId,
-        tipo,
-        descripcion: data.descripcion ?? null,
-        latitud: data.latitud ?? null,
-        longitud: data.longitud ?? null,
-        velocidad: data.velocidad ?? null,
-        metadata: data.metadata ? JSON.stringify(data.metadata) : null,
-        created_at: DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss'),
-      })
-      logger.warn({ conductorId, tipo, descripcion: data.descripcion }, `Fraud detected: ${tipo}`)
-    } catch (err) {
-      logger.error({ err, conductorId, tipo }, 'Failed to log fraud event')
-    }
-  }
+    const conductorIdNum = Number(conductorId)
 
-  static reset(conductorId?: number) {
-    if (conductorId !== undefined) {
-      lastLocations.delete(conductorId)
-    } else {
-      lastLocations.clear()
+    for (const tipoFraude of frauds) {
+      logger.warn({ conductorId: conductorIdNum, tipoFraude, lat, lng, tripId }, 'Fraud detected')
+      try {
+        await LogFraude.create({ conductorId: conductorIdNum, tipo: tipoFraude, latitud: lat, longitud: lng, metadata: tripId ? { viajeId: tripId } : null })
+      } catch (err) {
+        logger.error({ err, conductorId: conductorIdNum }, 'Failed to log fraud')
+      }
     }
-  }
+
+    return frauds
+  },
 }
+
+export default FraudDetectionService
