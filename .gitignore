@@ -42,3 +42,5 @@ npm-cache
 
 # Backups locales
 tmp/backups/
+
+server_out.log
