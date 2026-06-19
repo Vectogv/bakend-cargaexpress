@@ -10,9 +10,8 @@ import { randomUUID } from 'node:crypto'
 import { DateTime } from 'luxon'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import { emitToClient } from '#start/socket'
-
-const lastGpsUpdate = new Map<number, number>()
-const GPS_MIN_INTERVAL_MS = 8_000
+import GpsRateLimitService from '#services/gps_rate_limit_service'
+import FraudDetectionService from '#services/fraud_detection_service'
 
 export default class DriverController {
   @ApiOperation({
@@ -162,17 +161,24 @@ export default class DriverController {
 
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
-    const now = Date.now()
-    const last = lastGpsUpdate.get(conductor.id)
-    if (last && now - last < GPS_MIN_INTERVAL_MS) {
+    // GPS rate limit (Redis-backed, with in-memory fallback)
+    if (!(await GpsRateLimitService.checkAndMark(conductor.id))) {
       return response
         .status(429)
         .send({ error: 'Espera antes de actualizar ubicación' })
     }
-    lastGpsUpdate.set(conductor.id, now)
     conductor.ultimaUbicacionLat = data.lat
     conductor.ultimaUbicacionLng = data.lng
     await conductor.save()
+
+    // GPS fraud detection (non-blocking — logs only, no rejection)
+    FraudDetectionService.analyzeLocation({
+      conductorId: conductor.id,
+      userId: user.id,
+      lat: data.lat,
+      lng: data.lng,
+      speed: null,
+    })
 
     await UbicacionDriver.create({
       conductorId: conductor.id,

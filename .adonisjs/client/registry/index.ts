@@ -258,6 +258,12 @@ const routes = {
     tokens: [{"old":"/api/trips/:id/offers/:offerId/accept","type":0,"val":"api","end":""},{"old":"/api/trips/:id/offers/:offerId/accept","type":0,"val":"trips","end":""},{"old":"/api/trips/:id/offers/:offerId/accept","type":1,"val":"id","end":""},{"old":"/api/trips/:id/offers/:offerId/accept","type":0,"val":"offers","end":""},{"old":"/api/trips/:id/offers/:offerId/accept","type":1,"val":"offerId","end":""},{"old":"/api/trips/:id/offers/:offerId/accept","type":0,"val":"accept","end":""}],
     types: placeholder as Registry['trips.offer.accept']['types'],
   },
+  'trips.offer.reject': {
+    methods: ["POST"],
+    pattern: '/api/trips/:id/offers/:offerId/reject',
+    tokens: [{"old":"/api/trips/:id/offers/:offerId/reject","type":0,"val":"api","end":""},{"old":"/api/trips/:id/offers/:offerId/reject","type":0,"val":"trips","end":""},{"old":"/api/trips/:id/offers/:offerId/reject","type":1,"val":"id","end":""},{"old":"/api/trips/:id/offers/:offerId/reject","type":0,"val":"offers","end":""},{"old":"/api/trips/:id/offers/:offerId/reject","type":1,"val":"offerId","end":""},{"old":"/api/trips/:id/offers/:offerId/reject","type":0,"val":"reject","end":""}],
+    types: placeholder as Registry['trips.offer.reject']['types'],
+  },
   'trips.report.store': {
     methods: ["POST"],
     pattern: '/api/trips/:id/report',
@@ -570,6 +576,12 @@ const routes = {
     tokens: [{"old":"/api/payment/proof","type":0,"val":"api","end":""},{"old":"/api/payment/proof","type":0,"val":"payment","end":""},{"old":"/api/payment/proof","type":0,"val":"proof","end":""}],
     types: placeholder as Registry['payment.payment.upload_proof']['types'],
   },
+  'mapbox.token': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/config/mapbox',
+    tokens: [{"old":"/api/config/mapbox","type":0,"val":"api","end":""},{"old":"/api/config/mapbox","type":0,"val":"config","end":""},{"old":"/api/config/mapbox","type":0,"val":"mapbox","end":""}],
+    types: placeholder as Registry['mapbox.token']['types'],
+  },
   'moderator.moderator.store_comunicado': {
     methods: ["POST"],
     pattern: '/api/moderator/comunicados',
@@ -624,29 +636,29 @@ const routes = {
     tokens: [{"old":"/api/moderator/encuestas/:id/answer","type":0,"val":"api","end":""},{"old":"/api/moderator/encuestas/:id/answer","type":0,"val":"moderator","end":""},{"old":"/api/moderator/encuestas/:id/answer","type":0,"val":"encuestas","end":""},{"old":"/api/moderator/encuestas/:id/answer","type":1,"val":"id","end":""},{"old":"/api/moderator/encuestas/:id/answer","type":0,"val":"answer","end":""}],
     types: placeholder as Registry['moderator.moderator.answer_encuesta']['types'],
   },
-  'foro.moderator.foro_index': {
+  'avisos.moderator.avisos_index': {
     methods: ["GET","HEAD"],
-    pattern: '/api/foro',
-    tokens: [{"old":"/api/foro","type":0,"val":"api","end":""},{"old":"/api/foro","type":0,"val":"foro","end":""}],
-    types: placeholder as Registry['foro.moderator.foro_index']['types'],
+    pattern: '/api/avisos',
+    tokens: [{"old":"/api/avisos","type":0,"val":"api","end":""},{"old":"/api/avisos","type":0,"val":"avisos","end":""}],
+    types: placeholder as Registry['avisos.moderator.avisos_index']['types'],
   },
-  'foro.moderator.foro_store': {
+  'avisos.moderator.avisos_store': {
     methods: ["POST"],
-    pattern: '/api/foro',
-    tokens: [{"old":"/api/foro","type":0,"val":"api","end":""},{"old":"/api/foro","type":0,"val":"foro","end":""}],
-    types: placeholder as Registry['foro.moderator.foro_store']['types'],
+    pattern: '/api/avisos',
+    tokens: [{"old":"/api/avisos","type":0,"val":"api","end":""},{"old":"/api/avisos","type":0,"val":"avisos","end":""}],
+    types: placeholder as Registry['avisos.moderator.avisos_store']['types'],
   },
-  'foro.moderator.foro_pin': {
+  'avisos.moderator.avisos_pin': {
     methods: ["PUT"],
-    pattern: '/api/foro/:id/pin',
-    tokens: [{"old":"/api/foro/:id/pin","type":0,"val":"api","end":""},{"old":"/api/foro/:id/pin","type":0,"val":"foro","end":""},{"old":"/api/foro/:id/pin","type":1,"val":"id","end":""},{"old":"/api/foro/:id/pin","type":0,"val":"pin","end":""}],
-    types: placeholder as Registry['foro.moderator.foro_pin']['types'],
+    pattern: '/api/avisos/:id/pin',
+    tokens: [{"old":"/api/avisos/:id/pin","type":0,"val":"api","end":""},{"old":"/api/avisos/:id/pin","type":0,"val":"avisos","end":""},{"old":"/api/avisos/:id/pin","type":1,"val":"id","end":""},{"old":"/api/avisos/:id/pin","type":0,"val":"pin","end":""}],
+    types: placeholder as Registry['avisos.moderator.avisos_pin']['types'],
   },
-  'foro.moderator.foro_delete': {
+  'avisos.moderator.avisos_delete': {
     methods: ["DELETE"],
-    pattern: '/api/foro/:id',
-    tokens: [{"old":"/api/foro/:id","type":0,"val":"api","end":""},{"old":"/api/foro/:id","type":0,"val":"foro","end":""},{"old":"/api/foro/:id","type":1,"val":"id","end":""}],
-    types: placeholder as Registry['foro.moderator.foro_delete']['types'],
+    pattern: '/api/avisos/:id',
+    tokens: [{"old":"/api/avisos/:id","type":0,"val":"api","end":""},{"old":"/api/avisos/:id","type":0,"val":"avisos","end":""},{"old":"/api/avisos/:id","type":1,"val":"id","end":""}],
+    types: placeholder as Registry['avisos.moderator.avisos_delete']['types'],
   },
   'emergency.trigger': {
     methods: ["POST"],
@@ -654,29 +666,29 @@ const routes = {
     tokens: [{"old":"/api/emergency","type":0,"val":"api","end":""},{"old":"/api/emergency","type":0,"val":"emergency","end":""}],
     types: placeholder as Registry['emergency.trigger']['types'],
   },
-  'leader.leader.foro_index': {
+  'leader.leader.avisos_index': {
     methods: ["GET","HEAD"],
-    pattern: '/api/leader/foro',
-    tokens: [{"old":"/api/leader/foro","type":0,"val":"api","end":""},{"old":"/api/leader/foro","type":0,"val":"leader","end":""},{"old":"/api/leader/foro","type":0,"val":"foro","end":""}],
-    types: placeholder as Registry['leader.leader.foro_index']['types'],
+    pattern: '/api/leader/avisos',
+    tokens: [{"old":"/api/leader/avisos","type":0,"val":"api","end":""},{"old":"/api/leader/avisos","type":0,"val":"leader","end":""},{"old":"/api/leader/avisos","type":0,"val":"avisos","end":""}],
+    types: placeholder as Registry['leader.leader.avisos_index']['types'],
   },
-  'leader.leader.foro_store': {
+  'leader.leader.avisos_store': {
     methods: ["POST"],
-    pattern: '/api/leader/foro',
-    tokens: [{"old":"/api/leader/foro","type":0,"val":"api","end":""},{"old":"/api/leader/foro","type":0,"val":"leader","end":""},{"old":"/api/leader/foro","type":0,"val":"foro","end":""}],
-    types: placeholder as Registry['leader.leader.foro_store']['types'],
+    pattern: '/api/leader/avisos',
+    tokens: [{"old":"/api/leader/avisos","type":0,"val":"api","end":""},{"old":"/api/leader/avisos","type":0,"val":"leader","end":""},{"old":"/api/leader/avisos","type":0,"val":"avisos","end":""}],
+    types: placeholder as Registry['leader.leader.avisos_store']['types'],
   },
-  'leader.leader.foro_pin': {
+  'leader.leader.avisos_pin': {
     methods: ["PUT"],
-    pattern: '/api/leader/foro/:id/pin',
-    tokens: [{"old":"/api/leader/foro/:id/pin","type":0,"val":"api","end":""},{"old":"/api/leader/foro/:id/pin","type":0,"val":"leader","end":""},{"old":"/api/leader/foro/:id/pin","type":0,"val":"foro","end":""},{"old":"/api/leader/foro/:id/pin","type":1,"val":"id","end":""},{"old":"/api/leader/foro/:id/pin","type":0,"val":"pin","end":""}],
-    types: placeholder as Registry['leader.leader.foro_pin']['types'],
+    pattern: '/api/leader/avisos/:id/pin',
+    tokens: [{"old":"/api/leader/avisos/:id/pin","type":0,"val":"api","end":""},{"old":"/api/leader/avisos/:id/pin","type":0,"val":"leader","end":""},{"old":"/api/leader/avisos/:id/pin","type":0,"val":"avisos","end":""},{"old":"/api/leader/avisos/:id/pin","type":1,"val":"id","end":""},{"old":"/api/leader/avisos/:id/pin","type":0,"val":"pin","end":""}],
+    types: placeholder as Registry['leader.leader.avisos_pin']['types'],
   },
-  'leader.leader.foro_delete': {
+  'leader.leader.avisos_delete': {
     methods: ["DELETE"],
-    pattern: '/api/leader/foro/:id',
-    tokens: [{"old":"/api/leader/foro/:id","type":0,"val":"api","end":""},{"old":"/api/leader/foro/:id","type":0,"val":"leader","end":""},{"old":"/api/leader/foro/:id","type":0,"val":"foro","end":""},{"old":"/api/leader/foro/:id","type":1,"val":"id","end":""}],
-    types: placeholder as Registry['leader.leader.foro_delete']['types'],
+    pattern: '/api/leader/avisos/:id',
+    tokens: [{"old":"/api/leader/avisos/:id","type":0,"val":"api","end":""},{"old":"/api/leader/avisos/:id","type":0,"val":"leader","end":""},{"old":"/api/leader/avisos/:id","type":0,"val":"avisos","end":""},{"old":"/api/leader/avisos/:id","type":1,"val":"id","end":""}],
+    types: placeholder as Registry['leader.leader.avisos_delete']['types'],
   },
   'leader.leader.store_comunicado': {
     methods: ["POST"],

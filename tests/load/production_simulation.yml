@@ -1,0 +1,102 @@
+config:
+  target: "http://localhost:3333"
+  phases:
+    - duration: 60
+      arrivalRate: 100
+      name: "100 usuarios concurrentes"
+    - duration: 60
+      arrivalRate: 500
+      name: "500 usuarios concurrentes"
+    - duration: 60
+      arrivalRate: 1000
+      name: "1000 usuarios concurrentes"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+  socketio:
+    transports: ["websocket"]
+  plugins:
+    metrics-by-endpoint: {}
+    ensure:
+      maxErrorRate: 5
+
+scenarios:
+  - name: "Flujo completo de viaje - Cliente"
+    weight: 1
+    flow:
+      - post:
+          url: "/api/auth/register"
+          json:
+            nombre: "Load Client"
+            apellido: "Test"
+            email: "load-client-{{ $randomString(8) }}@test.com"
+            password: "123456"
+            rol: "cliente"
+          capture:
+            - json: "$.token"
+              as: "clientToken"
+      - post:
+          url: "/api/trips/request"
+          headers:
+            Authorization: "Bearer {{ clientToken }}"
+          json:
+            origen:
+              direccion: "Calle 1"
+              lat: 3.4516
+              lng: -76.5320
+            destino:
+              direccion: "Calle 2"
+              lat: 3.4520
+              lng: -76.5310
+            descripcion: "carga de prueba"
+            precioCliente: 50000
+          capture:
+            - json: "$.id"
+              as: "tripId"
+      - think: 2
+      - get:
+          url: "/api/trips/active"
+          headers:
+            Authorization: "Bearer {{ clientToken }}"
+
+  - name: "Flujo conductor - Aceptar viaje"
+    weight: 1
+    flow:
+      - post:
+          url: "/api/auth/register"
+          json:
+            nombre: "Load Driver"
+            apellido: "Test"
+            email: "load-driver-{{ $randomString(8) }}@test.com"
+            password: "123456"
+            rol: "conductor"
+            cedula: "{{ $randomString(10) }}"
+            placa: "LD-{{ $randomString(5) }}"
+            tipoVehiculo: "camioneta"
+            capacidad: "1000 kg"
+          capture:
+            - json: "$.token"
+              as: "driverToken"
+            - json: "$.id"
+              as: "driverUserId"
+      - patch:
+          url: "/api/drivers/location"
+          headers:
+            Authorization: "Bearer {{ driverToken }}"
+          json:
+            lat: 3.4516
+            lng: -76.5320
+            heading: 0
+            accuracy: 10
+
+  - name: "Endpoint salud y monitoreo"
+    weight: 3
+    flow:
+      - get:
+          url: "/health"
+      - get:
+          url: "/api/trips/nearby?lat=3.4516&lng=-76.5320&radio=20"
+
+ensure:
+  thresholds:
+    - engine.http.p99: 2000

@@ -64,6 +64,7 @@ export interface ApiDefinition {
       index: typeof routes['trips.offer.index']
       store: typeof routes['trips.offer.store']
       accept: typeof routes['trips.offer.accept']
+      reject: typeof routes['trips.offer.reject']
     }
     report: {
       store: typeof routes['trips.report.store']
@@ -140,6 +141,9 @@ export interface ApiDefinition {
       uploadProof: typeof routes['payment.payment.upload_proof']
     }
   }
+  mapbox: {
+    token: typeof routes['mapbox.token']
+  }
   moderator: {
     moderator: {
       storeComunicado: typeof routes['moderator.moderator.store_comunicado']
@@ -153,12 +157,12 @@ export interface ApiDefinition {
       answerEncuesta: typeof routes['moderator.moderator.answer_encuesta']
     }
   }
-  foro: {
+  avisos: {
     moderator: {
-      foroIndex: typeof routes['foro.moderator.foro_index']
-      foroStore: typeof routes['foro.moderator.foro_store']
-      foroPin: typeof routes['foro.moderator.foro_pin']
-      foroDelete: typeof routes['foro.moderator.foro_delete']
+      avisosIndex: typeof routes['avisos.moderator.avisos_index']
+      avisosStore: typeof routes['avisos.moderator.avisos_store']
+      avisosPin: typeof routes['avisos.moderator.avisos_pin']
+      avisosDelete: typeof routes['avisos.moderator.avisos_delete']
     }
   }
   emergency: {
@@ -166,10 +170,10 @@ export interface ApiDefinition {
   }
   leader: {
     leader: {
-      foroIndex: typeof routes['leader.leader.foro_index']
-      foroStore: typeof routes['leader.leader.foro_store']
-      foroPin: typeof routes['leader.leader.foro_pin']
-      foroDelete: typeof routes['leader.leader.foro_delete']
+      avisosIndex: typeof routes['leader.leader.avisos_index']
+      avisosStore: typeof routes['leader.leader.avisos_store']
+      avisosPin: typeof routes['leader.leader.avisos_pin']
+      avisosDelete: typeof routes['leader.leader.avisos_delete']
       storeComunicado: typeof routes['leader.leader.store_comunicado']
       myComunicados: typeof routes['leader.leader.my_comunicados']
       driversList: typeof routes['leader.leader.drivers_list']

@@ -14,15 +14,27 @@ export function getIO(): SocketServer {
 }
 
 export function emitToClient(clienteId: number | string, event: string, data: unknown) {
-  getIO().to(`client:${clienteId}`).emit(event, data)
+  try {
+    getIO().to(`client:${clienteId}`).emit(event, data)
+  } catch {
+    logger.warn(`Socket.io not available, skipping emitToClient event: ${event}`)
+  }
 }
 
 export function emitToDriver(driverUserId: number | string, event: string, data: unknown) {
-  getIO().to(`driver:${driverUserId}`).emit(event, data)
+  try {
+    getIO().to(`driver:${driverUserId}`).emit(event, data)
+  } catch {
+    logger.warn(`Socket.io not available, skipping emitToDriver event: ${event}`)
+  }
 }
 
 export function emitToAdmin(event: string, data: unknown) {
-  getIO().to('admin').emit(event, data)
+  try {
+    getIO().to('admin').emit(event, data)
+  } catch {
+    logger.warn(`Socket.io not available, skipping emitToAdmin event: ${event}`)
+  }
 }
 
 export function initSocket(nodeHttpServer: NodeServer | null) {

@@ -1,3 +1,4 @@
+import db from '@adonisjs/lucid/services/db'
 import User from '#models/user'
 import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
@@ -224,11 +225,10 @@ export default class TripController {
   @ApiOperation({ summary: 'Accept a trip (DEPRECATED)', description: 'DEPRECATED: usar POST /trips/:id/offers/:offerId/accept. Este endpoint será eliminado en la próxima versión mayor.' })
   @ApiResponse({ type: 'object' })
   async accept({ params, serialize, auth, response }: HttpContext) {
-    // Cabecera de deprecación según RFC 8594
     response.header('Deprecation', 'true')
     response.header(
       'Sunset',
-      new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString() // 90 días
+      new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString()
     )
     response.header(
       'Link',
@@ -238,14 +238,6 @@ export default class TripController {
     const user = auth.getUserOrFail()
     if (user.rol !== 'conductor') {
       return response.status(403).send({ error: 'Solo los conductores pueden aceptar viajes' })
-    }
-
-    const viaje = await Viaje.find(params.id)
-    if (!viaje) {
-      return response.status(404).send({ error: 'Viaje no encontrado' })
-    }
-    if (viaje.estado !== 'buscando_conductor') {
-      return response.status(422).send({ error: 'Este viaje ya no está disponible' })
     }
 
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
@@ -258,48 +250,79 @@ export default class TripController {
       return response.status(403).send({ error: 'Tu cuenta de conductor no está verificada.' })
     }
 
-    viaje.conductorId = conductor.id
-    viaje.estado = 'aceptado'
-    viaje.aceptadoAt = DateTime.now()
+    // ── Transacción con bloqueo pesimista ─────────────────────────────
+    // Evita que dos conductores acepten el mismo viaje simultáneamente.
+    let resultado: { viaje: Viaje }
+    try {
+      resultado = await db.transaction(async (trx) => {
+        const viaje = await Viaje.query({ client: trx })
+          .where('id', params.id)
+          .forUpdate()
+          .first()
 
-    if (conductor.ultimaUbicacionLat && conductor.ultimaUbicacionLng) {
-      const R = 6371
-      const dLat = ((viaje.origenLat - conductor.ultimaUbicacionLat) * Math.PI) / 180
-      const dLng = ((viaje.origenLng - conductor.ultimaUbicacionLng) * Math.PI) / 180
-      const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos((conductor.ultimaUbicacionLat * Math.PI) / 180) *
-          Math.cos((viaje.origenLat * Math.PI) / 180) *
-          Math.sin(dLng / 2) ** 2
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-      const distanciaKm = R * c
-      viaje.tiempoEstimadoMinutos = Math.ceil((distanciaKm / 30) * 60)
+        if (!viaje) {
+          throw Object.assign(new Error('NO_ENCONTRADO'), { statusCode: 404, message: 'Viaje no encontrado' })
+        }
+
+        // Re-validar estado DENTRO de la transacción (pudo cambiar mientras
+        // otro proceso concurrente tenía el lock antes que nosotros).
+        if (viaje.estado !== 'buscando_conductor') {
+          throw Object.assign(
+            new Error('YA_ASIGNADO'),
+            { statusCode: 422, message: 'El viaje ya fue asignado' }
+          )
+        }
+
+        viaje.conductorId = conductor.id
+        viaje.estado = 'aceptado'
+        viaje.aceptadoAt = DateTime.now()
+
+        if (conductor.ultimaUbicacionLat && conductor.ultimaUbicacionLng) {
+          const R = 6371
+          const dLat = ((viaje.origenLat - conductor.ultimaUbicacionLat) * Math.PI) / 180
+          const dLng = ((viaje.origenLng - conductor.ultimaUbicacionLng) * Math.PI) / 180
+          const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos((conductor.ultimaUbicacionLat * Math.PI) / 180) *
+              Math.cos((viaje.origenLat * Math.PI) / 180) *
+              Math.sin(dLng / 2) ** 2
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+          const distanciaKm = R * c
+          viaje.tiempoEstimadoMinutos = Math.ceil((distanciaKm / 30) * 60)
+        }
+
+        await viaje.useTransaction(trx).save()
+
+        await viaje.load('conductor', (q) => q.preload('usuario'))
+
+        return { viaje }
+      })
+    } catch (err: any) {
+      if (err?.statusCode) {
+        return response.status(err.statusCode).send({ error: err.message })
+      }
+      throw err
     }
 
-    await viaje.save()
-
-    await viaje.load('conductor', (q) => q.preload('usuario'))
-
-    emitToClient(viaje.clienteId, 'trip:accepted', {
-      id: String(viaje.id),
-      estado: viaje.estado,
+    emitToClient(resultado.viaje.clienteId, 'trip:accepted', {
+      id: String(resultado.viaje.id),
+      estado: resultado.viaje.estado,
       conductor: {
-        id: String(viaje.conductor.id),
+        id: String(resultado.viaje.conductor.id),
         nombre:
-          `${viaje.conductor.usuario.nombre || ''} ${viaje.conductor.usuario.apellido || ''}`.trim(),
-        telefono: viaje.conductor.usuario.telefono,
-        placa: viaje.conductor.placa,
-        foto: viaje.conductor.fotoConductor,
-        calificacion: viaje.conductor.calificacion,
+          `${resultado.viaje.conductor.usuario.nombre || ''} ${resultado.viaje.conductor.usuario.apellido || ''}`.trim(),
+        telefono: resultado.viaje.conductor.usuario.telefono,
+        placa: resultado.viaje.conductor.placa,
+        foto: resultado.viaje.conductor.fotoConductor,
+        calificacion: resultado.viaje.conductor.calificacion,
       },
-      tiempoEstimadoMinutos: viaje.tiempoEstimadoMinutos,
-      aceptadoAt: viaje.aceptadoAt.toISO(),
+      tiempoEstimadoMinutos: resultado.viaje.tiempoEstimadoMinutos,
+      aceptadoAt: resultado.viaje.aceptadoAt.toISO(),
     })
 
-    // Emitir trip:accepted a TODOS los conductores online (excepto el que aceptó)
     const tripAcceptedPayload = {
       event: 'trip:accepted',
-      tripId: Number(viaje.id),
+      tripId: Number(resultado.viaje.id),
       conductorId: Number(conductor.id),
     }
     const todosConductores = await Conductor.query()
@@ -310,9 +333,9 @@ export default class TripController {
     }
 
     return serialize.withoutWrapping({
-      id: String(viaje.id),
-      estado: viaje.estado,
-      aceptadoAt: viaje.aceptadoAt.toISO(),
+      id: String(resultado.viaje.id),
+      estado: resultado.viaje.estado,
+      aceptadoAt: resultado.viaje.aceptadoAt.toISO(),
     })
   }
 

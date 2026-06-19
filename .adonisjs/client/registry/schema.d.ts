@@ -511,6 +511,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['accept']>>>
     }
   }
+  'trips.offer.reject': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/offers/:offerId/reject'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue, ParamValue]
+      params: { id: ParamValue; offerId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['reject']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['reject']>>>
+    }
+  }
   'trips.report.store': {
     methods: ["POST"]
     pattern: '/api/trips/:id/report'
@@ -1135,6 +1147,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/payment_controller').default['uploadProof']>>>
     }
   }
+  'mapbox.token': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/config/mapbox'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/mapbox_controller').default['token']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/mapbox_controller').default['token']>>>
+    }
+  }
   'moderator.moderator.store_comunicado': {
     methods: ["POST"]
     pattern: '/api/moderator/comunicados'
@@ -1243,52 +1267,52 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['answerEncuesta']>>>
     }
   }
-  'foro.moderator.foro_index': {
+  'avisos.moderator.avisos_index': {
     methods: ["GET","HEAD"]
-    pattern: '/api/foro'
+    pattern: '/api/avisos'
     types: {
       body: {}
       paramsTuple: []
       params: {}
       query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroIndex']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroIndex']>>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['avisosIndex']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['avisosIndex']>>>
     }
   }
-  'foro.moderator.foro_store': {
+  'avisos.moderator.avisos_store': {
     methods: ["POST"]
-    pattern: '/api/foro'
+    pattern: '/api/avisos'
     types: {
       body: {}
       paramsTuple: []
       params: {}
       query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroStore']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroStore']>>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['avisosStore']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['avisosStore']>>>
     }
   }
-  'foro.moderator.foro_pin': {
+  'avisos.moderator.avisos_pin': {
     methods: ["PUT"]
-    pattern: '/api/foro/:id/pin'
+    pattern: '/api/avisos/:id/pin'
     types: {
       body: {}
       paramsTuple: [ParamValue]
       params: { id: ParamValue }
       query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroPin']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroPin']>>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['avisosPin']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['avisosPin']>>>
     }
   }
-  'foro.moderator.foro_delete': {
+  'avisos.moderator.avisos_delete': {
     methods: ["DELETE"]
-    pattern: '/api/foro/:id'
+    pattern: '/api/avisos/:id'
     types: {
       body: {}
       paramsTuple: [ParamValue]
       params: { id: ParamValue }
       query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroDelete']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['foroDelete']>>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['avisosDelete']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['avisosDelete']>>>
     }
   }
   'emergency.trigger': {
@@ -1303,52 +1327,52 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/emergency_controller').default['trigger']>>>
     }
   }
-  'leader.leader.foro_index': {
+  'leader.leader.avisos_index': {
     methods: ["GET","HEAD"]
-    pattern: '/api/leader/foro'
+    pattern: '/api/leader/avisos'
     types: {
       body: {}
       paramsTuple: []
       params: {}
       query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroIndex']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroIndex']>>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['avisosIndex']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['avisosIndex']>>>
     }
   }
-  'leader.leader.foro_store': {
+  'leader.leader.avisos_store': {
     methods: ["POST"]
-    pattern: '/api/leader/foro'
+    pattern: '/api/leader/avisos'
     types: {
       body: {}
       paramsTuple: []
       params: {}
       query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroStore']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroStore']>>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['avisosStore']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['avisosStore']>>>
     }
   }
-  'leader.leader.foro_pin': {
+  'leader.leader.avisos_pin': {
     methods: ["PUT"]
-    pattern: '/api/leader/foro/:id/pin'
+    pattern: '/api/leader/avisos/:id/pin'
     types: {
       body: {}
       paramsTuple: [ParamValue]
       params: { id: ParamValue }
       query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroPin']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroPin']>>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['avisosPin']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['avisosPin']>>>
     }
   }
-  'leader.leader.foro_delete': {
+  'leader.leader.avisos_delete': {
     methods: ["DELETE"]
-    pattern: '/api/leader/foro/:id'
+    pattern: '/api/leader/avisos/:id'
     types: {
       body: {}
       paramsTuple: [ParamValue]
       params: { id: ParamValue }
       query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroDelete']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['foroDelete']>>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['avisosDelete']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/leader_controller').default['avisosDelete']>>>
     }
   }
   'leader.leader.store_comunicado': {

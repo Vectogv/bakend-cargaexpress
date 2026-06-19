@@ -46,6 +46,7 @@ export type ScannedRoutes = {
     'trips.offer.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.accept': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'offerId': ParamValue} }
+    'trips.offer.reject': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'offerId': ParamValue} }
     'trips.report.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'notifications.notification.index': { paramsTuple?: []; params?: {} }
     'notifications.notification.read': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -98,6 +99,7 @@ export type ScannedRoutes = {
     'support.support.emergency': { paramsTuple?: []; params?: {} }
     'payment.payment.info': { paramsTuple?: []; params?: {} }
     'payment.payment.upload_proof': { paramsTuple?: []; params?: {} }
+    'mapbox.token': { paramsTuple?: []; params?: {} }
     'moderator.moderator.store_comunicado': { paramsTuple?: []; params?: {} }
     'moderator.moderator.my_comunicados': { paramsTuple?: []; params?: {} }
     'moderator.moderator.drivers_list': { paramsTuple?: []; params?: {} }
@@ -107,15 +109,15 @@ export type ScannedRoutes = {
     'moderator.moderator.store_encuesta': { paramsTuple?: []; params?: {} }
     'moderator.moderator.encuesta_results': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'moderator.moderator.answer_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'foro.moderator.foro_index': { paramsTuple?: []; params?: {} }
-    'foro.moderator.foro_store': { paramsTuple?: []; params?: {} }
-    'foro.moderator.foro_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'foro.moderator.foro_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'avisos.moderator.avisos_index': { paramsTuple?: []; params?: {} }
+    'avisos.moderator.avisos_store': { paramsTuple?: []; params?: {} }
+    'avisos.moderator.avisos_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'avisos.moderator.avisos_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'emergency.trigger': { paramsTuple?: []; params?: {} }
-    'leader.leader.foro_index': { paramsTuple?: []; params?: {} }
-    'leader.leader.foro_store': { paramsTuple?: []; params?: {} }
-    'leader.leader.foro_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'leader.leader.foro_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'leader.leader.avisos_index': { paramsTuple?: []; params?: {} }
+    'leader.leader.avisos_store': { paramsTuple?: []; params?: {} }
+    'leader.leader.avisos_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'leader.leader.avisos_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'leader.leader.store_comunicado': { paramsTuple?: []; params?: {} }
     'leader.leader.my_comunicados': { paramsTuple?: []; params?: {} }
     'leader.leader.drivers_list': { paramsTuple?: []; params?: {} }
@@ -155,12 +157,13 @@ export type ScannedRoutes = {
     'support.support.help': { paramsTuple?: []; params?: {} }
     'support.support.emergency': { paramsTuple?: []; params?: {} }
     'payment.payment.info': { paramsTuple?: []; params?: {} }
+    'mapbox.token': { paramsTuple?: []; params?: {} }
     'moderator.moderator.my_comunicados': { paramsTuple?: []; params?: {} }
     'moderator.moderator.drivers_list': { paramsTuple?: []; params?: {} }
     'moderator.moderator.inactive_drivers': { paramsTuple?: []; params?: {} }
     'moderator.moderator.encuesta_results': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'foro.moderator.foro_index': { paramsTuple?: []; params?: {} }
-    'leader.leader.foro_index': { paramsTuple?: []; params?: {} }
+    'avisos.moderator.avisos_index': { paramsTuple?: []; params?: {} }
+    'leader.leader.avisos_index': { paramsTuple?: []; params?: {} }
     'leader.leader.my_comunicados': { paramsTuple?: []; params?: {} }
     'leader.leader.drivers_list': { paramsTuple?: []; params?: {} }
     'leader.leader.reports_limited': { paramsTuple?: []; params?: {} }
@@ -199,12 +202,13 @@ export type ScannedRoutes = {
     'support.support.help': { paramsTuple?: []; params?: {} }
     'support.support.emergency': { paramsTuple?: []; params?: {} }
     'payment.payment.info': { paramsTuple?: []; params?: {} }
+    'mapbox.token': { paramsTuple?: []; params?: {} }
     'moderator.moderator.my_comunicados': { paramsTuple?: []; params?: {} }
     'moderator.moderator.drivers_list': { paramsTuple?: []; params?: {} }
     'moderator.moderator.inactive_drivers': { paramsTuple?: []; params?: {} }
     'moderator.moderator.encuesta_results': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'foro.moderator.foro_index': { paramsTuple?: []; params?: {} }
-    'leader.leader.foro_index': { paramsTuple?: []; params?: {} }
+    'avisos.moderator.avisos_index': { paramsTuple?: []; params?: {} }
+    'leader.leader.avisos_index': { paramsTuple?: []; params?: {} }
     'leader.leader.my_comunicados': { paramsTuple?: []; params?: {} }
     'leader.leader.drivers_list': { paramsTuple?: []; params?: {} }
     'leader.leader.reports_limited': { paramsTuple?: []; params?: {} }
@@ -236,6 +240,7 @@ export type ScannedRoutes = {
     'trips.dispute.upload_support': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.accept': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'offerId': ParamValue} }
+    'trips.offer.reject': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'offerId': ParamValue} }
     'trips.report.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.upload_profile_avatar': { paramsTuple?: []; params?: {} }
     'admin.admin.manual_backup': { paramsTuple?: []; params?: {} }
@@ -248,9 +253,9 @@ export type ScannedRoutes = {
     'moderator.moderator.report_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'moderator.moderator.store_encuesta': { paramsTuple?: []; params?: {} }
     'moderator.moderator.answer_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'foro.moderator.foro_store': { paramsTuple?: []; params?: {} }
+    'avisos.moderator.avisos_store': { paramsTuple?: []; params?: {} }
     'emergency.trigger': { paramsTuple?: []; params?: {} }
-    'leader.leader.foro_store': { paramsTuple?: []; params?: {} }
+    'leader.leader.avisos_store': { paramsTuple?: []; params?: {} }
     'leader.leader.store_comunicado': { paramsTuple?: []; params?: {} }
   }
   PUT: {
@@ -280,14 +285,14 @@ export type ScannedRoutes = {
     'admin.admin.approve_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.reject_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'foro.moderator.foro_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'leader.leader.foro_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'avisos.moderator.avisos_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'leader.leader.avisos_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   DELETE: {
     'admin.admin.delete_user': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'favorites.favorite_route.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'foro.moderator.foro_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'leader.leader.foro_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'avisos.moderator.avisos_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'leader.leader.avisos_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
 }
 declare module '@adonisjs/core/types/http' {
