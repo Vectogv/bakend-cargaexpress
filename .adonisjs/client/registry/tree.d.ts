@@ -135,10 +135,25 @@ export interface ApiDefinition {
       emergency: typeof routes['support.support.emergency']
     }
   }
+  disputes: {
+    dispute: {
+      storeRoot: typeof routes['disputes.dispute.store_root']
+      show: typeof routes['disputes.dispute.show']
+    }
+  }
   payment: {
     payment: {
       info: typeof routes['payment.payment.info']
       uploadProof: typeof routes['payment.payment.upload_proof']
+    }
+  }
+  payments: {
+    info: typeof routes['payments.info']
+  }
+  settings: {
+    settings: {
+      show: typeof routes['settings.settings.show']
+      update: typeof routes['settings.settings.update']
     }
   }
   mapbox: {

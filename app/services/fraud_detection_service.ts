@@ -7,8 +7,8 @@ type FraudType = 'COORDENADA_INVALIDA' | 'GPS_SOSPECHOSO' | 'VELOCIDAD_IMPÓSIBL
 const EARTH_RADIUS_KM = 6371
 const MAX_SPEED_KMH = 180
 const MAX_SPEED_KMS = MAX_SPEED_KMH / 3600
-const FREEZE_THRESHOLD_MS = 60_000
-const FREEZE_DISTANCE_M = 5
+const FREEZE_THRESHOLD_MS = 120_000
+const FREEZE_DISTANCE_M = 20
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const dLat = ((lat2 - lat1) * Math.PI) / 180

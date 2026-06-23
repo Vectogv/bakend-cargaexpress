@@ -479,6 +479,25 @@ export class UbicacionesDriverSchema extends BaseModel {
   declare lng: string
 }
 
+export class UserSettingSchema extends BaseModel {
+  static $columns = ['createdAt', 'id', 'idioma', 'notificacionesSonido', 'updatedAt', 'userId', 'visibilidad'] as const
+  $columns = UserSettingSchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare idioma: string
+  @column()
+  declare notificacionesSonido: boolean
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime | null
+  @column()
+  declare userId: number
+  @column()
+  declare visibilidad: string
+}
+
 export class UserSchema extends BaseModel {
   static $columns = ['apellido', 'avatar', 'calificacion', 'comprobantePago', 'contactoEmergenciaNombre', 'contactoEmergenciaTelefono', 'createdAt', 'deudaFechaLimite', 'edad', 'email', 'esModerador', 'estadoCuenta', 'fcmToken', 'fullName', 'id', 'montoDeuda', 'nombre', 'password', 'reportesInfundadosConductor', 'reputacion', 'rol', 'suspendido', 'telefono', 'tieneDeudaActiva', 'totalReportes', 'totalViajesCompletados', 'updatedAt', 'visibilidad', 'zonaModerador'] as const
   $columns = UserSchema.$columns

@@ -11,13 +11,13 @@ function createClient(): Ioredis | null {
       host: env.get('REDIS_HOST', '127.0.0.1'),
       port: Number(env.get('REDIS_PORT', '6379')),
       password: env.get('REDIS_PASSWORD') || undefined,
-      maxRetriesPerRequest: null,
+      maxRetriesPerRequest: 3,
       retryStrategy(times: number) {
-        if (times > 10) return 5000
-        return Math.min(times * 200, 2000)
+        if (times > 3) return null
+        return Math.min(times * 100, 500)
       },
       lazyConnect: true,
-      enableOfflineQueue: true,
+      enableOfflineQueue: false,
     })
     c.on('error', (err) => logger.warn({ err }, 'Redis connection error (degraded mode)'))
     c.on('ready', () => logger.info('Redis connected'))
@@ -98,7 +98,7 @@ const RedisService = {
   },
 
   // ── Rate limiting (GPS) ────────────────────────────────────────
-  GPS_MIN_INTERVAL_MS: 8_000,
+  GPS_MIN_INTERVAL_MS: 4_000,
   GPS_PREFIX: 'gps_rate_limit:',
 
   async checkGpsRateLimit(conductorId: number): Promise<boolean> {

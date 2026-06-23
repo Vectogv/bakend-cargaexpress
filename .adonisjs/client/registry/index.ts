@@ -564,6 +564,18 @@ const routes = {
     tokens: [{"old":"/api/support/emergency","type":0,"val":"api","end":""},{"old":"/api/support/emergency","type":0,"val":"support","end":""},{"old":"/api/support/emergency","type":0,"val":"emergency","end":""}],
     types: placeholder as Registry['support.support.emergency']['types'],
   },
+  'disputes.dispute.store_root': {
+    methods: ["POST"],
+    pattern: '/api/disputes',
+    tokens: [{"old":"/api/disputes","type":0,"val":"api","end":""},{"old":"/api/disputes","type":0,"val":"disputes","end":""}],
+    types: placeholder as Registry['disputes.dispute.store_root']['types'],
+  },
+  'disputes.dispute.show': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/disputes/:id',
+    tokens: [{"old":"/api/disputes/:id","type":0,"val":"api","end":""},{"old":"/api/disputes/:id","type":0,"val":"disputes","end":""},{"old":"/api/disputes/:id","type":1,"val":"id","end":""}],
+    types: placeholder as Registry['disputes.dispute.show']['types'],
+  },
   'payment.payment.info': {
     methods: ["GET","HEAD"],
     pattern: '/api/payment/debt',
@@ -575,6 +587,24 @@ const routes = {
     pattern: '/api/payment/proof',
     tokens: [{"old":"/api/payment/proof","type":0,"val":"api","end":""},{"old":"/api/payment/proof","type":0,"val":"payment","end":""},{"old":"/api/payment/proof","type":0,"val":"proof","end":""}],
     types: placeholder as Registry['payment.payment.upload_proof']['types'],
+  },
+  'payments.info': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/payments',
+    tokens: [{"old":"/api/payments","type":0,"val":"api","end":""},{"old":"/api/payments","type":0,"val":"payments","end":""}],
+    types: placeholder as Registry['payments.info']['types'],
+  },
+  'settings.settings.show': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/settings',
+    tokens: [{"old":"/api/settings","type":0,"val":"api","end":""},{"old":"/api/settings","type":0,"val":"settings","end":""}],
+    types: placeholder as Registry['settings.settings.show']['types'],
+  },
+  'settings.settings.update': {
+    methods: ["PUT"],
+    pattern: '/api/settings',
+    tokens: [{"old":"/api/settings","type":0,"val":"api","end":""},{"old":"/api/settings","type":0,"val":"settings","end":""}],
+    types: placeholder as Registry['settings.settings.update']['types'],
   },
   'mapbox.token': {
     methods: ["GET","HEAD"],

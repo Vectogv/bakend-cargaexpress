@@ -21,6 +21,15 @@ export default class Disputa extends BaseModel {
   declare clienteId: number
 
   @column()
+  declare numero: string | null
+
+  @column()
+  declare problema: string | null
+
+  @column()
+  declare descripcion: string | null
+
+  @column()
   declare versionConductor: string
 
   @column()
@@ -30,10 +39,19 @@ export default class Disputa extends BaseModel {
   declare soporteCliente: string | null
 
   @column()
+  declare fotos: string[] | null
+
+  @column()
   declare estado: string
 
   @column()
   declare resultado: string | null
+
+  @column()
+  declare reembolso: number | null
+
+  @column()
+  declare comentarioAdmin: string | null
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

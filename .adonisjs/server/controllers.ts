@@ -21,6 +21,7 @@ export const controllers = {
   Payment: () => import('#controllers/payment_controller'),
   Profile: () => import('#controllers/profile_controller'),
   Report: () => import('#controllers/report_controller'),
+  Settings: () => import('#controllers/settings_controller'),
   Support: () => import('#controllers/support_controller'),
   Trip: () => import('#controllers/trip_controller'),
 }

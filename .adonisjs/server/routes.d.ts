@@ -97,8 +97,13 @@ export type ScannedRoutes = {
     'favorites.favorite_route.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'support.support.help': { paramsTuple?: []; params?: {} }
     'support.support.emergency': { paramsTuple?: []; params?: {} }
+    'disputes.dispute.store_root': { paramsTuple?: []; params?: {} }
+    'disputes.dispute.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'payment.payment.info': { paramsTuple?: []; params?: {} }
     'payment.payment.upload_proof': { paramsTuple?: []; params?: {} }
+    'payments.info': { paramsTuple?: []; params?: {} }
+    'settings.settings.show': { paramsTuple?: []; params?: {} }
+    'settings.settings.update': { paramsTuple?: []; params?: {} }
     'mapbox.token': { paramsTuple?: []; params?: {} }
     'moderator.moderator.store_comunicado': { paramsTuple?: []; params?: {} }
     'moderator.moderator.my_comunicados': { paramsTuple?: []; params?: {} }
@@ -156,7 +161,10 @@ export type ScannedRoutes = {
     'favorites.favorite_route.index': { paramsTuple?: []; params?: {} }
     'support.support.help': { paramsTuple?: []; params?: {} }
     'support.support.emergency': { paramsTuple?: []; params?: {} }
+    'disputes.dispute.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'payment.payment.info': { paramsTuple?: []; params?: {} }
+    'payments.info': { paramsTuple?: []; params?: {} }
+    'settings.settings.show': { paramsTuple?: []; params?: {} }
     'mapbox.token': { paramsTuple?: []; params?: {} }
     'moderator.moderator.my_comunicados': { paramsTuple?: []; params?: {} }
     'moderator.moderator.drivers_list': { paramsTuple?: []; params?: {} }
@@ -201,7 +209,10 @@ export type ScannedRoutes = {
     'favorites.favorite_route.index': { paramsTuple?: []; params?: {} }
     'support.support.help': { paramsTuple?: []; params?: {} }
     'support.support.emergency': { paramsTuple?: []; params?: {} }
+    'disputes.dispute.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'payment.payment.info': { paramsTuple?: []; params?: {} }
+    'payments.info': { paramsTuple?: []; params?: {} }
+    'settings.settings.show': { paramsTuple?: []; params?: {} }
     'mapbox.token': { paramsTuple?: []; params?: {} }
     'moderator.moderator.my_comunicados': { paramsTuple?: []; params?: {} }
     'moderator.moderator.drivers_list': { paramsTuple?: []; params?: {} }
@@ -247,6 +258,7 @@ export type ScannedRoutes = {
     'admin.admin.approve_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.reject_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'favorites.favorite_route.store': { paramsTuple?: []; params?: {} }
+    'disputes.dispute.store_root': { paramsTuple?: []; params?: {} }
     'payment.payment.upload_proof': { paramsTuple?: []; params?: {} }
     'moderator.moderator.store_comunicado': { paramsTuple?: []; params?: {} }
     'moderator.moderator.notify_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -285,6 +297,7 @@ export type ScannedRoutes = {
     'admin.admin.approve_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.reject_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'settings.settings.update': { paramsTuple?: []; params?: {} }
     'avisos.moderator.avisos_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'leader.leader.avisos_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }

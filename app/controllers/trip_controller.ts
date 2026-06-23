@@ -203,15 +203,15 @@ export default class TripController {
       viaje = await Viaje.query()
         .where('conductor_id', conductor.id)
         .whereIn('estado', ['aceptado', 'en_curso'])
-        .preload('cliente')
-        .preload('conductor', (q) => q.preload('usuario'))
+        .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
+        .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
         .first()
     } else {
       viaje = await Viaje.query()
         .where('cliente_id', user.id)
         .whereIn('estado', ['buscando_conductor', 'pendiente', 'aceptado', 'en_curso'])
-        .preload('cliente')
-        .preload('conductor', (q) => q.preload('usuario'))
+        .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
+        .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
         .first()
     }
 
@@ -325,10 +325,11 @@ export default class TripController {
       tripId: Number(resultado.viaje.id),
       conductorId: Number(conductor.id),
     }
-    const todosConductores = await Conductor.query()
+    const onlineDriverIds = await Conductor.query()
       .where('online', true)
       .where('id', '!=', conductor.id)
-    for (const c of todosConductores) {
+      .select('usuario_id')
+    for (const c of onlineDriverIds) {
       emitToDriver(c.usuarioId, 'trip:accepted', tripAcceptedPayload)
     }
 
@@ -818,7 +819,9 @@ export default class TripController {
     }
 
     const { puntaje, comentario } = request.only(['puntaje', 'comentario'])
-    if (!puntaje || puntaje < 1 || puntaje > 5) {
+    const rating = request.input('rating', puntaje || null)
+    const puntajeFinal = rating ?? puntaje
+    if (puntajeFinal === null || puntajeFinal === undefined || puntajeFinal < 1 || puntajeFinal > 5) {
       return response
         .status(422)
         .send(serialize.withoutWrapping({ error: 'El puntaje debe ser entre 1 y 5' }))
@@ -872,7 +875,7 @@ export default class TripController {
       viajeId: viaje.id,
       calificadorId: user.id,
       calificadoId,
-      puntaje,
+      puntaje: puntajeFinal,
       comentario: comentario || null,
       tipo,
     })
@@ -895,7 +898,8 @@ export default class TripController {
 
     return serialize.withoutWrapping({
       success: true,
-      puntaje,
+      rating: puntajeFinal,
+      puntaje: puntajeFinal,
       promedio: Math.round(promedio * 100) / 100,
     })
   }

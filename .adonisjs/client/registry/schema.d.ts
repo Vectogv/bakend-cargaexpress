@@ -1123,6 +1123,30 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/support_controller').default['emergency']>>>
     }
   }
+  'disputes.dispute.store_root': {
+    methods: ["POST"]
+    pattern: '/api/disputes'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['storeRoot']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['storeRoot']>>>
+    }
+  }
+  'disputes.dispute.show': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/disputes/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['show']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['show']>>>
+    }
+  }
   'payment.payment.info': {
     methods: ["GET","HEAD"]
     pattern: '/api/payment/debt'
@@ -1145,6 +1169,42 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/payment_controller').default['uploadProof']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/payment_controller').default['uploadProof']>>>
+    }
+  }
+  'payments.info': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/payments'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/payment_controller').default['info']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/payment_controller').default['info']>>>
+    }
+  }
+  'settings.settings.show': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/settings'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/settings_controller').default['show']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/settings_controller').default['show']>>>
+    }
+  }
+  'settings.settings.update': {
+    methods: ["PUT"]
+    pattern: '/api/settings'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#validators/settings').updateSettingsValidator)>>
+      paramsTuple: []
+      params: {}
+      query: ExtractQuery<InferInput<(typeof import('#validators/settings').updateSettingsValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/settings_controller').default['update']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/settings_controller').default['update']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
   'mapbox.token': {

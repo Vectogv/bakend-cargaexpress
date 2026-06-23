@@ -6,7 +6,153 @@ import app from '@adonisjs/core/services/app'
 import { randomUUID } from 'node:crypto'
 import { emitToAdmin } from '#start/socket'
 
+
 export default class DisputeController {
+  async show({ auth, params, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const disputa = await Disputa.find(params.id)
+    if (!disputa) {
+      return response.status(404).send(serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
+    }
+    if (disputa.clienteId !== user.id && disputa.conductorId !== user.id) {
+      const conductor = await Conductor.findBy('usuario_id', user.id)
+      if (!conductor || disputa.conductorId !== conductor.id) {
+        return response.status(403).send(serialize.withoutWrapping({ error: 'No tienes acceso a esta disputa' }))
+      }
+    }
+
+    return serialize.withoutWrapping({
+      id: String(disputa.id),
+      numero: disputa.numero,
+      estado: disputa.estado,
+      problema: disputa.problema,
+      resultado: disputa.resultado,
+      reembolso: disputa.reembolso,
+      comentarioAdmin: disputa.comentarioAdmin,
+      fechaResolucion: disputa.resueltaAt?.toISO() || null,
+    })
+  }
+
+  async storeRoot({ auth, request, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    if (user.rol !== 'conductor' && user.rol !== 'cliente') {
+      return response.status(403).send(serialize.withoutWrapping({ error: 'Solo conductores o clientes pueden abrir disputas' }))
+    }
+
+    const { tripId, problema, descripcion } = request.only(['tripId', 'problema', 'descripcion'])
+    let fotos = request.input('fotos', [])
+
+    if (!tripId) {
+      return response.status(422).send(serialize.withoutWrapping({ error: 'tripId es requerido' }))
+    }
+
+    const viaje = await Viaje.find(tripId)
+    if (!viaje) {
+      return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
+    }
+    if (viaje.estado !== 'finalizado') {
+      return response.status(422).send(serialize.withoutWrapping({ error: 'Solo puedes disputar viajes finalizados' }))
+    }
+
+    const existe = await Disputa.query().where('viaje_id', viaje.id).first()
+    if (existe) {
+      return response.status(400).send(serialize.withoutWrapping({ error: 'Ya existe una disputa para este viaje' }))
+    }
+
+    if (!Array.isArray(fotos)) {
+      fotos = []
+    }
+
+    if (user.rol === 'conductor') {
+      const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+      if (viaje.conductorId !== conductor.id) {
+        return response.status(403).send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
+      }
+
+      const disputa = await Disputa.create({
+        viajeId: viaje.id,
+        conductorId: conductor.id,
+        clienteId: viaje.clienteId,
+        versionConductor: descripcion || '',
+        problema: problema || null,
+        descripcion: descripcion || null,
+        fotos: fotos.length > 0 ? fotos : null,
+        estado: 'abierta',
+      })
+
+      disputa.numero = await this.generarNumero()
+      await disputa.save()
+
+      emitToAdmin('admin:new_dispute', {
+        id: String(disputa.id),
+        numero: disputa.numero,
+        viajeId: String(viaje.id),
+        conductorId: String(conductor.id),
+        clienteId: String(viaje.clienteId),
+        estado: disputa.estado,
+        problema: disputa.problema,
+        createdAt: disputa.createdAt.toISO(),
+      })
+
+      return response.status(201).send(
+        serialize.withoutWrapping({
+          id: String(disputa.id),
+          numero_disputa: disputa.numero,
+        })
+      )
+    }
+
+    if (viaje.clienteId !== user.id) {
+      return response.status(403).send(serialize.withoutWrapping({ error: 'Este viaje no te pertenece' }))
+    }
+    if (!viaje.conductorId) {
+      return response.status(422).send(serialize.withoutWrapping({ error: 'El viaje no tiene conductor asignado' }))
+    }
+
+    const conductor = await Conductor.find(viaje.conductorId)
+    if (!conductor) {
+      return response.status(422).send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+    }
+
+    const disputa = await Disputa.create({
+      viajeId: viaje.id,
+      conductorId: conductor.id,
+      clienteId: viaje.clienteId,
+      versionCliente: descripcion || '',
+      problema: problema || null,
+      descripcion: descripcion || null,
+      fotos: fotos.length > 0 ? fotos : null,
+      estado: 'abierta',
+    })
+
+    disputa.numero = await this.generarNumero()
+    await disputa.save()
+
+    emitToAdmin('admin:new_dispute', {
+      id: String(disputa.id),
+      numero: disputa.numero,
+      viajeId: String(viaje.id),
+      conductorId: String(conductor.id),
+      clienteId: String(viaje.clienteId),
+      estado: disputa.estado,
+      problema: disputa.problema,
+      createdAt: disputa.createdAt.toISO(),
+    })
+
+    return response.status(201).send(
+      serialize.withoutWrapping({
+        id: String(disputa.id),
+        numero_disputa: disputa.numero,
+      })
+    )
+  }
+
+  private async generarNumero(): Promise<string> {
+    const count = await Disputa.query().count('id as total')
+    const total = Number(count[0].$extras?.total || 0)
+    return `DSP-${String(total).padStart(5, '0')}`
+  }
+
   async store({ auth, params, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     if (user.rol !== 'conductor' && user.rol !== 'cliente') {

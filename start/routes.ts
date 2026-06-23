@@ -219,11 +219,35 @@ router
 
 router
   .group(() => {
+    router.post('', [controllers.Dispute, 'storeRoot'])
+    router.get(':id', [controllers.Dispute, 'show'])
+  })
+  .prefix('/api/disputes')
+  .as('disputes')
+  .use(middleware.auth())
+
+router
+  .group(() => {
     router.get('debt', [controllers.Payment, 'info'])
     router.post('proof', [controllers.Payment, 'uploadProof'])
   })
   .prefix('/api/payment')
   .as('payment')
+  .use(middleware.auth())
+
+// Alias para compatibilidad con Flutter (PaymentService usa GET /api/payments)
+router
+  .get('/api/payments', [controllers.Payment, 'info'])
+  .as('payments.info')
+  .use(middleware.auth())
+
+router
+  .group(() => {
+    router.get('', [controllers.Settings, 'show'])
+    router.put('', [controllers.Settings, 'update'])
+  })
+  .prefix('/api/settings')
+  .as('settings')
   .use(middleware.auth())
 
 router.get('/api/config/banner', async ({ serialize }) => {
