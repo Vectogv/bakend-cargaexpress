@@ -4,6 +4,8 @@ import type { Server as NodeServer } from 'node:http'
 import logger from '@adonisjs/core/services/logger'
 import { Secret } from '@adonisjs/core/helpers'
 import User from '#models/user'
+import Viaje from '#models/viaje'
+import Conductor from '#models/conductor'
 import RedisService from '#services/redis_service'
 
 let io: SocketServer | null = null
@@ -133,6 +135,32 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
 
     socket.on('leave:trip', (tripId: number | string) => {
       socket.leave(`trip:${tripId}`)
+    })
+
+    socket.on('trip:finalize_request', async (data: any) => {
+      try {
+        const tripId = data?.tripId
+        if (!tripId) return
+        const viaje = await Viaje.find(tripId)
+        if (!viaje || !viaje.clienteId) return
+        getIO().to(`client:${viaje.clienteId}`).emit('trip:finalize_request', data)
+      } catch (err) {
+        logger.warn({ err }, 'socket: trip:finalize_request forwarding failed')
+      }
+    })
+
+    socket.on('trip:finalize_response', async (data: any) => {
+      try {
+        const tripId = data?.tripId
+        if (!tripId) return
+        const viaje = await Viaje.find(tripId)
+        if (!viaje || !viaje.conductorId) return
+        const conductor = await Conductor.find(viaje.conductorId)
+        if (!conductor || !conductor.usuarioId) return
+        getIO().to(`driver:${conductor.usuarioId}`).emit('trip:finalize_response', data)
+      } catch (err) {
+        logger.warn({ err }, 'socket: trip:finalize_response forwarding failed')
+      }
     })
 
     socket.on('disconnect', () => {
