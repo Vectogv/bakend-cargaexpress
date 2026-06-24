@@ -50,14 +50,15 @@ export default class OfferController {
       return response.status(422).send({ error: 'Monto inválido' })
     }
 
-    const existeOferta = await Oferta.query()
+    const ofertaAnterior = await Oferta.query()
       .where('viaje_id', viaje.id)
       .where('conductor_id', conductor.id)
       .where('estado', 'pendiente')
       .first()
 
-    if (existeOferta) {
-      return response.status(400).send({ error: 'Ya has hecho una oferta para este viaje' })
+    if (ofertaAnterior) {
+      ofertaAnterior.estado = 'cancelada'
+      await ofertaAnterior.save()
     }
 
     const oferta = await Oferta.create({
@@ -69,7 +70,7 @@ export default class OfferController {
 
     try {
       const io = getIO()
-      io.to(`client:${viaje.clienteId}`).emit('offer:new', {
+      io.to(`client:${viaje.clienteId}`).emit('new:offer', {
         id: String(oferta.id),
         viajeId: String(oferta.viajeId),
         monto: oferta.monto,
@@ -222,10 +223,11 @@ export default class OfferController {
       tripId: Number(viaje.id),
       conductorId: Number(oferta.conductorId),
     }
-    const todosConductores = await Conductor.query()
+    const onlineDriverIds = await Conductor.query()
       .where('online', true)
       .where('id', '!=', oferta.conductorId)
-    for (const c of todosConductores) {
+      .select('usuario_id')
+    for (const c of onlineDriverIds) {
       emitToDriver(c.usuarioId, 'trip:accepted', tripAcceptedPayload)
     }
 
