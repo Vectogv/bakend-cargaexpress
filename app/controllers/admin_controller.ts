@@ -13,6 +13,8 @@ import LogRespaldo from '#models/log_respaldo'
 import SolicitudCancelacion from '#models/solicitud_cancelacion'
 import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
 import type { HttpContext } from '@adonisjs/core/http'
+import db from '@adonisjs/lucid/services/db'
+import RedisService from '#services/redis_service'
 import { DateTime } from 'luxon'
 import app from '@adonisjs/core/services/app'
 import { randomUUID } from 'node:crypto'
@@ -21,6 +23,9 @@ import { sendToMultiple } from '#services/push_notification_service'
 
 export default class AdminController {
   async dashboard({ serialize }: HttpContext) {
+    const cached = await RedisService.cacheGet<any>('admin:dashboard')
+    if (cached) return serialize.withoutWrapping(cached)
+
     const now = DateTime.now()
     const startOfDay = now.startOf('day').toSQL()
     const startOfMonth = now.startOf('month').toSQL()
@@ -47,7 +52,7 @@ export default class AdminController {
       Ganancia.query().where('created_at', '>=', startOfMonth).sum('monto as total').first(),
     ])
 
-    return serialize.withoutWrapping({
+    const data = {
       totalUsers: Number(totalUsers?.$extras?.total || 0),
       totalDrivers: Number(totalDrivers?.$extras?.total || 0),
       activeVehicles: Number(activeVehicles?.$extras?.total || 0),
@@ -55,11 +60,16 @@ export default class AdminController {
       totalEarnings: Number(totalEarnings?.$extras?.total || 0),
       todayEarnings: Number(todayEarnings?.$extras?.total || 0),
       monthEarnings: Number(monthEarnings?.$extras?.total || 0),
-    })
+    }
+
+    await RedisService.cacheSet('admin:dashboard', data, 60)
+    return serialize.withoutWrapping(data)
   }
 
-  async users({ serialize }: HttpContext) {
-    const users = await User.query()
+  async users({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
+    const result = await User.query()
       .select(
         'id',
         'nombre',
@@ -73,9 +83,10 @@ export default class AdminController {
         'created_at'
       )
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      users.map((u) => ({
+      result.all().map((u) => ({
         id: u.id,
         nombre: u.nombre,
         apellido: u.apellido,
@@ -90,15 +101,18 @@ export default class AdminController {
     )
   }
 
-  async drivers({ serialize }: HttpContext) {
-    const drivers = await Conductor.query()
+  async drivers({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
+    const result = await Conductor.query()
       .preload('usuario', (q) =>
         q.select('id', 'nombre', 'apellido', 'email', 'telefono', 'suspendido')
       )
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      drivers.map((d) => ({
+      result.all().map((d) => ({
         id: d.id,
         usuarioId: d.usuarioId,
         cedula: d.cedula,
@@ -129,8 +143,10 @@ export default class AdminController {
     )
   }
 
-  async trips({ serialize }: HttpContext) {
-    const trips = await Viaje.query()
+  async trips({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
+    const result = await Viaje.query()
       .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'email'))
       .preload('conductor', (q) =>
         q
@@ -138,9 +154,10 @@ export default class AdminController {
           .preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido'))
       )
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      trips.map((t) => ({
+      result.all().map((t) => ({
         id: t.id,
         clienteId: t.clienteId,
         conductorId: t.conductorId,
@@ -177,8 +194,10 @@ export default class AdminController {
     )
   }
 
-  async earnings({ serialize }: HttpContext) {
-    const all = await Ganancia.query()
+  async earnings({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
+    const result = await Ganancia.query()
       .preload('conductor', (q) =>
         q
           .select('id', 'placa')
@@ -186,9 +205,10 @@ export default class AdminController {
       )
       .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion', 'estado'))
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      all.map((g) => ({
+      result.all().map((g) => ({
         id: g.id,
         monto: g.monto,
         conductorId: g.conductorId,
@@ -255,6 +275,7 @@ export default class AdminController {
     }
     user.suspendido = !user.suspendido
     await user.save()
+    RedisService.cacheDel('admin:dashboard')
     return serialize.withoutWrapping({
       id: user.id,
       suspendido: user.suspendido,
@@ -357,41 +378,35 @@ export default class AdminController {
   }
 
   async conductorDebt({ serialize }: HttpContext) {
-    const conductores = await Conductor.query().preload('usuario', (q) =>
-      q.select('id', 'nombre', 'apellido', 'email')
+    const rows = await db
+      .from('conductores')
+      .select(
+        'conductores.id',
+        'conductores.usuario_id',
+        'conductores.placa',
+        'users.nombre',
+        'users.apellido',
+        'users.email',
+        db.raw('COALESCE(SUM(ganancias.monto_bruto), 0) as total_bruto'),
+        db.raw('COALESCE(SUM(ganancias.monto_neto), 0) as total_neto'),
+        db.raw('COALESCE(SUM(CASE WHEN ganancias.comision_pagada = 0 THEN ganancias.comision ELSE 0 END), 0) as comision_pendiente')
+      )
+      .leftJoin('users', 'conductores.usuario_id', 'users.id')
+      .leftJoin('ganancias', 'ganancias.conductor_id', 'conductores.id')
+      .groupBy('conductores.id', 'conductores.usuario_id', 'conductores.placa', 'users.nombre', 'users.apellido', 'users.email')
+      .having(db.raw('COALESCE(SUM(CASE WHEN ganancias.comision_pagada = 0 THEN ganancias.comision ELSE 0 END), 0)'), '>', 0)
+
+    return serialize.withoutWrapping(
+      rows.map((r: any) => ({
+        conductorId: r.id,
+        nombre: `${r.nombre || ''} ${r.apellido || ''}`.trim(),
+        email: r.email,
+        placa: r.placa,
+        totalBruto: Number(r.total_bruto),
+        totalNeto: Number(r.total_neto),
+        comisionPendiente: Number(r.comision_pendiente),
+      }))
     )
-
-    const result = await Promise.all(
-      conductores.map(async (c) => {
-        const pendiente = await Ganancia.query()
-          .where('conductor_id', c.id)
-          .where('comision_pagada', false)
-          .sum('comision as total')
-          .first()
-
-        const totalBruto = await Ganancia.query()
-          .where('conductor_id', c.id)
-          .sum('monto_bruto as total')
-          .first()
-
-        const totalNeto = await Ganancia.query()
-          .where('conductor_id', c.id)
-          .sum('monto_neto as total')
-          .first()
-
-        return {
-          conductorId: c.id,
-          nombre: `${c.usuario.nombre || ''} ${c.usuario.apellido || ''}`.trim(),
-          email: c.usuario.email,
-          placa: c.placa,
-          totalBruto: Number(totalBruto?.$extras?.total || 0),
-          totalNeto: Number(totalNeto?.$extras?.total || 0),
-          comisionPendiente: Number(pendiente?.$extras?.total || 0),
-        }
-      })
-    )
-
-    return serialize.withoutWrapping(result.filter((r) => r.comisionPendiente > 0))
   }
 
   async markCommissionPaid({ params, response, serialize }: HttpContext) {
@@ -415,7 +430,7 @@ export default class AdminController {
     })
   }
 
-  async commissionHistory({ params, response, serialize }: HttpContext) {
+  async commissionHistory({ params, request, response, serialize }: HttpContext) {
     const conductor = await Conductor.find(params.conductorId)
     if (!conductor) {
       return response
@@ -423,14 +438,17 @@ export default class AdminController {
         .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const comisiones = await Ganancia.query()
       .where('conductor_id', conductor.id)
       .whereNotNull('comision')
       .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion'))
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      comisiones.map((g) => ({
+      comisiones.all().map((g) => ({
         id: g.id,
         viajeId: g.viajeId,
         montoBruto: g.montoBruto,
@@ -446,7 +464,9 @@ export default class AdminController {
     )
   }
 
-  async reports({ serialize }: HttpContext) {
+  async reports({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const reportes = await Reporte.query()
       .preload('cliente', (q) =>
         q.select('id', 'nombre', 'apellido', 'email', 'reputacion', 'visibilidad')
@@ -456,9 +476,10 @@ export default class AdminController {
       )
       .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion', 'estado'))
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      reportes.map((r) => ({
+      reportes.all().map((r) => ({
         id: r.id,
         viajeId: r.viajeId,
         conductorId: r.conductorId,
@@ -510,14 +531,17 @@ export default class AdminController {
     })
   }
 
-  async pendingVerifications({ serialize }: HttpContext) {
+  async pendingVerifications({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const conductores = await Conductor.query()
       .where('estado_verificacion', 'pendiente')
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'email', 'telefono'))
       .orderBy('created_at', 'asc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      conductores.map((c) => ({
+      conductores.all().map((c) => ({
         id: c.id,
         usuarioId: c.usuarioId,
         cedula: c.cedula,
@@ -589,15 +613,18 @@ export default class AdminController {
     })
   }
 
-  async emergencies({ serialize }: HttpContext) {
+  async emergencies({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const alertas = await AlertaEmergencia.query()
       .where('atendida', false)
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
-      .preload('viaje')
+      .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion', 'estado'))
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      alertas.map((a) => ({
+      alertas.all().map((a) => ({
         id: a.id,
         userId: a.userId,
         viajeId: a.viajeId,
@@ -634,16 +661,19 @@ export default class AdminController {
     })
   }
 
-  async disputes({ serialize }: HttpContext) {
+  async disputes({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const disputas = await Disputa.query()
       .whereIn('estado', ['abierta', 'en_revision'])
-      .preload('viaje')
-      .preload('conductor', (q) => q.preload('usuario'))
-      .preload('cliente')
+      .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion', 'precio_final'))
+      .preload('conductor', (q) => q.select('id', 'placa', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido')))
+      .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'email'))
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      disputas.map((d) => ({
+      disputas.all().map((d) => ({
         id: d.id,
         viajeId: d.viajeId,
         conductorId: d.conductorId,
@@ -722,6 +752,7 @@ export default class AdminController {
           emitToClient(disputa.clienteId, 'dispute:resolved', {
             disputaId: disputa.id,
             resultado,
+            estado: 'resuelta',
             acuerdoDePago: true,
             montoDeuda: cliente.montoDeuda,
             deudaFechaLimite: cliente.deudaFechaLimite.toISO(),
@@ -732,6 +763,7 @@ export default class AdminController {
           emitToClient(disputa.clienteId, 'dispute:resolved', {
             disputaId: disputa.id,
             resultado,
+            estado: 'resuelta',
             message: 'La disputa se resolvió a favor del conductor. Tienes una deuda activa.',
           })
         }
@@ -742,6 +774,7 @@ export default class AdminController {
         emitToDriver(conductor.usuarioId, 'dispute:resolved', {
           disputaId: disputa.id,
           resultado,
+          estado: 'resuelta',
           message: 'La disputa se resolvió a tu favor.',
         })
       }
@@ -755,6 +788,7 @@ export default class AdminController {
           emitToDriver(conductorUser.id, 'dispute:resolved', {
             disputaId: disputa.id,
             resultado,
+            estado: 'resuelta',
             message: 'La disputa se resolvió a favor del cliente. Quedas bajo observación.',
           })
           if (conductorUser.reportesInfundadosConductor >= 2) {
@@ -769,6 +803,7 @@ export default class AdminController {
       emitToClient(disputa.clienteId, 'dispute:resolved', {
         disputaId: disputa.id,
         resultado,
+        estado: 'resuelta',
         message: 'La disputa se resolvió a tu favor.',
       })
     }
@@ -903,6 +938,7 @@ export default class AdminController {
     if (nequiNumero !== undefined) config.nequiNumero = nequiNumero
     if (nequiNombre !== undefined) config.nequiNombre = nequiNombre
     await config.save()
+    RedisService.cacheDel('config:plataforma')
 
     return serialize.withoutWrapping({
       nequiNumero: config.nequiNumero,
@@ -1032,10 +1068,8 @@ export default class AdminController {
     comunicado.publicadoAt = DateTime.now()
     await comunicado.save()
 
-    const conductores = await Conductor.query()
-      .whereHas('usuario', (q) => q.whereNotNull('fcm_token'))
-      .preload('usuario')
-    const tokens = conductores.map((c) => c.usuario.fcmToken).filter(Boolean) as string[]
+    const tokenRows = await db.from('users').whereNotNull('fcm_token').select('fcm_token')
+    const tokens = tokenRows.map((r: any) => r.fcm_token).filter(Boolean) as string[]
 
     if (tokens.length > 0) {
       await sendToMultiple(tokens, comunicado.titulo, comunicado.contenido)
@@ -1089,10 +1123,8 @@ export default class AdminController {
     encuesta.estado = 'activa'
     await encuesta.save()
 
-    const conductores = await Conductor.query()
-      .whereHas('usuario', (q) => q.whereNotNull('fcm_token'))
-      .preload('usuario')
-    const tokens = conductores.map((c) => c.usuario.fcmToken).filter(Boolean) as string[]
+    const tokenRows = await db.from('users').whereNotNull('fcm_token').select('fcm_token')
+    const tokens = tokenRows.map((r: any) => r.fcm_token).filter(Boolean) as string[]
 
     if (tokens.length > 0) {
       await sendToMultiple(tokens, 'Nueva encuesta disponible', encuesta.pregunta)
@@ -1104,16 +1136,19 @@ export default class AdminController {
     })
   }
 
-  async moderatorReports({ serialize }: HttpContext) {
+  async moderatorReports({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const reportes = await ReporteModerador.query()
       .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
       .preload('conductor', (q) =>
         q.select('id', 'placa').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido'))
       )
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      reportes.map((r) => ({
+      reportes.all().map((r) => ({
         id: r.id,
         moderadorId: r.moderadorId,
         conductorId: r.conductorId,
@@ -1134,15 +1169,18 @@ export default class AdminController {
     )
   }
 
-  async cancellationRequests({ serialize }: HttpContext) {
+  async cancellationRequests({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const solicitudes = await SolicitudCancelacion.query()
       .where('estado', 'pendiente')
-      .preload('viaje')
-      .preload('conductor', (q) => q.preload('usuario'))
+      .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion'))
+      .preload('conductor', (q) => q.select('id', 'placa', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      solicitudes.map((s) => ({
+      solicitudes.all().map((s) => ({
         id: s.id,
         tripId: String(s.viajeId),
         conductorId: String(s.conductorId),

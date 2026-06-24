@@ -4,7 +4,7 @@ import Conductor from '#models/conductor'
 import type { HttpContext } from '@adonisjs/core/http'
 import app from '@adonisjs/core/services/app'
 import { randomUUID } from 'node:crypto'
-import { emitToAdmin } from '#start/socket'
+import { emitToAdmin, emitToClient, emitToDriver } from '#start/socket'
 
 
 export default class DisputeController {
@@ -83,7 +83,7 @@ export default class DisputeController {
       disputa.numero = await this.generarNumero()
       await disputa.save()
 
-      emitToAdmin('admin:new_dispute', {
+      const createdPayload = {
         id: String(disputa.id),
         numero: disputa.numero,
         viajeId: String(viaje.id),
@@ -92,7 +92,10 @@ export default class DisputeController {
         estado: disputa.estado,
         problema: disputa.problema,
         createdAt: disputa.createdAt.toISO(),
-      })
+      }
+
+      emitToAdmin('admin:new_dispute', createdPayload)
+      emitToClient(viaje.clienteId, 'dispute:updated', createdPayload)
 
       return response.status(201).send(
         serialize.withoutWrapping({
@@ -102,6 +105,7 @@ export default class DisputeController {
       )
     }
 
+    // cliente
     if (viaje.clienteId !== user.id) {
       return response.status(403).send(serialize.withoutWrapping({ error: 'Este viaje no te pertenece' }))
     }
@@ -128,7 +132,7 @@ export default class DisputeController {
     disputa.numero = await this.generarNumero()
     await disputa.save()
 
-    emitToAdmin('admin:new_dispute', {
+    const createdPayloadCliente = {
       id: String(disputa.id),
       numero: disputa.numero,
       viajeId: String(viaje.id),
@@ -137,7 +141,13 @@ export default class DisputeController {
       estado: disputa.estado,
       problema: disputa.problema,
       createdAt: disputa.createdAt.toISO(),
-    })
+    }
+
+    emitToAdmin('admin:new_dispute', createdPayloadCliente)
+    const conductorUserObj = await Conductor.find(conductor.id)
+    if (conductorUserObj) {
+      emitToDriver(conductorUserObj.usuarioId, 'dispute:updated', createdPayloadCliente)
+    }
 
     return response.status(201).send(
       serialize.withoutWrapping({
@@ -297,11 +307,18 @@ export default class DisputeController {
     disputa.estado = 'en_revision'
     await disputa.save()
 
-    emitToAdmin('admin:dispute_appeal', {
+    const appealPayload = {
       id: String(disputa.id),
       viajeId: String(disputa.viajeId),
       estado: disputa.estado,
-    })
+    }
+
+    emitToAdmin('admin:dispute_appeal', appealPayload)
+    emitToClient(disputa.clienteId, 'dispute:updated', appealPayload)
+    const conductorObj = await Conductor.find(disputa.conductorId)
+    if (conductorObj) {
+      emitToDriver(conductorObj.usuarioId, 'dispute:updated', appealPayload)
+    }
 
     return serialize.withoutWrapping({
       id: String(disputa.id),
@@ -345,11 +362,18 @@ export default class DisputeController {
     }
     await disputa.save()
 
-    emitToAdmin('admin:dispute_updated', {
+    const payload = {
       id: String(disputa.id),
       viajeId: String(disputa.viajeId),
       estado: disputa.estado,
-    })
+    }
+
+    emitToAdmin('admin:dispute_updated', payload)
+    emitToClient(disputa.clienteId, 'dispute:updated', payload)
+    const conductorObj = await Conductor.find(disputa.conductorId)
+    if (conductorObj) {
+      emitToDriver(conductorObj.usuarioId, 'dispute:updated', payload)
+    }
 
     return serialize.withoutWrapping({
       id: String(disputa.id),
