@@ -576,6 +576,12 @@ const routes = {
     tokens: [{"old":"/api/disputes/:id","type":0,"val":"api","end":""},{"old":"/api/disputes/:id","type":0,"val":"disputes","end":""},{"old":"/api/disputes/:id","type":1,"val":"id","end":""}],
     types: placeholder as Registry['disputes.dispute.show']['types'],
   },
+  'disputes.dispute.submit_version': {
+    methods: ["POST"],
+    pattern: '/api/disputes/:id/version',
+    tokens: [{"old":"/api/disputes/:id/version","type":0,"val":"api","end":""},{"old":"/api/disputes/:id/version","type":0,"val":"disputes","end":""},{"old":"/api/disputes/:id/version","type":1,"val":"id","end":""},{"old":"/api/disputes/:id/version","type":0,"val":"version","end":""}],
+    types: placeholder as Registry['disputes.dispute.submit_version']['types'],
+  },
   'payment.payment.info': {
     methods: ["GET","HEAD"],
     pattern: '/api/payment/debt',

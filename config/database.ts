@@ -19,12 +19,13 @@ const dbConfig = defineConfig({
           : undefined,
       },
       pool: {
-        min: env.get('NODE_ENV') === 'production' ? 2 : 1,
-        max: env.get('NODE_ENV') === 'production' ? 25 : 5,
-        acquireTimeoutMillis: 10000,
-        createTimeoutMillis: 15000,
-        idleTimeoutMillis: 30000,
+        min: 1,
+        max: 10,
+        acquireTimeoutMillis: 15000,
+        createTimeoutMillis: 20000,
+        idleTimeoutMillis: 60000,
         reapIntervalMillis: 1000,
+        propagateCreateError: false,
       },
       migrations: {
         naturalSort: true,

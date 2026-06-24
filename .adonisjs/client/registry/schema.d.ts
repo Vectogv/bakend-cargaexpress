@@ -1147,6 +1147,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['show']>>>
     }
   }
+  'disputes.dispute.submit_version': {
+    methods: ["POST"]
+    pattern: '/api/disputes/:id/version'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['submitVersion']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['submitVersion']>>>
+    }
+  }
   'payment.payment.info': {
     methods: ["GET","HEAD"]
     pattern: '/api/payment/debt'

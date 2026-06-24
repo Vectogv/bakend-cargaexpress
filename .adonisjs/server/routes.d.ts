@@ -99,6 +99,7 @@ export type ScannedRoutes = {
     'support.support.emergency': { paramsTuple?: []; params?: {} }
     'disputes.dispute.store_root': { paramsTuple?: []; params?: {} }
     'disputes.dispute.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'disputes.dispute.submit_version': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'payment.payment.info': { paramsTuple?: []; params?: {} }
     'payment.payment.upload_proof': { paramsTuple?: []; params?: {} }
     'payments.info': { paramsTuple?: []; params?: {} }
@@ -259,6 +260,7 @@ export type ScannedRoutes = {
     'admin.admin.reject_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'favorites.favorite_route.store': { paramsTuple?: []; params?: {} }
     'disputes.dispute.store_root': { paramsTuple?: []; params?: {} }
+    'disputes.dispute.submit_version': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'payment.payment.upload_proof': { paramsTuple?: []; params?: {} }
     'moderator.moderator.store_comunicado': { paramsTuple?: []; params?: {} }
     'moderator.moderator.notify_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

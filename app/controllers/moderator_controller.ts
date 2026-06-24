@@ -43,14 +43,18 @@ export default class ModeratorController {
     })
   }
 
-  async myComunicados({ auth, serialize }: HttpContext) {
+  async myComunicados({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const comunicados = await Comunicado.query()
       .where('moderador_id', user.id)
+      .select('id', 'zona', 'titulo', 'contenido', 'estado', 'nota_rechazo', 'publicado_at', 'created_at')
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      comunicados.map((c) => ({
+      comunicados.all().map((c) => ({
         id: c.id,
         zona: c.zona,
         titulo: c.titulo,
@@ -63,11 +67,17 @@ export default class ModeratorController {
     )
   }
 
-  async driversList({ serialize }: HttpContext) {
+  async driversList({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const conductores = await Conductor.query()
+      .select('id', 'usuario_id', 'placa', 'tipo_vehiculo', 'online', 'calificacion', 'total_viajes', 'created_at')
+      .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email'))
+      .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      conductores.map((c) => ({
+      conductores.all().map((c) => ({
         id: c.id,
         usuarioId: c.usuarioId,
         placa: c.placa,
@@ -87,10 +97,13 @@ export default class ModeratorController {
     )
   }
 
-  async inactiveDrivers({ serialize }: HttpContext) {
+  async inactiveDrivers({ request, serialize }: HttpContext) {
     const fechaLimite = DateTime.now().minus({ days: 7 }).toSQL()
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
 
     const conductores = await Conductor.query()
+      .select('id', 'usuario_id', 'placa', 'tipo_vehiculo', 'total_viajes', 'ultima_ubicacion_lat', 'ultima_ubicacion_lng', 'created_at')
       .whereNotExists((qb) => {
         qb.from('viajes')
           .whereRaw('viajes.conductor_id = conductores.id')
@@ -99,9 +112,10 @@ export default class ModeratorController {
       .where('online', false)
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email'))
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      conductores.map((c) => ({
+      conductores.all().map((c) => ({
         id: c.id,
         usuarioId: c.usuarioId,
         placa: c.placa,
@@ -307,15 +321,18 @@ export default class ModeratorController {
     })
   }
 
-  async avisosIndex({ serialize }: HttpContext) {
+  async avisosIndex({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const mensajes = await Aviso.query()
       .where('eliminado', false)
       .preload('autor', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('fijado', 'desc')
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      mensajes.map((m) => ({
+      mensajes.all().map((m) => ({
         id: m.id,
         autor: {
           id: m.autor.id,

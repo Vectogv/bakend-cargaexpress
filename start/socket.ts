@@ -66,22 +66,21 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
   })
 
   // Redis adapter para multi-instancia
-  const pubClient = RedisService.getClient()
-  if (pubClient) {
-    try {
+  try {
+    const pubClient = RedisService.getClient()
+    if (pubClient && RedisService.isConnected()) {
       const subClient = pubClient.duplicate()
-      // Duplicate no hereda listeners — agregar error handler para evitar crash
       subClient.on('error', (err: Error) => logger.warn({ err }, 'Redis sub client error'))
       subClient.on('ready', () => logger.info('Redis sub client ready'))
       subClient.on('end', () => logger.warn('Redis sub client ended'))
       subClient.on('close', () => logger.warn('Redis sub client closed'))
       io.adapter(createAdapter(pubClient, subClient))
       logger.info('Socket.IO Redis adapter enabled')
-    } catch (err) {
-      logger.warn({ err }, 'Socket.IO Redis adapter failed — running in single-instance mode')
+    } else {
+      logger.warn('Socket.IO running without Redis adapter (single instance only)')
     }
-  } else {
-    logger.warn('Socket.IO running without Redis adapter (single instance only)')
+  } catch (err) {
+    logger.warn({ err }, 'Socket.IO Redis adapter failed — running in single-instance mode')
   }
 
   io.use(async (socket, next) => {

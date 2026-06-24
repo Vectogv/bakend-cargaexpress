@@ -9,14 +9,17 @@ export default class NotificationController {
     description: 'Returns all notifications for the authenticated user',
   })
   @ApiResponse({ type: 'array' })
-  async index({ auth, serialize }: HttpContext) {
+  async index({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const notificaciones = await Notificacion.query()
       .where('usuario_id', user.id)
       .orderBy('createdAt', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      notificaciones.map((n) => NotificacionTransformer.transform(n))
+      notificaciones.all().map((n) => NotificacionTransformer.transform(n))
     )
   }
 

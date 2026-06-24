@@ -12,6 +12,7 @@ import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators
 import { emitToClient } from '#start/socket'
 import GpsRateLimitService from '#services/gps_rate_limit_service'
 import FraudDetectionService from '#services/fraud_detection_service'
+import RedisService from '#services/redis_service'
 
 export default class DriverController {
   @ApiOperation({
@@ -49,6 +50,10 @@ export default class DriverController {
   @ApiResponse({ type: 'object' })
   async earnings({ auth, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
+    const cacheKey = `driver:earnings:${user.id}`
+    const cached = await RedisService.cacheGet<any>(cacheKey)
+    if (cached) return serialize.withoutWrapping(cached)
+
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
     const now = DateTime.now()
@@ -100,12 +105,15 @@ export default class DriverController {
       }
     }
 
-    return serialize.withoutWrapping({
+    const data = {
       hoy: mapPeriod(hoy),
       semana: mapPeriod(semana),
       mes: mapPeriod(mes),
       total: mapPeriod(total),
-    })
+    }
+
+    await RedisService.cacheSet(cacheKey, data, 30)
+    return serialize.withoutWrapping(data)
   }
 
   @ApiOperation({
@@ -115,14 +123,20 @@ export default class DriverController {
   @ApiResponse({ type: 'object' })
   async stats({ auth, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    const cacheKey = `driver:stats:${user.id}`
+    const cached = await RedisService.cacheGet<any>(cacheKey)
+    if (cached) return serialize.withoutWrapping(cached)
 
-    return serialize.withoutWrapping({
+    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    const data = {
       viajes: conductor.totalViajes,
       horasActivo: conductor.horasActivo,
       calificacion: conductor.calificacion,
       totalReviews: 0,
-    })
+    }
+
+    await RedisService.cacheSet(cacheKey, data, 30)
+    return serialize.withoutWrapping(data)
   }
 
   @ApiOperation({ summary: 'Upload vehicle photo', description: 'Uploads a photo of the vehicle' })
@@ -256,6 +270,10 @@ export default class DriverController {
   @ApiResponse({ type: 'object' })
   async todayStats({ auth, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
+    const cacheKey = `driver:todayStats:${user.id}`
+    const cached = await RedisService.cacheGet<any>(cacheKey)
+    if (cached) return serialize.withoutWrapping(cached)
+
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
     const now = DateTime.now()
@@ -274,7 +292,7 @@ export default class DriverController {
 
     const s = stats?.$extras || {}
 
-    return serialize.withoutWrapping({
+    const data = {
       viajesHoy: Number(s.viajes || 0),
       horasOnline: conductor.horasActivo,
       gananciasHoy: Number(s.bruto || 0),
@@ -282,7 +300,10 @@ export default class DriverController {
       netaHoy: Number(s.neto || 0),
       totalViajes: conductor.totalViajes,
       calificacion: conductor.calificacion,
-    })
+    }
+
+    await RedisService.cacheSet(cacheKey, data, 30)
+    return serialize.withoutWrapping(data)
   }
 
   @ApiOperation({ summary: 'Upload driver photo', description: 'Uploads a photo of the driver' })

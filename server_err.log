@@ -1,0 +1,366 @@
+
+[31mℹ SyntaxError: The requested module '@sentry/node' does not provide an export named 'defineConfig'[39m
+
+ ⁃ [33m(D:/cargaexpressbakend/config/sentry.ts:2:undefined)[39m
+
+   [2m 1[22m [2m┃[22m  [31mimport[0m env [31mfrom[0m [32m'#start/env'[0m
+ [41m❯  2 ┃  import { defineConfig } from '@sentry/node'[49m
+   [2m 3[22m [2m┃[22m  
+   [2m 4[22m [2m┃[22m  [31mconst[0m sentryConfig [34m=[0m [35mdefineConfig[0m({
+   [2m 5[22m [2m┃[22m    dsn[34m:[0m env[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m[34m,[0m [32m''[0m)[34m,[0m
+   [2m 6[22m [2m┃[22m    environment[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m[34m,[0m [32m'development'[0m)[34m,[0m
+   [2m 7[22m [2m┃[22m    tracesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.25[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 8[22m [2m┃[22m    profilesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.1[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 9[22m [2m┃[22m    enabled[34m:[0m [34m!![0menv[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m)[34m,[0m
+   [2m10[22m [2m┃[22m    attachStacktrace[34m:[0m [36mtrue[0m[34m,[0m
+   [2m11[22m [2m┃[22m    maxBreadcrumbs[34m:[0m [33m50[0m[34m,[0m
+
+[2m ⁃ at [3m#asyncInstantiate[23m ([3mnode:internal/modules/esm/module_job:326:21[23m)[22m
+[2m ⁃ at [3masync ModuleJob.run[23m ([3mnode:internal/modules/esm/module_job:429:5[23m)[22m
+[2m ⁃ ([3masync node:internal/modules/esm/loader:639:26[23m)[22m
+ ⁃ at async importFile [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:45:104)[39m
+ ⁃ at async fsImportAll [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:57:2)[39m
+ ⁃ at async ConfigManager.process [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:890:29)[39m
+ ⁃ at async Application.boot [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:2460:3)[39m
+ ⁃ at async HttpServerProcess.start [33m(D:/cargaexpressbakend/node_modules/@adonisjs/core/build/main-lRY4g_D8.js:286:3)[39m
+ ⁃ at async bootstrap [33m(D:/cargaexpressbakend/bin/server.ts:22:3)[39m
+
+
+[31mℹ SyntaxError: The requested module '@sentry/node' does not provide an export named 'defineConfig'[39m
+
+ ⁃ [33m(D:/cargaexpressbakend/config/sentry.ts:2:undefined)[39m
+
+   [2m 1[22m [2m┃[22m  [31mimport[0m env [31mfrom[0m [32m'#start/env'[0m
+ [41m❯  2 ┃  import { defineConfig } from '@sentry/node'[49m
+   [2m 3[22m [2m┃[22m  
+   [2m 4[22m [2m┃[22m  [31mconst[0m sentryConfig [34m=[0m [35mdefineConfig[0m({
+   [2m 5[22m [2m┃[22m    dsn[34m:[0m env[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m[34m,[0m [32m''[0m)[34m,[0m
+   [2m 6[22m [2m┃[22m    environment[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m[34m,[0m [32m'development'[0m)[34m,[0m
+   [2m 7[22m [2m┃[22m    tracesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.25[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 8[22m [2m┃[22m    profilesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.1[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 9[22m [2m┃[22m    enabled[34m:[0m [34m!![0menv[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m)[34m,[0m
+   [2m10[22m [2m┃[22m    attachStacktrace[34m:[0m [36mtrue[0m[34m,[0m
+   [2m11[22m [2m┃[22m    maxBreadcrumbs[34m:[0m [33m50[0m[34m,[0m
+
+[2m ⁃ at [3m#asyncInstantiate[23m ([3mnode:internal/modules/esm/module_job:326:21[23m)[22m
+[2m ⁃ at [3masync ModuleJob.run[23m ([3mnode:internal/modules/esm/module_job:429:5[23m)[22m
+[2m ⁃ ([3masync node:internal/modules/esm/loader:639:26[23m)[22m
+ ⁃ at async importFile [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:45:104)[39m
+ ⁃ at async fsImportAll [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:57:2)[39m
+ ⁃ at async ConfigManager.process [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:890:29)[39m
+ ⁃ at async Application.boot [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:2460:3)[39m
+ ⁃ at async HttpServerProcess.start [33m(D:/cargaexpressbakend/node_modules/@adonisjs/core/build/main-lRY4g_D8.js:286:3)[39m
+ ⁃ at async bootstrap [33m(D:/cargaexpressbakend/bin/server.ts:22:3)[39m
+
+
+[31mℹ SyntaxError: The requested module '@sentry/node' does not provide an export named 'defineConfig'[39m
+
+ ⁃ [33m(D:/cargaexpressbakend/config/sentry.ts:2:undefined)[39m
+
+   [2m 1[22m [2m┃[22m  [31mimport[0m env [31mfrom[0m [32m'#start/env'[0m
+ [41m❯  2 ┃  import { defineConfig } from '@sentry/node'[49m
+   [2m 3[22m [2m┃[22m  
+   [2m 4[22m [2m┃[22m  [31mconst[0m sentryConfig [34m=[0m [35mdefineConfig[0m({
+   [2m 5[22m [2m┃[22m    dsn[34m:[0m env[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m[34m,[0m [32m''[0m)[34m,[0m
+   [2m 6[22m [2m┃[22m    environment[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m[34m,[0m [32m'development'[0m)[34m,[0m
+   [2m 7[22m [2m┃[22m    tracesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.25[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 8[22m [2m┃[22m    profilesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.1[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 9[22m [2m┃[22m    enabled[34m:[0m [34m!![0menv[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m)[34m,[0m
+   [2m10[22m [2m┃[22m    attachStacktrace[34m:[0m [36mtrue[0m[34m,[0m
+   [2m11[22m [2m┃[22m    maxBreadcrumbs[34m:[0m [33m50[0m[34m,[0m
+
+[2m ⁃ at [3m#asyncInstantiate[23m ([3mnode:internal/modules/esm/module_job:326:21[23m)[22m
+[2m ⁃ at [3masync ModuleJob.run[23m ([3mnode:internal/modules/esm/module_job:429:5[23m)[22m
+[2m ⁃ ([3masync node:internal/modules/esm/loader:639:26[23m)[22m
+ ⁃ at async importFile [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:45:104)[39m
+ ⁃ at async fsImportAll [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:57:2)[39m
+ ⁃ at async ConfigManager.process [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:890:29)[39m
+ ⁃ at async Application.boot [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:2460:3)[39m
+ ⁃ at async HttpServerProcess.start [33m(D:/cargaexpressbakend/node_modules/@adonisjs/core/build/main-lRY4g_D8.js:286:3)[39m
+ ⁃ at async bootstrap [33m(D:/cargaexpressbakend/bin/server.ts:22:3)[39m
+
+
+[31mℹ SyntaxError: The requested module '@sentry/node' does not provide an export named 'defineConfig'[39m
+
+ ⁃ [33m(D:/cargaexpressbakend/config/sentry.ts:2:undefined)[39m
+
+   [2m 1[22m [2m┃[22m  [31mimport[0m env [31mfrom[0m [32m'#start/env'[0m
+ [41m❯  2 ┃  import { defineConfig } from '@sentry/node'[49m
+   [2m 3[22m [2m┃[22m  
+   [2m 4[22m [2m┃[22m  [31mconst[0m sentryConfig [34m=[0m [35mdefineConfig[0m({
+   [2m 5[22m [2m┃[22m    dsn[34m:[0m env[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m[34m,[0m [32m''[0m)[34m,[0m
+   [2m 6[22m [2m┃[22m    environment[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m[34m,[0m [32m'development'[0m)[34m,[0m
+   [2m 7[22m [2m┃[22m    tracesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.25[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 8[22m [2m┃[22m    profilesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.1[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 9[22m [2m┃[22m    enabled[34m:[0m [34m!![0menv[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m)[34m,[0m
+   [2m10[22m [2m┃[22m    attachStacktrace[34m:[0m [36mtrue[0m[34m,[0m
+   [2m11[22m [2m┃[22m    maxBreadcrumbs[34m:[0m [33m50[0m[34m,[0m
+
+[2m ⁃ at [3m#asyncInstantiate[23m ([3mnode:internal/modules/esm/module_job:326:21[23m)[22m
+[2m ⁃ at [3masync ModuleJob.run[23m ([3mnode:internal/modules/esm/module_job:429:5[23m)[22m
+[2m ⁃ ([3masync node:internal/modules/esm/loader:639:26[23m)[22m
+ ⁃ at async importFile [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:45:104)[39m
+ ⁃ at async fsImportAll [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:57:2)[39m
+ ⁃ at async ConfigManager.process [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:890:29)[39m
+ ⁃ at async Application.boot [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:2460:3)[39m
+ ⁃ at async HttpServerProcess.start [33m(D:/cargaexpressbakend/node_modules/@adonisjs/core/build/main-lRY4g_D8.js:286:3)[39m
+ ⁃ at async bootstrap [33m(D:/cargaexpressbakend/bin/server.ts:22:3)[39m
+
+
+[31mℹ SyntaxError: The requested module '@sentry/node' does not provide an export named 'defineConfig'[39m
+
+ ⁃ [33m(D:/cargaexpressbakend/config/sentry.ts:2:undefined)[39m
+
+   [2m 1[22m [2m┃[22m  [31mimport[0m env [31mfrom[0m [32m'#start/env'[0m
+ [41m❯  2 ┃  import { defineConfig } from '@sentry/node'[49m
+   [2m 3[22m [2m┃[22m  
+   [2m 4[22m [2m┃[22m  [31mconst[0m sentryConfig [34m=[0m [35mdefineConfig[0m({
+   [2m 5[22m [2m┃[22m    dsn[34m:[0m env[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m[34m,[0m [32m''[0m)[34m,[0m
+   [2m 6[22m [2m┃[22m    environment[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m[34m,[0m [32m'development'[0m)[34m,[0m
+   [2m 7[22m [2m┃[22m    tracesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.25[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 8[22m [2m┃[22m    profilesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.1[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 9[22m [2m┃[22m    enabled[34m:[0m [34m!![0menv[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m)[34m,[0m
+   [2m10[22m [2m┃[22m    attachStacktrace[34m:[0m [36mtrue[0m[34m,[0m
+   [2m11[22m [2m┃[22m    maxBreadcrumbs[34m:[0m [33m50[0m[34m,[0m
+
+[2m ⁃ at [3m#asyncInstantiate[23m ([3mnode:internal/modules/esm/module_job:326:21[23m)[22m
+[2m ⁃ at [3masync ModuleJob.run[23m ([3mnode:internal/modules/esm/module_job:429:5[23m)[22m
+[2m ⁃ ([3masync node:internal/modules/esm/loader:639:26[23m)[22m
+ ⁃ at async importFile [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:45:104)[39m
+ ⁃ at async fsImportAll [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:57:2)[39m
+ ⁃ at async ConfigManager.process [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:890:29)[39m
+ ⁃ at async Application.boot [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:2460:3)[39m
+ ⁃ at async HttpServerProcess.start [33m(D:/cargaexpressbakend/node_modules/@adonisjs/core/build/main-lRY4g_D8.js:286:3)[39m
+ ⁃ at async bootstrap [33m(D:/cargaexpressbakend/bin/server.ts:22:3)[39m
+
+
+[31mℹ SyntaxError: The requested module '@sentry/node' does not provide an export named 'defineConfig'[39m
+
+ ⁃ [33m(D:/cargaexpressbakend/config/sentry.ts:2:undefined)[39m
+
+   [2m 1[22m [2m┃[22m  [31mimport[0m env [31mfrom[0m [32m'#start/env'[0m
+ [41m❯  2 ┃  import { defineConfig } from '@sentry/node'[49m
+   [2m 3[22m [2m┃[22m  
+   [2m 4[22m [2m┃[22m  [31mconst[0m sentryConfig [34m=[0m [35mdefineConfig[0m({
+   [2m 5[22m [2m┃[22m    dsn[34m:[0m env[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m[34m,[0m [32m''[0m)[34m,[0m
+   [2m 6[22m [2m┃[22m    environment[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m[34m,[0m [32m'development'[0m)[34m,[0m
+   [2m 7[22m [2m┃[22m    tracesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.25[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 8[22m [2m┃[22m    profilesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.1[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 9[22m [2m┃[22m    enabled[34m:[0m [34m!![0menv[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m)[34m,[0m
+   [2m10[22m [2m┃[22m    attachStacktrace[34m:[0m [36mtrue[0m[34m,[0m
+   [2m11[22m [2m┃[22m    maxBreadcrumbs[34m:[0m [33m50[0m[34m,[0m
+
+[2m ⁃ at [3m#asyncInstantiate[23m ([3mnode:internal/modules/esm/module_job:326:21[23m)[22m
+[2m ⁃ at [3masync ModuleJob.run[23m ([3mnode:internal/modules/esm/module_job:429:5[23m)[22m
+[2m ⁃ ([3masync node:internal/modules/esm/loader:639:26[23m)[22m
+ ⁃ at async importFile [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:45:104)[39m
+ ⁃ at async fsImportAll [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:57:2)[39m
+ ⁃ at async ConfigManager.process [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:890:29)[39m
+ ⁃ at async Application.boot [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:2460:3)[39m
+ ⁃ at async HttpServerProcess.start [33m(D:/cargaexpressbakend/node_modules/@adonisjs/core/build/main-lRY4g_D8.js:286:3)[39m
+ ⁃ at async bootstrap [33m(D:/cargaexpressbakend/bin/server.ts:22:3)[39m
+
+
+[31mℹ SyntaxError: The requested module '@sentry/node' does not provide an export named 'defineConfig'[39m
+
+ ⁃ [33m(D:/cargaexpressbakend/config/sentry.ts:2:undefined)[39m
+
+   [2m 1[22m [2m┃[22m  [31mimport[0m env [31mfrom[0m [32m'#start/env'[0m
+ [41m❯  2 ┃  import { defineConfig } from '@sentry/node'[49m
+   [2m 3[22m [2m┃[22m  
+   [2m 4[22m [2m┃[22m  [31mconst[0m sentryConfig [34m=[0m [35mdefineConfig[0m({
+   [2m 5[22m [2m┃[22m    dsn[34m:[0m env[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m[34m,[0m [32m''[0m)[34m,[0m
+   [2m 6[22m [2m┃[22m    environment[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m[34m,[0m [32m'development'[0m)[34m,[0m
+   [2m 7[22m [2m┃[22m    tracesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.25[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 8[22m [2m┃[22m    profilesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.1[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 9[22m [2m┃[22m    enabled[34m:[0m [34m!![0menv[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m)[34m,[0m
+   [2m10[22m [2m┃[22m    attachStacktrace[34m:[0m [36mtrue[0m[34m,[0m
+   [2m11[22m [2m┃[22m    maxBreadcrumbs[34m:[0m [33m50[0m[34m,[0m
+
+[2m ⁃ at [3m#asyncInstantiate[23m ([3mnode:internal/modules/esm/module_job:326:21[23m)[22m
+[2m ⁃ at [3masync ModuleJob.run[23m ([3mnode:internal/modules/esm/module_job:429:5[23m)[22m
+[2m ⁃ ([3masync node:internal/modules/esm/loader:639:26[23m)[22m
+ ⁃ at async importFile [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:45:104)[39m
+ ⁃ at async fsImportAll [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:57:2)[39m
+ ⁃ at async ConfigManager.process [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:890:29)[39m
+ ⁃ at async Application.boot [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:2460:3)[39m
+ ⁃ at async HttpServerProcess.start [33m(D:/cargaexpressbakend/node_modules/@adonisjs/core/build/main-lRY4g_D8.js:286:3)[39m
+ ⁃ at async bootstrap [33m(D:/cargaexpressbakend/bin/server.ts:22:3)[39m
+
+
+[31mℹ SyntaxError: The requested module '@sentry/node' does not provide an export named 'defineConfig'[39m
+
+ ⁃ [33m(D:/cargaexpressbakend/config/sentry.ts:2:undefined)[39m
+
+   [2m 1[22m [2m┃[22m  [31mimport[0m env [31mfrom[0m [32m'#start/env'[0m
+ [41m❯  2 ┃  import { defineConfig } from '@sentry/node'[49m
+   [2m 3[22m [2m┃[22m  
+   [2m 4[22m [2m┃[22m  [31mconst[0m sentryConfig [34m=[0m [35mdefineConfig[0m({
+   [2m 5[22m [2m┃[22m    dsn[34m:[0m env[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m[34m,[0m [32m''[0m)[34m,[0m
+   [2m 6[22m [2m┃[22m    environment[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m[34m,[0m [32m'development'[0m)[34m,[0m
+   [2m 7[22m [2m┃[22m    tracesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.25[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 8[22m [2m┃[22m    profilesSampleRate[34m:[0m env[34m.[0m[31mget[0m([32m'NODE_ENV'[0m) [34m===[0m [32m'production'[0m [34m?[0m [33m0.1[0m [34m:[0m [33m0.0[0m[34m,[0m
+   [2m 9[22m [2m┃[22m    enabled[34m:[0m [34m!![0menv[34m.[0m[31mget[0m([32m'SENTRY_DSN'[0m)[34m,[0m
+   [2m10[22m [2m┃[22m    attachStacktrace[34m:[0m [36mtrue[0m[34m,[0m
+   [2m11[22m [2m┃[22m    maxBreadcrumbs[34m:[0m [33m50[0m[34m,[0m
+
+[2m ⁃ at [3m#asyncInstantiate[23m ([3mnode:internal/modules/esm/module_job:326:21[23m)[22m
+[2m ⁃ at [3masync ModuleJob.run[23m ([3mnode:internal/modules/esm/module_job:429:5[23m)[22m
+[2m ⁃ ([3masync node:internal/modules/esm/loader:639:26[23m)[22m
+ ⁃ at async importFile [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:45:104)[39m
+ ⁃ at async fsImportAll [33m(D:/cargaexpressbakend/node_modules/@poppinss/utils/build/modules/fs/main.js:57:2)[39m
+ ⁃ at async ConfigManager.process [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:890:29)[39m
+ ⁃ at async Application.boot [33m(D:/cargaexpressbakend/node_modules/@adonisjs/application/build/application-BCWLhWpE.js:2460:3)[39m
+ ⁃ at async HttpServerProcess.start [33m(D:/cargaexpressbakend/node_modules/@adonisjs/core/build/main-lRY4g_D8.js:286:3)[39m
+ ⁃ at async bootstrap [33m(D:/cargaexpressbakend/bin/server.ts:22:3)[39m
+
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207
+                    self.flushQueue(new errors_1.MaxRetriesPerRequestError(maxRetriesPerRequest));
+                                    ^
+
+MaxRetriesPerRequestError: Reached the max retries per request limit (which is 3). Refer to "maxRetriesPerRequest" option for details.
+    at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207:37)
+    at Object.onceWrapper (node:events:631:26)
+    at Socket.emit (node:events:509:28)
+    at TCP.<anonymous> (node:net:350:12)
+
+Node.js v24.15.0
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207
+                    self.flushQueue(new errors_1.MaxRetriesPerRequestError(maxRetriesPerRequest));
+                                    ^
+
+MaxRetriesPerRequestError: Reached the max retries per request limit (which is 3). Refer to "maxRetriesPerRequest" option for details.
+    at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207:37)
+    at Object.onceWrapper (node:events:631:26)
+    at Socket.emit (node:events:509:28)
+    at TCP.<anonymous> (node:net:350:12)
+
+Node.js v24.15.0
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207
+                    self.flushQueue(new errors_1.MaxRetriesPerRequestError(maxRetriesPerRequest));
+                                    ^
+
+MaxRetriesPerRequestError: Reached the max retries per request limit (which is 3). Refer to "maxRetriesPerRequest" option for details.
+    at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207:37)
+    at Object.onceWrapper (node:events:631:26)
+    at Socket.emit (node:events:509:28)
+    at TCP.<anonymous> (node:net:350:12)
+
+Node.js v24.15.0
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207
+                    self.flushQueue(new errors_1.MaxRetriesPerRequestError(maxRetriesPerRequest));
+                                    ^
+
+MaxRetriesPerRequestError: Reached the max retries per request limit (which is 3). Refer to "maxRetriesPerRequest" option for details.
+    at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207:37)
+    at Object.onceWrapper (node:events:631:26)
+    at Socket.emit (node:events:509:28)
+    at TCP.<anonymous> (node:net:350:12)
+
+Node.js v24.15.0
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207
+                    self.flushQueue(new errors_1.MaxRetriesPerRequestError(maxRetriesPerRequest));
+                                    ^
+
+MaxRetriesPerRequestError: Reached the max retries per request limit (which is 3). Refer to "maxRetriesPerRequest" option for details.
+    at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207:37)
+    at Object.onceWrapper (node:events:631:26)
+    at Socket.emit (node:events:509:28)
+    at TCP.<anonymous> (node:net:350:12)
+
+Node.js v24.15.0
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207
+                    self.flushQueue(new errors_1.MaxRetriesPerRequestError(maxRetriesPerRequest));
+                                    ^
+
+MaxRetriesPerRequestError: Reached the max retries per request limit (which is 3). Refer to "maxRetriesPerRequest" option for details.
+    at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207:37)
+    at Object.onceWrapper (node:events:631:26)
+    at Socket.emit (node:events:509:28)
+    at TCP.<anonymous> (node:net:350:12)
+
+Node.js v24.15.0
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207
+                    self.flushQueue(new errors_1.MaxRetriesPerRequestError(maxRetriesPerRequest));
+                                    ^
+
+MaxRetriesPerRequestError: Reached the max retries per request limit (which is 3). Refer to "maxRetriesPerRequest" option for details.
+    at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207:37)
+    at Object.onceWrapper (node:events:631:26)
+    at Socket.emit (node:events:509:28)
+    at TCP.<anonymous> (node:net:350:12)
+
+Node.js v24.15.0
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207
+                    self.flushQueue(new errors_1.MaxRetriesPerRequestError(maxRetriesPerRequest));
+                                    ^
+
+MaxRetriesPerRequestError: Reached the max retries per request limit (which is 3). Refer to "maxRetriesPerRequest" option for details.
+    at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207:37)
+    at Object.onceWrapper (node:events:631:26)
+    at Socket.emit (node:events:509:28)
+    at TCP.<anonymous> (node:net:350:12)
+
+Node.js v24.15.0
+D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207
+                    self.flushQueue(new errors_1.MaxRetriesPerRequestError(maxRetriesPerRequest));
+                                    ^
+
+MaxRetriesPerRequestError: Reached the max retries per request limit (which is 3). Refer to "maxRetriesPerRequest" option for details.
+    at Socket.<anonymous> (D:\cargaexpressbakend\node_modules\ioredis\built\redis\event_handler.js:207:37)
+    at Object.onceWrapper (node:events:631:26)
+    at Socket.emit (node:events:509:28)
+    at TCP.<anonymous> (node:net:350:12)
+
+Node.js v24.15.0
+D:\cargaexpressbakend\node_modules\ioredis\built\Redis.js:376
+                command.reject(new Error("Stream isn't writeable and enableOfflineQueue options is false"));
+                               ^
+
+Error: Stream isn't writeable and enableOfflineQueue options is false
+    at EventEmitter.sendCommand (D:\cargaexpressbakend\node_modules\ioredis\built\Redis.js:376:32)
+    at EventEmitter.psubscribe (D:\cargaexpressbakend\node_modules\ioredis\built\utils\Commander.js:90:25)
+    at new RedisAdapter (D:\cargaexpressbakend\node_modules\@socket.io\redis-adapter\dist\index.js:99:28)
+    at new <anonymous> (D:\cargaexpressbakend\node_modules\@socket.io\redis-adapter\dist\index.js:49:16)
+    at Namespace._initAdapter (D:\cargaexpressbakend\node_modules\socket.io\dist\namespace.js:99:24)
+    at Server.adapter (D:\cargaexpressbakend\node_modules\socket.io\dist\index.js:188:17)
+    at initSocket (D:\cargaexpressbakend\start\socket.ts:76:10)
+    at bootstrap (D:\cargaexpressbakend\bin\server.ts:27:3)
+
+Node.js v24.15.0

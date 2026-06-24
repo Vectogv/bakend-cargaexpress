@@ -9,14 +9,17 @@ import { emitToAdmin, getIO } from '#start/socket'
 
 export default class LeaderController {
   // ──────────────────────── AVISOS ────────────────────────
-  async avisosIndex({ serialize }: HttpContext) {
+  async avisosIndex({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
     const posts = await Aviso.query()
-      .preload('autor')
+      .preload('autor', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('fijado', 'desc')
       .orderBy('created_at', 'desc')
+      .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      posts.map((p) => ({
+      posts.all().map((p) => ({
         id: p.id,
         contenido: p.contenido,
         fijado: p.fijado,

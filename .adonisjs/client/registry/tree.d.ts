@@ -139,6 +139,7 @@ export interface ApiDefinition {
     dispute: {
       storeRoot: typeof routes['disputes.dispute.store_root']
       show: typeof routes['disputes.dispute.show']
+      submitVersion: typeof routes['disputes.dispute.submit_version']
     }
   }
   payment: {
