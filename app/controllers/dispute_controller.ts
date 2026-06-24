@@ -310,6 +310,54 @@ export default class DisputeController {
     })
   }
 
+  async submitVersion({ auth, params, request, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const disputa = await Disputa.find(params.id)
+    if (!disputa) {
+      return response.status(404).send(serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
+    }
+
+    const { version } = request.only(['version'])
+    if (!version || !version.trim()) {
+      return response.status(422).send(serialize.withoutWrapping({ error: 'Debes escribir tu versión' }))
+    }
+
+    const conductor = await Conductor.findBy('usuario_id', user.id)
+    const esConductor = conductor && disputa.conductorId === conductor.id
+    const esCliente = disputa.clienteId === user.id
+
+    if (!esConductor && !esCliente) {
+      return response.status(403).send(serialize.withoutWrapping({ error: 'No tienes acceso a esta disputa' }))
+    }
+
+    if (disputa.estado === 'resuelta') {
+      return response.status(422).send(serialize.withoutWrapping({ error: 'La disputa ya fue resuelta' }))
+    }
+
+    if (esConductor) {
+      disputa.versionConductor = version.trim()
+    } else {
+      disputa.versionCliente = version.trim()
+    }
+
+    if (disputa.estado === 'abierta') {
+      disputa.estado = 'en_revision'
+    }
+    await disputa.save()
+
+    emitToAdmin('admin:dispute_updated', {
+      id: String(disputa.id),
+      viajeId: String(disputa.viajeId),
+      estado: disputa.estado,
+    })
+
+    return serialize.withoutWrapping({
+      id: String(disputa.id),
+      estado: disputa.estado,
+      message: 'Versión actualizada. El administrador revisará el caso.',
+    })
+  }
+
   async uploadSupport({ auth, params, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     const disputa = await Disputa.query().where('viaje_id', params.id).first()

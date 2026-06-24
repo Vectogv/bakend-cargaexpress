@@ -221,6 +221,7 @@ router
   .group(() => {
     router.post('', [controllers.Dispute, 'storeRoot'])
     router.get(':id', [controllers.Dispute, 'show'])
+    router.post(':id/version', [controllers.Dispute, 'submitVersion'])
   })
   .prefix('/api/disputes')
   .as('disputes')
