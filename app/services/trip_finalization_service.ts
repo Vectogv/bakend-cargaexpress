@@ -149,7 +149,7 @@ export default class TripFinalizationService {
             new Error('ESTADO_INVALIDO'),
             {
               statusCode: 422,
-              message: `El viaje debe estar 'completado' o 'esperando_confirmacion' antes de finalizar (estado actual: ${viaje.estado})`,
+              message: `El viaje debe estar 'esperando_confirmacion' antes de finalizar (estado actual: ${viaje.estado})`,
             }
           )
         }

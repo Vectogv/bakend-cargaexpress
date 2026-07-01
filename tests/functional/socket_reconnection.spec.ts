@@ -72,7 +72,7 @@ test.group('Socket.IO Reconnection', (group) => {
 
     // Verify final state persists
     viaje = await db.from('viajes').where('id', tripId).first()
-    assert.equal(viaje.estado, 'completado')
+    assert.equal(viaje.estado, 'esperando_confirmacion')
   })
 
   test('rejoin rules: socket.ts auto-joins rooms by role', ({ assert }) => {

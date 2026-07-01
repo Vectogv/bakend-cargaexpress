@@ -187,7 +187,7 @@ export default class OfferController {
     }
 
     // Verificar que el viaje sigue aceptando ofertas
-    if (!['buscando_conductor', 'pendiente', 'ofertas_recibidas'].includes(viaje.estado)) {
+    if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
       return response.status(400).send({ error: 'El viaje ya no acepta ofertas' })
     }
 
@@ -303,7 +303,7 @@ export default class OfferController {
   }
 
   /**
-   * Confirma que el conductor va en camino (transicion de conductor_aceptado a conductor_en_camino)
+   * Confirma que el conductor va en camino (transicion de aceptado a conductor_en_camino)
    */
   async confirmArrival({ auth, params, response }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -318,14 +318,8 @@ export default class OfferController {
       return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
     }
 
-    if (!['aceptado', 'conductor_aceptado'].includes(viaje.estado)) {
-      return response.status(422).send({ error: `El viaje debe estar en 'aceptado' o 'conductor_aceptado' (actual: ${viaje.estado})` })
-    }
-
-    // Si venía de 'aceptado', registramos el paso intermedio
-    if (viaje.estado === 'aceptado') {
-      viaje.estado = 'conductor_aceptado'
-      await viaje.save()
+    if (viaje.estado !== 'aceptado') {
+      return response.status(422).send({ error: `El viaje debe estar en 'aceptado' (actual: ${viaje.estado})` })
     }
 
     viaje.estado = 'conductor_en_camino'

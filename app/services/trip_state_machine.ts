@@ -1,40 +1,22 @@
-export type EstadoViaje =
-  | 'creado'
-  | 'buscando_conductor'
-  | 'pendiente'
-  | 'ofertas_recibidas'
-  | 'aceptado'
-  | 'conductor_aceptado'
-  | 'conductor_en_camino'
-  | 'conductor_llegada'
-  | 'en_curso'
-  | 'entregado'
-  | 'esperando_confirmacion'
-  | 'completado'
-  | 'finalizado'
-  | 'cancelado'
-  | 'rechazado'
-  | 'sos'
-  | 'disputa'
+import { TRIP_STATUS } from '../../contracts/trip_status.js'
+
+export type EstadoViaje = (typeof TRIP_STATUS)[keyof typeof TRIP_STATUS]
 
 const transiciones: Record<EstadoViaje, EstadoViaje[]> = {
   creado: ['buscando_conductor', 'cancelado'],
-  buscando_conductor: ['pendiente', 'ofertas_recibidas', 'aceptado', 'cancelado', 'rechazado'],
-  pendiente: ['ofertas_recibidas', 'aceptado', 'cancelado', 'rechazado'],
-  ofertas_recibidas: ['aceptado', 'conductor_aceptado', 'cancelado'],
-  aceptado: ['conductor_aceptado', 'conductor_en_camino', 'en_curso', 'cancelado', 'sos'],
-  conductor_aceptado: ['conductor_en_camino', 'cancelado', 'sos'],
+  buscando_conductor: ['pendiente', 'aceptado', 'cancelado', 'rechazado'],
+  pendiente: ['aceptado', 'cancelado', 'rechazado'],
+  aceptado: ['conductor_en_camino', 'en_curso', 'cancelado', 'sos'],
   conductor_en_camino: ['conductor_llegada', 'cancelado', 'sos'],
   conductor_llegada: ['en_curso', 'cancelado', 'sos'],
-  en_curso: ['completado', 'entregado', 'cancelado', 'sos'],
+  en_curso: ['entregado', 'cancelado', 'sos'],
   entregado: ['esperando_confirmacion', 'disputa'],
-  esperando_confirmacion: ['completado', 'finalizado', 'disputa'],
-  completado: ['finalizado', 'disputa'],
+  esperando_confirmacion: ['finalizado', 'disputa'],
   finalizado: [],
   cancelado: [],
   rechazado: [],
-  sos: ['conductor_en_camino', 'conductor_llegada', 'en_curso', 'completado', 'finalizado', 'cancelado'],
-  disputa: ['completado', 'finalizado'],
+  sos: ['conductor_en_camino', 'conductor_llegada', 'en_curso', 'finalizado', 'cancelado'],
+  disputa: ['finalizado'],
 }
 
 export default class TripStateMachine {

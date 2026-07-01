@@ -37,7 +37,7 @@ export default class TripController {
     // Un cliente no puede tener más de un viaje activo simultáneo.
     const viajeActivo = await Viaje.query()
       .where('cliente_id', user.id)
-      .whereIn('estado', ['buscando_conductor', 'pendiente', 'ofertas_recibidas', 'aceptado', 'conductor_aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos', 'disputa'])
+      .whereIn('estado', ['buscando_conductor', 'pendiente', 'aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos', 'disputa'])
       .first()
     if (viajeActivo) {
       return response.status(409).send({
@@ -216,14 +216,14 @@ export default class TripController {
       const conductor = await Conductor.findByOrFail('usuario_id', user.id)
       viaje = await Viaje.query()
         .where('conductor_id', conductor.id)
-        .whereIn('estado', ['aceptado', 'conductor_aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos'])
+        .whereIn('estado', ['aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos'])
         .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
         .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
         .first()
     } else {
       viaje = await Viaje.query()
         .where('cliente_id', user.id)
-        .whereIn('estado', ['creado', 'buscando_conductor', 'pendiente', 'ofertas_recibidas', 'aceptado', 'conductor_aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos', 'disputa'])
+        .whereIn('estado', ['creado', 'buscando_conductor', 'pendiente', 'aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos', 'disputa'])
         .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
         .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
         .first()
@@ -280,7 +280,7 @@ export default class TripController {
 
         // Re-validar estado DENTRO de la transacción (pudo cambiar mientras
         // otro proceso concurrente tenía el lock antes que nosotros).
-        if (!['buscando_conductor', 'ofertas_recibidas'].includes(viaje.estado)) {
+        if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
           throw Object.assign(
             new Error('YA_ASIGNADO'),
             { statusCode: 422, message: 'El viaje ya fue asignado' }
@@ -288,7 +288,7 @@ export default class TripController {
         }
 
         viaje.conductorId = conductor.id
-        viaje.estado = 'conductor_aceptado'
+        viaje.estado = 'aceptado'
         viaje.aceptadoAt = DateTime.now()
 
         if (conductor.ultimaUbicacionLat && conductor.ultimaUbicacionLng) {
@@ -320,7 +320,7 @@ export default class TripController {
 
     emitToClient(resultado.viaje.clienteId, 'trip:status_changed', {
       id: String(resultado.viaje.id),
-      estado: 'conductor_aceptado',
+      estado: 'aceptado',
       conductor: {
         id: String(resultado.viaje.conductor.id),
         nombre:
@@ -331,7 +331,7 @@ export default class TripController {
         calificacion: resultado.viaje.conductor.calificacion,
       },
       tiempoEstimadoMinutos: resultado.viaje.tiempoEstimadoMinutos,
-      aceptadoAt: resultado.viaje.aceptadoAt.toISO(),
+      aceptadoAt: resultado.viaje.aceptadoAt?.toISO() ?? null,
     })
 
     emitToClient(resultado.viaje.clienteId, 'trip:accepted', {
@@ -347,10 +347,10 @@ export default class TripController {
         calificacion: resultado.viaje.conductor.calificacion,
       },
       tiempoEstimadoMinutos: resultado.viaje.tiempoEstimadoMinutos,
-      aceptadoAt: resultado.viaje.aceptadoAt.toISO(),
+      aceptadoAt: resultado.viaje.aceptadoAt?.toISO() ?? null,
     })
 
-    emitToDriver(resultado.viaje.clienteId, 'trip:offer_accepted', {
+    emitToDriver(resultado.viaje.conductor.usuarioId, 'trip:offer_accepted', {
       id: String(resultado.viaje.id),
       estado: resultado.viaje.estado,
       viajeId: Number(resultado.viaje.id),
@@ -372,7 +372,7 @@ export default class TripController {
     return serialize.withoutWrapping({
       id: String(resultado.viaje.id),
       estado: resultado.viaje.estado,
-      aceptadoAt: resultado.viaje.aceptadoAt.toISO(),
+      aceptadoAt: resultado.viaje.aceptadoAt?.toISO() ?? null,
     })
   }
 
@@ -447,6 +447,11 @@ export default class TripController {
 
     viaje.estado = 'rechazado'
     await viaje.save()
+
+    emitToClient(viaje.clienteId, 'trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'rechazado',
+    })
 
     emitToClient(viaje.clienteId, 'trip:declined', {
       id: String(viaje.id),
@@ -553,6 +558,13 @@ export default class TripController {
       const viaje = await Viaje.find(Number(result.viaje.id))
 
       if (viaje) {
+        emitToClient(viaje.clienteId, 'trip:status_changed', {
+          id: String(viaje.id),
+          estado: 'finalizado',
+          montoFinal: result.viaje.montoFinal,
+          finalizadoAt: result.viaje.finalizadoAt,
+        })
+
         emitToClient(viaje.clienteId, 'trip:finalized', {
           id: result.viaje.id,
           estado: result.viaje.estado,
@@ -647,7 +659,7 @@ export default class TripController {
     }
 
     // Validar distancia si cliente cancela con conductor en camino
-    if (user.rol === 'cliente' && viaje.conductorId && ['conductor_aceptado', 'conductor_en_camino'].includes(viaje.estado)) {
+    if (user.rol === 'cliente' && viaje.conductorId && viaje.estado === 'conductor_en_camino') {
       const conductor = await Conductor.find(viaje.conductorId)
       if (conductor?.ultimaUbicacionLat && conductor?.ultimaUbicacionLng) {
         const distKm = haversineDist(
@@ -667,7 +679,7 @@ export default class TripController {
     await viaje.save()
 
     // Penalizar reputacion si el viaje ya tenia conductor asignado
-    if (user.id === viaje.clienteId && viaje.conductorId && ['aceptado', 'conductor_aceptado', 'conductor_en_camino'].includes(estadoAnterior)) {
+    if (user.id === viaje.clienteId && viaje.conductorId && ['aceptado', 'conductor_en_camino'].includes(estadoAnterior)) {
       const cliente = await User.find(viaje.clienteId)
       if (cliente) {
         cliente.reputacion = Math.max(1.0, cliente.reputacion - 0.5)
@@ -1005,10 +1017,10 @@ export default class TripController {
         .send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
     }
 
-    if (!['en_curso', 'completado'].includes(viaje.estado)) {
+    if (!['en_curso', 'entregado'].includes(viaje.estado)) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'Solo puedes subir foto de entrega cuando el viaje está en curso o completado' }))
+        .send(serialize.withoutWrapping({ error: 'Solo puedes subir foto de entrega cuando el viaje está en curso o entregado' }))
     }
 
     const file = request.file('file', {

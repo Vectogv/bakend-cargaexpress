@@ -43,7 +43,7 @@ export default class AdminController {
       Conductor.query().count('* as total').first(),
       Conductor.query().where('online', true).count('* as total').first(),
       Viaje.query()
-        .whereIn('estado', ['completado', 'finalizado'])
+        .whereIn('estado', ['finalizado'])
         .where('created_at', '>=', startOfDay)
         .count('* as total')
         .first(),
