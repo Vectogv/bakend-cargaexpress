@@ -60,7 +60,7 @@ test.group('Service Failure Simulation', (group) => {
 
     // Verify database integrity
     const viaje = await db.from('viajes').where('id', tripId).first()
-    assert.equal(viaje.estado, 'completado')
+    assert.equal(viaje.estado, 'esperando_confirmacion')
     assert.equal(Number(viaje.precio_final), 50000)
   }).timeout(30000)
 

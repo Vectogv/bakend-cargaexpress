@@ -21,6 +21,8 @@
  */
 import '@poppinss/ts-exec'
 
+process.env.PORT = '3333'
+
 /**
  * Import ace console entrypoint
  */

@@ -149,7 +149,7 @@ export default class TripFinalizationService {
             new Error('ESTADO_INVALIDO'),
             {
               statusCode: 422,
-              message: `El viaje debe estar 'completado' antes de finalizar (estado actual: ${viaje.estado})`,
+              message: `El viaje debe estar 'esperando_confirmacion' antes de finalizar (estado actual: ${viaje.estado})`,
             }
           )
         }
@@ -242,7 +242,7 @@ export default class TripFinalizationService {
             .forUpdate()
             .firstOrFail()
 
-          const deudaAnterior = conductorUser.montoDeuda ?? 0
+          const deudaAnterior = Number(conductorUser.montoDeuda) || 0
           conductorUser.montoDeuda = Math.round((deudaAnterior + comision) * 100) / 100
           conductorUser.tieneDeudaActiva = true
 
@@ -262,11 +262,17 @@ export default class TripFinalizationService {
           .firstOrFail()
 
         cliente.totalViajesCompletados += 1
-        if (cliente.totalViajesCompletados % 10 === 0 && cliente.reputacion < 5.0) {
-          cliente.reputacion = Math.min(5.0, cliente.reputacion + 0.5)
+
+        // ── Use Number() to coerce DECIMAL strings from MySQL into numbers ──
+        // mysql2 returns DECIMAL columns as strings (e.g. "4.0"), so direct
+        // arithmetic ("4.0" + 0.1) produces string concatenation → "4.00.1"
+        // and Math.min(5.0, "4.00.1") → NaN, which MySQL rejects.
+        const reputacion = Number(cliente.reputacion) || 0
+        if (cliente.totalViajesCompletados % 10 === 0 && reputacion < 5.0) {
+          cliente.reputacion = Math.min(5.0, reputacion + 0.5)
         }
-        if (cliente.totalViajesCompletados >= 1 && cliente.reputacion < 5.0) {
-          cliente.reputacion = Math.min(5.0, cliente.reputacion + 0.1)
+        if (cliente.totalViajesCompletados >= 1 && reputacion < 5.0) {
+          cliente.reputacion = Math.min(5.0, reputacion + 0.1)
         }
         await cliente.useTransaction(trx).save()
 

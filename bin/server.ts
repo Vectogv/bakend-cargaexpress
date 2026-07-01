@@ -20,7 +20,14 @@ process.on('unhandledRejection', (reason) => {
   console.error('Unhandled Rejection:', reason)
 })
 
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
 async function bootstrap() {
+  if (!process.env.PORT) process.env.PORT = '3333'
+  const desiredPort = Number(process.env.PORT)
+
   const ignitor = new Ignitor(APP_ROOT, { importer: IMPORTER }).tap((app) => {
     app.booting(async () => {
       await import('#start/env')
@@ -29,7 +36,19 @@ async function bootstrap() {
     app.listenIf(app.managedByPm2, 'SIGINT', () => app.terminate())
   })
 
-  await ignitor.httpServer().start()
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      await ignitor.httpServer().start()
+      break
+    } catch (err: any) {
+      if (err?.code === 'EADDRINUSE' && attempt < 5) {
+        console.log(`Puerto ${desiredPort} ocupado, reintentando en 5s (intento ${attempt}/5)...`)
+        await sleep(5000)
+        continue
+      }
+      throw err
+    }
+  }
 
   const { initSocket } = await import('../start/socket.js')
   const { default: server } = await import('@adonisjs/core/services/server')

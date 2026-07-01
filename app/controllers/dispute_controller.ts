@@ -50,8 +50,8 @@ export default class DisputeController {
     if (!viaje) {
       return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
-    if (viaje.estado !== 'finalizado') {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'Solo puedes disputar viajes finalizados' }))
+    if (!['esperando_confirmacion', 'finalizado'].includes(viaje.estado)) {
+      return response.status(422).send(serialize.withoutWrapping({ error: `Solo puedes disputar viajes en estado 'esperando_confirmacion' o 'finalizado' (actual: ${viaje.estado})` }))
     }
 
     const existe = await Disputa.query().where('viaje_id', viaje.id).first()
@@ -175,10 +175,10 @@ export default class DisputeController {
     if (!viaje) {
       return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
-    if (viaje.estado !== 'finalizado') {
+    if (!['esperando_confirmacion', 'finalizado'].includes(viaje.estado)) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'Solo puedes disputar viajes finalizados' }))
+        .send(serialize.withoutWrapping({ error: `Solo puedes disputar viajes en estado 'esperando_confirmacion' o 'finalizado' (actual: ${viaje.estado})` }))
     }
 
     const existe = await Disputa.query().where('viaje_id', viaje.id).first()

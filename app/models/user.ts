@@ -22,7 +22,9 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
   @hasMany(() => Viaje, { foreignKey: 'clienteId' })
   declare viajes: HasMany<typeof Viaje>
 
-  @column()
+  @column({
+    consume: (value: unknown) => (value != null ? Number(value) : 5.0),
+  })
   declare reputacion: number
 
   @column()
@@ -43,7 +45,9 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
   @column()
   declare fcmToken: string | null
 
-  @column()
+  @column({
+    consume: (value: unknown) => (value != null ? Number(value) : null),
+  })
   declare calificacion: number | null
 
   @column()
@@ -52,7 +56,9 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
   @column()
   declare reportesInfundadosConductor: number
 
-  @column()
+  @column({
+    consume: (value: unknown) => (value != null ? Number(value) : null),
+  })
   declare montoDeuda: number | null
 
   @column.dateTime()

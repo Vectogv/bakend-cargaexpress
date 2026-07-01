@@ -37,7 +37,7 @@ export default class TripController {
     // Un cliente no puede tener más de un viaje activo simultáneo.
     const viajeActivo = await Viaje.query()
       .where('cliente_id', user.id)
-      .whereIn('estado', ['buscando_conductor', 'aceptado', 'en_curso'])
+      .whereIn('estado', ['buscando_conductor', 'pendiente', 'aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos', 'disputa'])
       .first()
     if (viajeActivo) {
       return response.status(409).send({
@@ -72,7 +72,7 @@ export default class TripController {
 
     const viaje = await Viaje.create({
       clienteId: user.id,
-      estado: 'buscando_conductor',
+      estado: 'creado',
       origenDireccion: data.origen.direccion,
       origenLat: data.origen.lat,
       origenLng: data.origen.lng,
@@ -82,6 +82,20 @@ export default class TripController {
       carga: data.descripcion || null,
       precioCliente: data.precioCliente,
       precioEstimado: data.precioCliente,
+    })
+
+    // Transicion inmediata a buscando_conductor
+    viaje.estado = 'buscando_conductor'
+    await viaje.save()
+
+    emitToClient(viaje.clienteId, 'trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'creado',
+    })
+
+    emitToClient(viaje.clienteId, 'trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'buscando_conductor',
     })
 
     // Obtener conductores online dentro de 20km del origen usando Haversine en DB
@@ -202,14 +216,14 @@ export default class TripController {
       const conductor = await Conductor.findByOrFail('usuario_id', user.id)
       viaje = await Viaje.query()
         .where('conductor_id', conductor.id)
-        .whereIn('estado', ['aceptado', 'en_curso'])
+        .whereIn('estado', ['aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos'])
         .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
         .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
         .first()
     } else {
       viaje = await Viaje.query()
         .where('cliente_id', user.id)
-        .whereIn('estado', ['buscando_conductor', 'pendiente', 'aceptado', 'en_curso'])
+        .whereIn('estado', ['creado', 'buscando_conductor', 'pendiente', 'aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos', 'disputa'])
         .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
         .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
         .first()
@@ -266,7 +280,7 @@ export default class TripController {
 
         // Re-validar estado DENTRO de la transacción (pudo cambiar mientras
         // otro proceso concurrente tenía el lock antes que nosotros).
-        if (viaje.estado !== 'buscando_conductor') {
+        if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
           throw Object.assign(
             new Error('YA_ASIGNADO'),
             { statusCode: 422, message: 'El viaje ya fue asignado' }
@@ -304,6 +318,22 @@ export default class TripController {
       throw err
     }
 
+    emitToClient(resultado.viaje.clienteId, 'trip:status_changed', {
+      id: String(resultado.viaje.id),
+      estado: 'aceptado',
+      conductor: {
+        id: String(resultado.viaje.conductor.id),
+        nombre:
+          `${resultado.viaje.conductor.usuario.nombre || ''} ${resultado.viaje.conductor.usuario.apellido || ''}`.trim(),
+        telefono: resultado.viaje.conductor.usuario.telefono,
+        placa: resultado.viaje.conductor.placa,
+        foto: resultado.viaje.conductor.fotoConductor,
+        calificacion: resultado.viaje.conductor.calificacion,
+      },
+      tiempoEstimadoMinutos: resultado.viaje.tiempoEstimadoMinutos,
+      aceptadoAt: resultado.viaje.aceptadoAt?.toISO() ?? null,
+    })
+
     emitToClient(resultado.viaje.clienteId, 'trip:accepted', {
       id: String(resultado.viaje.id),
       estado: resultado.viaje.estado,
@@ -317,7 +347,13 @@ export default class TripController {
         calificacion: resultado.viaje.conductor.calificacion,
       },
       tiempoEstimadoMinutos: resultado.viaje.tiempoEstimadoMinutos,
-      aceptadoAt: resultado.viaje.aceptadoAt.toISO(),
+      aceptadoAt: resultado.viaje.aceptadoAt?.toISO() ?? null,
+    })
+
+    emitToDriver(resultado.viaje.conductor.usuarioId, 'trip:offer_accepted', {
+      id: String(resultado.viaje.id),
+      estado: resultado.viaje.estado,
+      viajeId: Number(resultado.viaje.id),
     })
 
     const tripAcceptedPayload = {
@@ -336,7 +372,7 @@ export default class TripController {
     return serialize.withoutWrapping({
       id: String(resultado.viaje.id),
       estado: resultado.viaje.estado,
-      aceptadoAt: resultado.viaje.aceptadoAt.toISO(),
+      aceptadoAt: resultado.viaje.aceptadoAt?.toISO() ?? null,
     })
   }
 
@@ -360,12 +396,18 @@ export default class TripController {
     }
 
     if (!TripStateMachine.validarTransicion(viaje.estado as EstadoViaje, 'en_curso')) {
-      return response.status(422).send({ error: `El viaje debe estar en estado 'aceptado' para iniciarse (estado actual: ${viaje.estado})` })
+      return response.status(422).send({ error: `El viaje debe estar en estado 'conductor_llegada' o 'aceptado' para iniciarse (estado actual: ${viaje.estado})` })
     }
 
     viaje.estado = 'en_curso'
     viaje.enCursoAt = DateTime.now()
     await viaje.save()
+
+    emitToClient(viaje.clienteId, 'trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'en_curso',
+      enCursoAt: viaje.enCursoAt.toISO(),
+    })
 
     emitToClient(viaje.clienteId, 'trip:started', {
       id: String(viaje.id),
@@ -406,6 +448,11 @@ export default class TripController {
     viaje.estado = 'rechazado'
     await viaje.save()
 
+    emitToClient(viaje.clienteId, 'trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'rechazado',
+    })
+
     emitToClient(viaje.clienteId, 'trip:declined', {
       id: String(viaje.id),
       estado: viaje.estado,
@@ -431,17 +478,24 @@ export default class TripController {
       return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
     }
 
-    if (!TripStateMachine.validarTransicion(viaje.estado as EstadoViaje, 'completado')) {
+    if (!TripStateMachine.validarTransicion(viaje.estado as EstadoViaje, 'entregado')) {
       return response.status(422).send({ error: `El viaje debe estar 'en_curso' para completarse (estado actual: ${viaje.estado})` })
     }
 
     const data = await request.validateUsing(tripCompleteValidator)
-    viaje.estado = 'completado'
+    viaje.estado = 'entregado'
     viaje.precioFinal = data.montoFinal
     viaje.completadoAt = DateTime.now()
     await viaje.save()
 
-    emitToClient(viaje.clienteId, 'trip:finalized', {
+    emitToClient(viaje.clienteId, 'trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'entregado',
+      montoFinal: viaje.precioFinal,
+      completadoAt: viaje.completadoAt.toISO(),
+    })
+
+    emitToClient(viaje.clienteId, 'trip:delivered', {
       id: String(viaje.id),
       estado: viaje.estado,
       montoFinal: viaje.precioFinal,
@@ -450,6 +504,15 @@ export default class TripController {
 
     emitToDriver(conductor.usuarioId, 'driver:stop_gps', {
       viajeId: String(viaje.id),
+    })
+
+    // Automaticamente pasar a esperando_confirmacion
+    viaje.estado = 'esperando_confirmacion'
+    await viaje.save()
+
+    emitToClient(viaje.clienteId, 'trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'esperando_confirmacion',
     })
 
     return serialize.withoutWrapping({
@@ -492,22 +555,30 @@ export default class TripController {
     // Si la operación fue idempotente (el viaje ya estaba finalizado) no
     // volvemos a emitir eventos para no spam al frontend con duplicados.
     if (!result.idempotent) {
-      emitToClient(Number(result.viaje.id), 'trip:finalized', {
-        id: result.viaje.id,
-        estado: result.viaje.estado,
-        montoFinal: result.viaje.montoFinal,
-        finalizadoAt: result.viaje.finalizadoAt,
-      })
-
-      emitToAdmin('admin:trip_completed', {
-        viajeId: result.viaje.id,
-        estado: result.viaje.estado,
-        montoFinal: result.viaje.montoFinal,
-      })
-
-      // Push notification al cliente
       const viaje = await Viaje.find(Number(result.viaje.id))
+
       if (viaje) {
+        emitToClient(viaje.clienteId, 'trip:status_changed', {
+          id: String(viaje.id),
+          estado: 'finalizado',
+          montoFinal: result.viaje.montoFinal,
+          finalizadoAt: result.viaje.finalizadoAt,
+        })
+
+        emitToClient(viaje.clienteId, 'trip:finalized', {
+          id: result.viaje.id,
+          estado: result.viaje.estado,
+          montoFinal: result.viaje.montoFinal,
+          finalizadoAt: result.viaje.finalizadoAt,
+        })
+
+        emitToAdmin('admin:trip_completed', {
+          viajeId: result.viaje.id,
+          estado: result.viaje.estado,
+          montoFinal: result.viaje.montoFinal,
+        })
+
+        // Push notification al cliente
         const cliente = await User.find(viaje.clienteId)
         if (cliente?.fcmToken) {
           await sendToToken(
@@ -558,8 +629,8 @@ export default class TripController {
     const data = await request.validateUsing(tripCancelValidator)
     const viaje = await Viaje.findOrFail(params.id)
 
-    // Solo el admin puede cancelar un viaje en curso
-    if (viaje.estado === 'en_curso' && user.rol !== 'admin') {
+    // Solo el admin puede cancelar un viaje en curso o en estados avanzados
+    if (['en_curso', 'conductor_llegada'].includes(viaje.estado) && user.rol !== 'admin') {
       return response.status(403).send({ error: 'No puedes cancelar un viaje en curso. Debes solicitar la cancelación al administrador.' })
     }
 
@@ -587,19 +658,40 @@ export default class TripController {
         .send({ error: `El viaje no puede cancelarse en su estado actual (${viaje.estado})` })
     }
 
+    // Validar distancia si cliente cancela con conductor en camino
+    if (user.rol === 'cliente' && viaje.conductorId && viaje.estado === 'conductor_en_camino') {
+      const conductor = await Conductor.find(viaje.conductorId)
+      if (conductor?.ultimaUbicacionLat && conductor?.ultimaUbicacionLng) {
+        const distKm = haversineDist(
+          viaje.origenLat, viaje.origenLng,
+          conductor.ultimaUbicacionLat, conductor.ultimaUbicacionLng
+        )
+        if (distKm < 1) {
+          return response.status(422).send({ error: `No puedes cancelar: el conductor está a ${distKm.toFixed(2)} km del origen (mín. 1 km)` })
+        }
+      }
+    }
+
     const estadoAnterior = viaje.estado
     viaje.estado = 'cancelado'
     viaje.motivoCancelacion = data.motivo || null
     viaje.canceladoAt = DateTime.now()
     await viaje.save()
 
-    if (user.id === viaje.clienteId && estadoAnterior === 'aceptado') {
+    // Penalizar reputacion si el viaje ya tenia conductor asignado
+    if (user.id === viaje.clienteId && viaje.conductorId && ['aceptado', 'conductor_en_camino'].includes(estadoAnterior)) {
       const cliente = await User.find(viaje.clienteId)
       if (cliente) {
         cliente.reputacion = Math.max(1.0, cliente.reputacion - 0.5)
         await cliente.save()
       }
     }
+
+    emitToClient(viaje.clienteId, 'trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'cancelado',
+      motivo: viaje.motivoCancelacion,
+    })
 
     emitToClient(viaje.clienteId, 'trip:cancelled', {
       id: String(viaje.id),
@@ -635,8 +727,8 @@ export default class TripController {
     const user = auth.getUserOrFail()
     const viaje = await Viaje.findOrFail(params.id)
 
-    if (viaje.estado !== 'en_curso') {
-      return response.status(422).send({ error: `Solo puedes solicitar cancelación cuando el viaje está en curso (estado actual: ${viaje.estado})` })
+    if (!['en_curso', 'conductor_llegada', 'sos'].includes(viaje.estado)) {
+      return response.status(422).send({ error: `No puedes solicitar cancelación en el estado actual (${viaje.estado})` })
     }
 
     let conductorId: number
@@ -706,6 +798,7 @@ export default class TripController {
     const page = Number.parseInt(request.input('page', '1'))
     const limitRaw = Number.parseInt(request.input('limit', '20'))
     const limit = Math.min(100, Math.max(1, Number.isNaN(limitRaw) ? 20 : limitRaw))
+    const estadoFilter = request.input('estado') as string | undefined
     let query
     if (user.rol === 'conductor') {
       const conductor = await Conductor.findByOrFail('usuario_id', user.id)
@@ -720,6 +813,12 @@ export default class TripController {
         .preload('cliente')
         .preload('conductor', (q) => q.preload('usuario'))
         .orderBy('createdAt', 'desc')
+    }
+    if (estadoFilter) {
+      const estados = estadoFilter.split(',').map((s) => s.trim()).filter(Boolean)
+      if (estados.length > 0) {
+        query.whereIn('estado', estados)
+      }
     }
     const result = await query.paginate(page, limit)
     const data = result.all().map((v) => this.formatViajeResponse(v))
@@ -918,10 +1017,10 @@ export default class TripController {
         .send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
     }
 
-    if (!['en_curso', 'completado'].includes(viaje.estado)) {
+    if (!['en_curso', 'entregado'].includes(viaje.estado)) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'Solo puedes subir foto de entrega cuando el viaje está en curso o completado' }))
+        .send(serialize.withoutWrapping({ error: 'Solo puedes subir foto de entrega cuando el viaje está en curso o entregado' }))
     }
 
     const file = request.file('file', {
@@ -940,4 +1039,17 @@ export default class TripController {
 
     return serialize.withoutWrapping({ fotoEntrega: viaje.fotoEntrega })
   }
+}
+
+function haversineDist(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function toRad(deg: number): number {
+  return (deg * Math.PI) / 180
 }

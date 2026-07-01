@@ -158,7 +158,7 @@ test.group('Trip Flow QA Test', (group) => {
     
     // 12. Verify trip completed in database
     viaje = await db.from('viajes').where('id', tripId).first()
-    assert.equal(viaje.estado, 'completado')
+    assert.equal(viaje.estado, 'esperando_confirmacion')
     assert.equal(Number(viaje.precio_final), 50000)
     
     // Cleanup sockets (if connected)
@@ -232,7 +232,7 @@ test.group('Trip Flow QA Test', (group) => {
     
     // Final verification via database
     const viajeDb = await db.from('viajes').where('id', tripId).first()
-    assert.equal(viajeDb.estado, 'completado')
+    assert.equal(viajeDb.estado, 'esperando_confirmacion')
     assert.equal(Number(viajeDb.precio_final), 50000)
   })
 })

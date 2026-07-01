@@ -8,7 +8,7 @@ import { BaseModel, column } from '@adonisjs/lucid/orm'
 import { DateTime } from 'luxon'
 
 export class AlertasEmergenciaSchema extends BaseModel {
-  static $columns = ['atendida', 'createdAt', 'id', 'lat', 'lng', 'userId', 'viajeId'] as const
+  static $columns = ['atendida', 'createdAt', 'id', 'lat', 'lng', 'motivo', 'userId', 'viajeId'] as const
   $columns = AlertasEmergenciaSchema.$columns
   @column()
   declare atendida: boolean
@@ -20,6 +20,8 @@ export class AlertasEmergenciaSchema extends BaseModel {
   declare lat: string | null
   @column()
   declare lng: string | null
+  @column()
+  declare motivo: string | null
   @column()
   declare userId: number
   @column()
@@ -183,18 +185,30 @@ export class ConfiguracionPlataformaSchema extends BaseModel {
 }
 
 export class DisputaSchema extends BaseModel {
-  static $columns = ['clienteId', 'conductorId', 'createdAt', 'estado', 'id', 'resueltaAt', 'resultado', 'soporteCliente', 'versionCliente', 'versionConductor', 'viajeId'] as const
+  static $columns = ['clienteId', 'comentarioAdmin', 'conductorId', 'createdAt', 'descripcion', 'estado', 'fotos', 'id', 'numero', 'problema', 'reembolso', 'resueltaAt', 'resultado', 'soporteCliente', 'versionCliente', 'versionConductor', 'viajeId'] as const
   $columns = DisputaSchema.$columns
   @column()
   declare clienteId: number
+  @column()
+  declare comentarioAdmin: string | null
   @column()
   declare conductorId: number
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
   @column()
+  declare descripcion: string | null
+  @column()
   declare estado: string
+  @column()
+  declare fotos: any | null
   @column({ isPrimary: true })
   declare id: number
+  @column()
+  declare numero: string | null
+  @column()
+  declare problema: string | null
+  @column()
+  declare reembolso: string | null
   @column.dateTime()
   declare resueltaAt: DateTime | null
   @column()
@@ -336,7 +350,7 @@ export class NotificacioneSchema extends BaseModel {
 }
 
 export class OfertaSchema extends BaseModel {
-  static $columns = ['conductorId', 'createdAt', 'estado', 'id', 'monto', 'viajeId'] as const
+  static $columns = ['conductorId', 'createdAt', 'estado', 'expiraAt', 'id', 'monto', 'viajeId'] as const
   $columns = OfertaSchema.$columns
   @column()
   declare conductorId: number
@@ -344,6 +358,8 @@ export class OfertaSchema extends BaseModel {
   declare createdAt: DateTime
   @column()
   declare estado: string
+  @column.dateTime()
+  declare expiraAt: DateTime | null
   @column({ isPrimary: true })
   declare id: number
   @column()

@@ -76,8 +76,17 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
       subClient.on('ready', () => logger.info('Redis sub client ready'))
       subClient.on('end', () => logger.warn('Redis sub client ended'))
       subClient.on('close', () => logger.warn('Redis sub client closed'))
-      io.adapter(createAdapter(pubClient, subClient))
-      logger.info('Socket.IO Redis adapter enabled')
+      await subClient.connect().catch((connErr: Error) => {
+        logger.warn({ connErr }, 'Redis subClient connect failed — running without adapter')
+        return
+      })
+      try {
+        io.adapter(createAdapter(pubClient, subClient))
+        logger.info('Socket.IO Redis adapter enabled')
+      } catch (adapterErr) {
+        logger.warn({ adapterErr }, 'Redis adapter constructor failed — single instance mode')
+        await subClient.disconnect().catch(() => {})
+      }
     } else {
       logger.warn('Socket.IO running without Redis adapter (single instance only)')
     }
@@ -137,6 +146,7 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
       socket.leave(`trip:${tripId}`)
     })
 
+    // Retransmitir eventos de finalización entre cliente y conductor
     socket.on('trip:finalize_request', async (data: any) => {
       try {
         const tripId = data?.tripId
@@ -160,6 +170,29 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
         getIO().to(`driver:${conductor.usuarioId}`).emit('trip:finalize_response', data)
       } catch (err) {
         logger.warn({ err }, 'socket: trip:finalize_response forwarding failed')
+      }
+    })
+
+    socket.on('trip:finalize_cancelled', (data: unknown) => {
+      if (data && typeof data === 'object' && 'tripId' in (data as Record<string, unknown>)) {
+        socket.broadcast.emit('trip:finalize_cancelled', data)
+      }
+    })
+
+    socket.on('trip:finalize_response', async (data: any) => {
+      try {
+        const tripId = data?.tripId
+        if (!tripId) return
+        const viaje = await Viaje.find(tripId)
+        if (!viaje || !viaje.conductorId) return
+        const conductor = await Conductor.find(viaje.conductorId)
+        if (!conductor || !conductor.usuarioId) return
+        getIO().to(`driver:${conductor.usuarioId}`).emit('trip:finalize_response', data)
+      } catch (err) {
+        logger.warn({ err }, 'socket: trip:finalize_response forwarding failed')
+    socket.on('trip:finalize_cancelled', (data: unknown) => {
+      if (data && typeof data === 'object' && 'tripId' in (data as Record<string, unknown>)) {
+        socket.broadcast.emit('trip:finalize_cancelled', data)
       }
     })
 
