@@ -605,7 +605,7 @@ export class ViajeSchema extends BaseModel {
   @column.dateTime()
   declare enCursoAt: DateTime | null
   @column()
-  declare estado: string
+  declare estado: string | null
   @column.dateTime()
   declare finalizadoAt: DateTime | null
   @column()

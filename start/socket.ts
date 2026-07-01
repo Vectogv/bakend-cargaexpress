@@ -179,23 +179,6 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
       }
     })
 
-    socket.on('trip:finalize_response', async (data: any) => {
-      try {
-        const tripId = data?.tripId
-        if (!tripId) return
-        const viaje = await Viaje.find(tripId)
-        if (!viaje || !viaje.conductorId) return
-        const conductor = await Conductor.find(viaje.conductorId)
-        if (!conductor || !conductor.usuarioId) return
-        getIO().to(`driver:${conductor.usuarioId}`).emit('trip:finalize_response', data)
-      } catch (err) {
-        logger.warn({ err }, 'socket: trip:finalize_response forwarding failed')
-    socket.on('trip:finalize_cancelled', (data: unknown) => {
-      if (data && typeof data === 'object' && 'tripId' in (data as Record<string, unknown>)) {
-        socket.broadcast.emit('trip:finalize_cancelled', data)
-      }
-    })
-
     socket.on('disconnect', () => {
       logger.info(`Socket disconnected: ${socket.id}`)
       RedisService.removeSocketConnection(user.id)
