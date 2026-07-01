@@ -22,6 +22,9 @@ export default class Oferta extends BaseModel {
   @column()
   declare estado: string
 
+  @column.dateTime()
+  declare expiraAt: DateTime | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

@@ -23,6 +23,9 @@ export default class AlertaEmergencia extends BaseModel {
   declare lng: number | null
 
   @column()
+  declare motivo: string | null
+
+  @column()
   declare atendida: boolean
 
   @column.dateTime({ autoCreate: true })

@@ -47,6 +47,8 @@ export type ScannedRoutes = {
     'trips.offer.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.accept': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'offerId': ParamValue} }
     'trips.offer.reject': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'offerId': ParamValue} }
+    'trips.offer.confirm_arrival': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'trips.offer.confirm_pickup': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.report.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'notifications.notification.index': { paramsTuple?: []; params?: {} }
     'notifications.notification.read': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -253,6 +255,8 @@ export type ScannedRoutes = {
     'trips.offer.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.accept': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'offerId': ParamValue} }
     'trips.offer.reject': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'offerId': ParamValue} }
+    'trips.offer.confirm_arrival': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'trips.offer.confirm_pickup': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.report.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.upload_profile_avatar': { paramsTuple?: []; params?: {} }
     'admin.admin.manual_backup': { paramsTuple?: []; params?: {} }

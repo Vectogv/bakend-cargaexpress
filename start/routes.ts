@@ -134,6 +134,8 @@ router
       .use(middleware.rateLimit({ max: 10, windowMs: 60_000 }))
     router.post(':id/offers/:offerId/accept', [controllers.Offer, 'accept'])
     router.post(':id/offers/:offerId/reject', [controllers.Offer, 'reject'])
+    router.post(':id/confirm-arrival', [controllers.Offer, 'confirmArrival'])
+    router.post(':id/confirm-pickup', [controllers.Offer, 'confirmPickup'])
     router.post(':id/report', [controllers.Report, 'store'])
   })
   .prefix('/api/trips')

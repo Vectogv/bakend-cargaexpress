@@ -264,6 +264,18 @@ const routes = {
     tokens: [{"old":"/api/trips/:id/offers/:offerId/reject","type":0,"val":"api","end":""},{"old":"/api/trips/:id/offers/:offerId/reject","type":0,"val":"trips","end":""},{"old":"/api/trips/:id/offers/:offerId/reject","type":1,"val":"id","end":""},{"old":"/api/trips/:id/offers/:offerId/reject","type":0,"val":"offers","end":""},{"old":"/api/trips/:id/offers/:offerId/reject","type":1,"val":"offerId","end":""},{"old":"/api/trips/:id/offers/:offerId/reject","type":0,"val":"reject","end":""}],
     types: placeholder as Registry['trips.offer.reject']['types'],
   },
+  'trips.offer.confirm_arrival': {
+    methods: ["POST"],
+    pattern: '/api/trips/:id/confirm-arrival',
+    tokens: [{"old":"/api/trips/:id/confirm-arrival","type":0,"val":"api","end":""},{"old":"/api/trips/:id/confirm-arrival","type":0,"val":"trips","end":""},{"old":"/api/trips/:id/confirm-arrival","type":1,"val":"id","end":""},{"old":"/api/trips/:id/confirm-arrival","type":0,"val":"confirm-arrival","end":""}],
+    types: placeholder as Registry['trips.offer.confirm_arrival']['types'],
+  },
+  'trips.offer.confirm_pickup': {
+    methods: ["POST"],
+    pattern: '/api/trips/:id/confirm-pickup',
+    tokens: [{"old":"/api/trips/:id/confirm-pickup","type":0,"val":"api","end":""},{"old":"/api/trips/:id/confirm-pickup","type":0,"val":"trips","end":""},{"old":"/api/trips/:id/confirm-pickup","type":1,"val":"id","end":""},{"old":"/api/trips/:id/confirm-pickup","type":0,"val":"confirm-pickup","end":""}],
+    types: placeholder as Registry['trips.offer.confirm_pickup']['types'],
+  },
   'trips.report.store': {
     methods: ["POST"],
     pattern: '/api/trips/:id/report',

@@ -41,7 +41,7 @@ export default class OfferController {
     if (!viaje) {
       return response.status(404).send({ error: 'Viaje no encontrado' })
     }
-    if (viaje.estado !== 'buscando_conductor') {
+    if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
       return response.status(400).send({ error: 'El viaje ya no acepta ofertas' })
     }
 
@@ -66,7 +66,21 @@ export default class OfferController {
       conductorId: conductor.id,
       monto,
       estado: 'pendiente',
+      expiraAt: DateTime.now().plus({ seconds: 28 }),
     })
+
+    // Si es la primera oferta, pasar a 'pendiente'
+    if (viaje.estado === 'buscando_conductor') {
+      viaje.estado = 'pendiente'
+      await viaje.save()
+      try {
+        const ioPrev = getIO()
+        ioPrev.to(`client:${viaje.clienteId}`).emit('trip:status_changed', {
+          id: String(viaje.id),
+          estado: 'pendiente',
+        })
+      } catch (_e) { /* no crítico */ }
+    }
 
     try {
       const io = getIO()
@@ -82,6 +96,23 @@ export default class OfferController {
           placa: conductor.placa,
           tipoVehiculo: conductor.tipoVehiculo,
         },
+        createdAt: oferta.createdAt ? oferta.createdAt.toISO() : new Date().toISOString(),
+      })
+
+      // Alias del documento
+      io.to(`client:${viaje.clienteId}`).emit('trip:offer_received', {
+        id: String(oferta.id),
+        viajeId: String(oferta.viajeId),
+        monto: oferta.monto,
+        conductor: {
+          id: String(conductor.id),
+          nombre: `${datosConductor.nombre} ${datosConductor.apellido}`.trim() || 'Sin nombre',
+          foto: conductor.fotoConductor,
+          calificacion: conductor.calificacion,
+          placa: conductor.placa,
+          tipoVehiculo: conductor.tipoVehiculo,
+        },
+        expiresAt: oferta.expiraAt ? oferta.expiraAt.toISO() : null,
         createdAt: oferta.createdAt ? oferta.createdAt.toISO() : new Date().toISOString(),
       })
     } catch (e) {
@@ -155,6 +186,11 @@ export default class OfferController {
       return response.status(403).send({ error: 'Este viaje no te pertenece' })
     }
 
+    // Verificar que el viaje sigue aceptando ofertas
+    if (!['buscando_conductor', 'pendiente', 'ofertas_recibidas'].includes(viaje.estado)) {
+      return response.status(400).send({ error: 'El viaje ya no acepta ofertas' })
+    }
+
     const oferta = await Oferta.query()
       .where('id', params.offerId)
       .where('viaje_id', viaje.id)
@@ -183,7 +219,33 @@ export default class OfferController {
     await viaje.save()
 
     const io = getIO()
+    io.to(`client:${viaje.clienteId}`).emit('trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'aceptado',
+    })
+
+    io.to(`client:${viaje.clienteId}`).emit('offer:accepted', {
+      viajeId: String(viaje.id),
+      ofertaId: String(oferta.id),
+      monto: oferta.monto,
+      conductor: {
+        id: String(oferta.conductorId),
+        nombre: `${oferta.conductor.usuario?.nombre || ''} ${oferta.conductor.usuario?.apellido || ''}`.trim() || 'Sin nombre',
+        tipoVehiculo: oferta.conductor.tipoVehiculo,
+        placa: oferta.conductor.placa,
+        rating: oferta.conductor.calificacion,
+      },
+      estado: 'aceptado',
+    })
+
     io.to(`driver:${oferta.conductor.usuarioId}`).emit('offer:accepted', {
+      viajeId: String(viaje.id),
+      ofertaId: String(oferta.id),
+      monto: oferta.monto,
+      estado: 'aceptado',
+    })
+
+    io.to(`driver:${oferta.conductor.usuarioId}`).emit('trip:offer_accepted', {
       viajeId: String(viaje.id),
       ofertaId: String(oferta.id),
       monto: oferta.monto,
@@ -238,6 +300,104 @@ export default class OfferController {
       conductorId: String(oferta.conductorId),
       precioFinal: viaje.precioFinal,
     }
+  }
+
+  /**
+   * Confirma que el conductor va en camino (transicion de conductor_aceptado a conductor_en_camino)
+   */
+  async confirmArrival({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const viaje = await Viaje.findOrFail(params.id)
+
+    if (viaje.conductorId === null) {
+      return response.status(403).send({ error: 'El viaje no tiene conductor asignado' })
+    }
+
+    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    if (viaje.conductorId !== conductor.id) {
+      return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
+    }
+
+    if (!['aceptado', 'conductor_aceptado'].includes(viaje.estado)) {
+      return response.status(422).send({ error: `El viaje debe estar en 'aceptado' o 'conductor_aceptado' (actual: ${viaje.estado})` })
+    }
+
+    // Si venía de 'aceptado', registramos el paso intermedio
+    if (viaje.estado === 'aceptado') {
+      viaje.estado = 'conductor_aceptado'
+      await viaje.save()
+    }
+
+    viaje.estado = 'conductor_en_camino'
+    await viaje.save()
+
+    try {
+      const io = getIO()
+      io.to(`client:${viaje.clienteId}`).emit('trip:status_changed', {
+        id: String(viaje.id),
+        estado: 'conductor_en_camino',
+      })
+      io.to(`client:${viaje.clienteId}`).emit('driver:on_the_way', {
+        viajeId: String(viaje.id),
+      })
+    } catch (_e) { /* no crítico */ }
+
+    const clienteUser = await User.find(viaje.clienteId)
+    if (clienteUser?.fcmToken) {
+      await sendToToken(
+        clienteUser.fcmToken,
+        'Conductor en camino',
+        'Tu conductor está en camino al punto de recogida'
+      ).catch(() => {})
+    }
+
+    return { id: String(viaje.id), estado: viaje.estado }
+  }
+
+  /**
+   * Confirma que el conductor ha llegado al origen (transicion de conductor_en_camino a conductor_llegada)
+   */
+  async confirmPickup({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const viaje = await Viaje.findOrFail(params.id)
+
+    if (viaje.conductorId === null) {
+      return response.status(403).send({ error: 'El viaje no tiene conductor asignado' })
+    }
+
+    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    if (viaje.conductorId !== conductor.id) {
+      return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
+    }
+
+    if (viaje.estado !== 'conductor_en_camino') {
+      return response.status(422).send({ error: `El viaje debe estar en 'conductor_en_camino' (actual: ${viaje.estado})` })
+    }
+
+    viaje.estado = 'conductor_llegada'
+    await viaje.save()
+
+    try {
+      const io = getIO()
+      io.to(`client:${viaje.clienteId}`).emit('trip:status_changed', {
+        id: String(viaje.id),
+        estado: 'conductor_llegada',
+      })
+      io.to(`client:${viaje.clienteId}`).emit('driver:arrived', {
+        viajeId: String(viaje.id),
+      })
+    } catch (_e) { /* no crítico */ }
+
+    const clienteUser = await User.find(viaje.clienteId)
+    if (clienteUser?.fcmToken) {
+      await sendToToken(
+        clienteUser.fcmToken,
+        'El conductor llegó',
+        'Tu conductor ha llegado al punto de recogida'
+      ).catch(() => {})
+    }
+
+    return { id: String(viaje.id), estado: viaje.estado }
   }
 
   async reject({ auth, params, response }: HttpContext) {

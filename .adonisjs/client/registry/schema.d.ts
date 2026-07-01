@@ -523,6 +523,30 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['reject']>>>
     }
   }
+  'trips.offer.confirm_arrival': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/confirm-arrival'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['confirmArrival']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['confirmArrival']>>>
+    }
+  }
+  'trips.offer.confirm_pickup': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/confirm-pickup'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['confirmPickup']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/offer_controller').default['confirmPickup']>>>
+    }
+  }
   'trips.report.store': {
     methods: ["POST"]
     pattern: '/api/trips/:id/report'

@@ -74,8 +74,17 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
       subClient.on('ready', () => logger.info('Redis sub client ready'))
       subClient.on('end', () => logger.warn('Redis sub client ended'))
       subClient.on('close', () => logger.warn('Redis sub client closed'))
-      io.adapter(createAdapter(pubClient, subClient))
-      logger.info('Socket.IO Redis adapter enabled')
+      await subClient.connect().catch((connErr: Error) => {
+        logger.warn({ connErr }, 'Redis subClient connect failed — running without adapter')
+        return
+      })
+      try {
+        io.adapter(createAdapter(pubClient, subClient))
+        logger.info('Socket.IO Redis adapter enabled')
+      } catch (adapterErr) {
+        logger.warn({ adapterErr }, 'Redis adapter constructor failed — single instance mode')
+        await subClient.disconnect().catch(() => {})
+      }
     } else {
       logger.warn('Socket.IO running without Redis adapter (single instance only)')
     }
@@ -133,6 +142,26 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
 
     socket.on('leave:trip', (tripId: number | string) => {
       socket.leave(`trip:${tripId}`)
+    })
+
+    // Retransmitir eventos de finalización entre cliente y conductor
+    socket.on('trip:finalize_request', (data: unknown) => {
+      if (data && typeof data === 'object' && 'tripId' in (data as Record<string, unknown>)) {
+        const tripId = (data as Record<string, unknown>).tripId
+        socket.broadcast.emit('trip:finalize_request', data)
+      }
+    })
+
+    socket.on('trip:finalize_response', (data: unknown) => {
+      if (data && typeof data === 'object' && 'tripId' in (data as Record<string, unknown>)) {
+        socket.broadcast.emit('trip:finalize_response', data)
+      }
+    })
+
+    socket.on('trip:finalize_cancelled', (data: unknown) => {
+      if (data && typeof data === 'object' && 'tripId' in (data as Record<string, unknown>)) {
+        socket.broadcast.emit('trip:finalize_cancelled', data)
+      }
     })
 
     socket.on('disconnect', () => {

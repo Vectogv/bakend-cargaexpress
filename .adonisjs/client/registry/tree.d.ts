@@ -65,6 +65,8 @@ export interface ApiDefinition {
       store: typeof routes['trips.offer.store']
       accept: typeof routes['trips.offer.accept']
       reject: typeof routes['trips.offer.reject']
+      confirmArrival: typeof routes['trips.offer.confirm_arrival']
+      confirmPickup: typeof routes['trips.offer.confirm_pickup']
     }
     report: {
       store: typeof routes['trips.report.store']
