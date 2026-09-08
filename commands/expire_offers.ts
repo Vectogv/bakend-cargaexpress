@@ -1,6 +1,5 @@
 import { BaseCommand } from '@adonisjs/core/ace'
 import Oferta from '#models/oferta'
-import Viaje from '#models/viaje'
 import { DateTime } from 'luxon'
 import { getIO } from '#start/socket'
 

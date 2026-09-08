@@ -1051,6 +1051,27 @@ export default class AdminController {
     })
   }
 
+  async assignLeader({ params, request, response, serialize }: HttpContext) {
+    const user = await User.find(params.id)
+    if (!user) {
+      return response
+        .status(404)
+        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+    }
+
+    // Asignar/quitar rol de líder de conductores
+    const { esLider } = request.only(['esLider'])
+    if (esLider !== undefined) {
+      user.esLider = esLider === true || esLider === 'true'
+    }
+    await user.save()
+
+    return serialize.withoutWrapping({
+      id: user.id,
+      esLider: user.esLider,
+    })
+  }
+
   async approveComunicado({ params, response, serialize }: HttpContext) {
     const comunicado = await Comunicado.find(params.id)
     if (!comunicado) {

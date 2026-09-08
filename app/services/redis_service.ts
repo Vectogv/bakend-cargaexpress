@@ -1,4 +1,4 @@
-import { default as Ioredis } from 'ioredis'
+import { Redis as Ioredis } from 'ioredis'
 import logger from '@adonisjs/core/services/logger'
 import env from '#start/env'
 
@@ -117,11 +117,12 @@ const RedisService = {
   LOCK_PREFIX: 'lock:',
   LOCK_TTL_MS: 5_000,
 
-  async acquireLock(resource: string, ttlMs = this.LOCK_TTL_MS): Promise<boolean> {
+  async acquireLock(resource: string, ttlMs?: number): Promise<boolean> {
+    const effectiveTtlMs = ttlMs ?? this.LOCK_TTL_MS
     const c = getClient()
     if (c) {
       try {
-        const result = await c.set(`${this.LOCK_PREFIX}${resource}`, '1', 'PX', ttlMs, 'NX')
+        const result = await c.set(`${this.LOCK_PREFIX}${resource}`, '1', 'PX', effectiveTtlMs, 'NX')
         return result === 'OK'
       } catch {
         return true // lock degraded: allow pass-through
@@ -130,7 +131,7 @@ const RedisService = {
     // In-memory fallback: simple optimistic lock
     const key = `${this.LOCK_PREFIX}${resource}`
     if (fallbackCache.has(key)) return false
-    fallbackCache.set(key, { value: '1', expiresAt: Date.now() + ttlMs })
+    fallbackCache.set(key, { value: '1', expiresAt: Date.now() + effectiveTtlMs })
     return true
   },
 
@@ -148,8 +149,9 @@ const RedisService = {
     try { return JSON.parse(raw) as T } catch { return null }
   },
 
-  async cacheSet(key: string, value: any, ttlSeconds = this.CACHE_DEFAULT_TTL): Promise<void> {
-    await this.set(`${this.CACHE_PREFIX}${key}`, JSON.stringify(value), ttlSeconds)
+  async cacheSet(key: string, value: any, ttlSeconds?: number): Promise<void> {
+    const effectiveTtl = ttlSeconds ?? this.CACHE_DEFAULT_TTL
+    await this.set(`${this.CACHE_PREFIX}${key}`, JSON.stringify(value), effectiveTtl)
   },
 
   async cacheDel(key: string): Promise<void> {

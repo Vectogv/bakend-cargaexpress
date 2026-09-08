@@ -16,8 +16,8 @@ import RedisService from '#services/redis_service'
 
 export default class DriverController {
   @ApiOperation({
-    summary: 'Update driver status',
-    description: 'Sets the driver online/offline status',
+    summary: 'Actualizar estado del conductor',
+    description: 'Establece el estado en línea/fuera de línea del conductor',
   })
   @ApiBody({ type: () => driverStatusValidator })
   @ApiResponse({ type: 'object' })
@@ -44,8 +44,8 @@ export default class DriverController {
   }
 
   @ApiOperation({
-    summary: 'Get driver earnings',
-    description: 'Returns driver earnings for today, week, month, and total',
+    summary: 'Obtener ganancias del conductor',
+    description: 'Devuelve las ganancias del conductor de hoy, la semana, el mes y el total',
   })
   @ApiResponse({ type: 'object' })
   async earnings({ auth, serialize }: HttpContext) {
@@ -117,8 +117,8 @@ export default class DriverController {
   }
 
   @ApiOperation({
-    summary: 'Get driver stats',
-    description: 'Returns driver statistics like trips, active hours, rating',
+    summary: 'Obtener estadísticas del conductor',
+    description: 'Devuelve estadísticas del conductor como viajes, horas activas y calificación',
   })
   @ApiResponse({ type: 'object' })
   async stats({ auth, serialize }: HttpContext) {
@@ -139,7 +139,7 @@ export default class DriverController {
     return serialize.withoutWrapping(data)
   }
 
-  @ApiOperation({ summary: 'Upload vehicle photo', description: 'Uploads a photo of the vehicle' })
+  @ApiOperation({ summary: 'Subir foto del vehículo', description: 'Sube una foto del vehículo' })
   @ApiResponse({ type: 'object' })
   async vehiclePhoto({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -164,8 +164,8 @@ export default class DriverController {
   }
 
   @ApiOperation({
-    summary: 'Update driver location',
-    description: 'Updates the driver current location and logs to ubicaciones_drivers',
+    summary: 'Actualizar ubicación del conductor',
+    description: 'Actualiza la ubicación actual del conductor y la registra en ubicaciones_drivers',
   })
   @ApiBody({ type: () => driverLocationValidator })
   @ApiResponse({ type: 'object' })
@@ -264,8 +264,8 @@ export default class DriverController {
   }
 
   @ApiOperation({
-    summary: 'Get driver today stats',
-    description: 'Returns earnings, trips, and km for today',
+    summary: 'Obtener estadísticas del día',
+    description: 'Devuelve las ganancias, viajes y kilómetros de hoy',
   })
   @ApiResponse({ type: 'object' })
   async todayStats({ auth, serialize }: HttpContext) {
@@ -306,7 +306,7 @@ export default class DriverController {
     return serialize.withoutWrapping(data)
   }
 
-  @ApiOperation({ summary: 'Upload driver photo', description: 'Uploads a photo of the driver' })
+  @ApiOperation({ summary: 'Subir foto del conductor', description: 'Sube una foto del conductor' })
   @ApiResponse({ type: 'object' })
   async driverPhoto({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -434,12 +434,6 @@ export default class DriverController {
     const user = auth.getUserOrFail()
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
-    const doc = new PDFDocument({ margin: 50 })
-
-    response.response.setHeader('Content-Type', 'application/pdf')
-    response.response.setHeader('Content-Disposition', 'attachment; filename=ganancias.pdf')
-    doc.pipe(response.response)
-
     const periodo = request.input('periodo', 'todo')
     const now = DateTime.now()
     let titulo = 'Historial completo'
@@ -457,6 +451,8 @@ export default class DriverController {
     const totalBruto = ganancias.reduce((s, g) => s + Number(g.montoBruto || 0), 0)
     const totalComision = ganancias.reduce((s, g) => s + Number(g.comision || 0), 0)
     const totalNeto = ganancias.reduce((s, g) => s + Number(g.montoNeto || 0), 0)
+
+    const doc = new PDFDocument({ margin: 50 })
 
     doc.fontSize(18).text('CargaExpress', { align: 'center' })
     doc.fontSize(14).text(`Reporte de Ganancias - ${titulo}`, { align: 'center' })
@@ -503,5 +499,9 @@ export default class DriverController {
     }
 
     doc.end()
+
+    response.type('application/pdf')
+    response.header('Content-Disposition', 'attachment; filename=ganancias.pdf')
+    return response.stream(doc)
   }
 }

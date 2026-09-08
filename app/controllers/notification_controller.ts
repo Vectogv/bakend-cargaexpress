@@ -5,8 +5,8 @@ import { ApiOperation, ApiResponse } from '@foadonis/openapi/decorators'
 
 export default class NotificationController {
   @ApiOperation({
-    summary: 'List notifications',
-    description: 'Returns all notifications for the authenticated user',
+    summary: 'Listar notificaciones',
+    description: 'Devuelve todas las notificaciones del usuario autenticado',
   })
   @ApiResponse({ type: 'array' })
   async index({ auth, request, serialize }: HttpContext) {
@@ -24,8 +24,8 @@ export default class NotificationController {
   }
 
   @ApiOperation({
-    summary: 'Mark notification as read',
-    description: 'Marks a specific notification as read',
+    summary: 'Marcar notificación como leída',
+    description: 'Marca una notificación específica como leída',
   })
   @ApiResponse({ type: 'object' })
   async read({ params, serialize }: HttpContext) {

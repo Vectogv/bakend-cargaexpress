@@ -2,7 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { ApiOperation, ApiResponse } from '@foadonis/openapi/decorators'
 
 export default class SupportController {
-  @ApiOperation({ summary: 'Get help info', description: 'Returns FAQ and contact information' })
+  @ApiOperation({ summary: 'Obtener información de ayuda', description: 'Devuelve las preguntas frecuentes (FAQ) y la información de contacto' })
   @ApiResponse({ type: 'object' })
   async help({ serialize }: HttpContext) {
     return serialize.withoutWrapping({
@@ -26,8 +26,8 @@ export default class SupportController {
   }
 
   @ApiOperation({
-    summary: 'Get emergency numbers',
-    description: 'Returns emergency and support phone numbers',
+    summary: 'Obtener números de emergencia',
+    description: 'Devuelve los números de teléfono de emergencia y soporte',
   })
   @ApiResponse({ type: 'object' })
   async emergency({ serialize }: HttpContext) {

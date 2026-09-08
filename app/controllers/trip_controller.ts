@@ -18,7 +18,7 @@ import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine
 import TripFinalizationService from '#services/trip_finalization_service'
 
 export default class TripController {
-  @ApiOperation({ summary: 'Request a trip', description: 'Creates a new trip request' })
+  @ApiOperation({ summary: 'Solicitar un viaje', description: 'Crea una nueva solicitud de viaje' })
   @ApiBody({ type: () => tripRequestValidator })
   @ApiResponse({ type: 'object' })
   async request({ auth, request, serialize, response }: HttpContext) {
@@ -170,8 +170,8 @@ export default class TripController {
   }
 
   @ApiOperation({
-    summary: 'Get nearby trips',
-    description: 'Returns trips near a given location within a radius. Uses Haversine formula with in-memory filtering.',
+    summary: 'Obtener viajes cercanos',
+    description: 'Devuelve los viajes cerca de una ubicación dentro de un radio. Usa la fórmula de Haversine con filtrado en memoria.',
   })
   @ApiResponse({ type: 'array' })
   async nearby({ auth, request, serialize, response }: HttpContext) {
@@ -204,8 +204,8 @@ export default class TripController {
   }
 
   @ApiOperation({
-    summary: 'Get active trip',
-    description: 'Returns the currently active trip for the authenticated user',
+    summary: 'Obtener viaje activo',
+    description: 'Devuelve el viaje activo actual del usuario autenticado',
   })
   @ApiResponse({ type: 'object' })
   async active({ auth, serialize, response }: HttpContext) {
@@ -236,7 +236,7 @@ export default class TripController {
     return serialize.withoutWrapping(this.formatViajeResponse(viaje))
   }
 
-  @ApiOperation({ summary: 'Accept a trip (DEPRECATED)', description: 'DEPRECATED: usar POST /trips/:id/offers/:offerId/accept. Este endpoint será eliminado en la próxima versión mayor.' })
+  @ApiOperation({ summary: 'Aceptar un viaje (OBSOLETO)', description: 'OBSOLETO: usar POST /trips/:id/offers/:offerId/accept. Este endpoint será eliminado en la próxima versión mayor.' })
   @ApiResponse({ type: 'object' })
   async accept({ params, serialize, auth, response }: HttpContext) {
     response.header('Deprecation', 'true')
@@ -377,8 +377,8 @@ export default class TripController {
   }
 
   @ApiOperation({
-    summary: 'Start trip (pickup)',
-    description: 'Changes trip to en_curso after driver picks up cargo',
+    summary: 'Iniciar viaje (recogida)',
+    description: 'Cambia el viaje a en_curso después de que el conductor recoge la carga',
   })
   @ApiResponse({ type: 'object' })
   async startTrip({ auth, params, serialize, response }: HttpContext) {
@@ -422,7 +422,7 @@ export default class TripController {
     })
   }
 
-  @ApiOperation({ summary: 'Decline a trip', description: 'Driver declines a pending trip' })
+  @ApiOperation({ summary: 'Rechazar un viaje', description: 'El conductor rechaza un viaje pendiente' })
   @ApiResponse({ type: 'object' })
   async decline({ auth, params, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -461,7 +461,7 @@ export default class TripController {
     return serialize.withoutWrapping({ id: String(viaje.id), estado: viaje.estado })
   }
 
-  @ApiOperation({ summary: 'Complete a trip', description: 'Marks a trip as completed' })
+  @ApiOperation({ summary: 'Completar un viaje', description: 'Marca un viaje como completado' })
   @ApiBody({ type: () => tripCompleteValidator })
   @ApiResponse({ type: 'object' })
   async complete({ auth, params, request, serialize, response }: HttpContext) {
@@ -524,8 +524,8 @@ export default class TripController {
   }
 
   @ApiOperation({
-    summary: 'Finalize delivery',
-    description: 'Confirms delivery, sets driver online, records payment. Idempotent — safe to retry.',
+    summary: 'Finalizar entrega',
+    description: 'Confirma la entrega, pone al conductor en línea y registra el pago. Idempotente: seguro de reintentar.',
   })
   @ApiBody({ type: () => tripCompleteValidator })
   @ApiResponse({ type: 'object' })
@@ -621,7 +621,7 @@ export default class TripController {
     })
   }
 
-  @ApiOperation({ summary: 'Cancel a trip', description: 'Cancels a trip with an optional reason' })
+  @ApiOperation({ summary: 'Cancelar un viaje', description: 'Cancela un viaje con un motivo opcional' })
   @ApiBody({ type: () => tripCancelValidator })
   @ApiResponse({ type: 'object' })
   async cancel({ params, request, serialize, auth, response }: HttpContext) {
@@ -721,7 +721,7 @@ export default class TripController {
     })
   }
 
-  @ApiOperation({ summary: 'Request cancellation', description: 'Conductor or client requests trip cancellation when en_curso. Admin must approve.' })
+  @ApiOperation({ summary: 'Solicitar cancelación', description: 'El conductor o el cliente solicitan la cancelación del viaje cuando está en_curso. El administrador debe aprobarla.' })
   @ApiResponse({ type: 'object' })
   async requestCancellation({ auth, params, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -789,8 +789,8 @@ export default class TripController {
   }
 
   @ApiOperation({
-    summary: 'Get trip history',
-    description: 'Returns paginated trip history for the authenticated user',
+    summary: 'Obtener historial de viajes',
+    description: 'Devuelve el historial de viajes paginado del usuario autenticado',
   })
   @ApiResponse({ type: 'array' })
   async history({ auth, request, serialize }: HttpContext) {
@@ -831,8 +831,8 @@ export default class TripController {
   }
 
   @ApiOperation({
-    summary: 'Get trip details',
-    description: 'Returns details of a specific trip by ID',
+    summary: 'Obtener detalles del viaje',
+    description: 'Devuelve los detalles de un viaje específico por ID',
   })
   @ApiResponse({ type: 'object' })
   async show({ auth, params, serialize, response }: HttpContext) {

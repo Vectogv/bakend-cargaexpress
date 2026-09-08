@@ -85,7 +85,11 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
         logger.info('Socket.IO Redis adapter enabled')
       } catch (adapterErr) {
         logger.warn({ adapterErr }, 'Redis adapter constructor failed — single instance mode')
-        await subClient.disconnect().catch(() => {})
+        try {
+          subClient.disconnect()
+        } catch {
+          // ignore
+        }
       }
     } else {
       logger.warn('Socket.IO running without Redis adapter (single instance only)')

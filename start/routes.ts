@@ -3,8 +3,6 @@ import router from '@adonisjs/core/services/router'
 import { controllers } from '#generated/controllers'
 import app from '@adonisjs/core/services/app'
 import fs from 'node:fs'
-import AutoSwagger from 'adonis-autoswagger'
-import swagger from '#config/swagger'
 
 router.get('/', () => {
   return { hello: 'world' }
@@ -303,12 +301,17 @@ router
   .as('emergency.trigger')
   .use(middleware.auth())
 
-router.get('/swagger', async () => {
-  return AutoSwagger.default.docs(router.toJSON(), swagger)
+// Documentación OpenAPI generada desde los decorators @foadonis/openapi
+// (app/controllers/*.ts y app/models/*.ts) — descripciones en español.
+router.get('/swagger', async ({ response }) => {
+  const openapi = await app.container.make('openapi')
+  const document = await openapi.buildDocument()
+  return response.header('Content-Type', 'application/json').send(JSON.stringify(document))
 })
 
-router.get('/docs', async () => {
-  return AutoSwagger.default.scalar('/swagger')
+router.get('/docs', async ({ response }) => {
+  const openapi = await app.container.make('openapi')
+  return response.header('Content-Type', 'text/html').send(openapi.generateUi('/swagger'))
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

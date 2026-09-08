@@ -2,7 +2,10 @@ import { Env } from '@adonisjs/core/env'
 
 export default await Env.create(new URL('../', import.meta.url), {
   NODE_ENV: Env.schema.enum(['development', 'production', 'test'] as const),
-  PORT: Env.schema.number({ default: 3333 }),
+  // Nota: el default real lo aplica bin/server.ts (process.env.PORT = '3333').
+  // `{ default }` no está soportado por @adonisjs/env v7 (validator-lite 2.x)
+  // y haría fallar la validación en tests/consola si PORT no está definido.
+  PORT: Env.schema.number.optional(),
   HOST: Env.schema.string({ format: 'host' }),
   LOG_LEVEL: Env.schema.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const),
 
@@ -11,6 +14,7 @@ export default await Env.create(new URL('../', import.meta.url), {
 
   SESSION_DRIVER: Env.schema.enum(['cookie', 'memory', 'database'] as const),
 
+  DB_CONNECTION: Env.schema.enum.optional(['mysql', 'sqlite'] as const),
   DB_HOST: Env.schema.string({ format: 'host' }),
   DB_PORT: Env.schema.number(),
   DB_USER: Env.schema.string(),

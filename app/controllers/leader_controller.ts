@@ -1,11 +1,9 @@
-import User from '#models/user'
 import Conductor from '#models/conductor'
 import Comunicado from '#models/comunicado'
 import Aviso from '#models/aviso'
 import ReporteModerador from '#models/reporte_moderador'
 import type { HttpContext } from '@adonisjs/core/http'
-import { sendToMultiple } from '#services/push_notification_service'
-import { emitToAdmin, getIO } from '#start/socket'
+import { emitToAdmin } from '#start/socket'
 
 export default class LeaderController {
   // ──────────────────────── AVISOS ────────────────────────

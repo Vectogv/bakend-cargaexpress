@@ -7,8 +7,8 @@ import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators
 
 export default class ProfileController {
   @ApiOperation({
-    summary: 'Get user profile',
-    description: 'Returns the authenticated user profile with conductor info',
+    summary: 'Obtener perfil del usuario',
+    description: 'Devuelve el perfil del usuario autenticado con información del conductor',
   })
   @ApiResponse({ type: 'object' })
   async show({ auth, serialize }: HttpContext) {
@@ -57,8 +57,8 @@ export default class ProfileController {
   }
 
   @ApiOperation({
-    summary: 'Update user profile',
-    description: 'Updates the authenticated user profile fields',
+    summary: 'Actualizar perfil del usuario',
+    description: 'Actualiza los campos del perfil del usuario autenticado',
   })
   @ApiBody({ type: () => updateProfileValidator })
   @ApiResponse({ type: 'object' })
@@ -105,7 +105,7 @@ export default class ProfileController {
     })
   }
 
-  @ApiOperation({ summary: 'Upload avatar', description: 'Uploads a new profile avatar image' })
+  @ApiOperation({ summary: 'Subir avatar', description: 'Sube una nueva imagen de avatar del perfil' })
   @ApiResponse({ type: 'object' })
   async avatar({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()

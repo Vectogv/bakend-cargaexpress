@@ -11,8 +11,8 @@ import { emitToAdmin } from '#start/socket'
 
 export default class AuthController {
   @ApiOperation({
-    summary: 'Register a new user',
-    description: 'Creates a new user account and optionally a conductor profile',
+    summary: 'Registrar un nuevo usuario',
+    description: 'Crea una cuenta de usuario nueva y, opcionalmente, un perfil de conductor',
   })
   @ApiBody({ type: () => registerValidator })
   @ApiResponse({ type: 'object' })
@@ -90,8 +90,8 @@ export default class AuthController {
   }
 
   @ApiOperation({
-    summary: 'User login',
-    description: 'Authenticates user and returns access token',
+    summary: 'Iniciar sesión',
+    description: 'Autentica al usuario y devuelve un token de acceso',
   })
   @ApiBody({ type: () => loginValidator })
   @ApiResponse({ type: 'object' })
@@ -140,8 +140,8 @@ export default class AuthController {
   }
 
   @ApiOperation({
-    summary: 'Refresh access token',
-    description: 'Refreshes an expired access token using a refresh token',
+    summary: 'Renovar token de acceso',
+    description: 'Renueva un token de acceso expirado usando un refresh token',
   })
   @ApiBody({ type: () => refreshTokenValidator })
   @ApiResponse({ type: 'object' })

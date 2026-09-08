@@ -28,16 +28,20 @@ export default class extends BaseSchema {
     // Primero limpiar posibles duplicados históricos antes de agregar el unique
     // (en producción esto debería hacerse con cuidado; aquí dejamos la migración
     //  segura asumiendo que el sistema está en estado limpio al deployar)
+    // Sintaxis portable MySQL/SQLite: borra las filas cuyo id no sea el
+    // MIN(id) de su grupo por viaje_id (subconsulta derivada para evitar
+    // el error de "target table in FROM clause" en ambos dialectos).
     await this.db.rawQuery(`
-      DELETE g FROM ganancias g
-      LEFT JOIN (
-        SELECT MIN(id) AS keep_id
-        FROM ganancias
-        WHERE viaje_id IS NOT NULL
-        GROUP BY viaje_id
-      ) keepper ON keepper.keep_id = g.id
-      WHERE keepper.keep_id IS NULL
-      AND g.viaje_id IS NOT NULL
+      DELETE FROM ganancias
+      WHERE viaje_id IS NOT NULL
+      AND id NOT IN (
+        SELECT keep_id FROM (
+          SELECT MIN(id) AS keep_id
+          FROM ganancias
+          WHERE viaje_id IS NOT NULL
+          GROUP BY viaje_id
+        ) AS keepper
+      )
     `)
 
     this.schema.alterTable(this.tableName, (table) => {

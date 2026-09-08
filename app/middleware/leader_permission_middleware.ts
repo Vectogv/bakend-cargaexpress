@@ -6,7 +6,7 @@ export interface LeaderPermissionConfig {
 }
 
 export default class LeaderPermissionMiddleware {
-  async handle(ctx: HttpContext, next: NextFn, args: LeaderPermissionConfig) {
+  async handle(ctx: HttpContext, next: NextFn, _args: LeaderPermissionConfig) {
     const user = ctx.auth.user
 
     if (!user) {

@@ -76,6 +76,9 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
   @column()
   declare zonaModerador: string | null
 
+  @column()
+  declare esLider: boolean
+
   get initials() {
     const nombre = this.nombre || ''
     const apellido = this.apellido || ''
