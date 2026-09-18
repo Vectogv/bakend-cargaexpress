@@ -45,6 +45,7 @@ export default class AuthController {
         placa: data.placa!,
         tipoVehiculo: data.tipoVehiculo || null,
         capacidad: data.capacidad || null,
+        ciudad: data.ciudad || null,
         estadoVerificacion: 'pendiente',
       })
     }
@@ -84,6 +85,8 @@ export default class AuthController {
       apellido: user.apellido,
       email: user.email,
       rol: user.rol,
+      esModerador: Boolean(user.esModerador),
+      zonaModerador: user.zonaModerador,
       token: token.value!.release(),
       refreshToken: refreshTokenValue,
     })
@@ -122,6 +125,8 @@ export default class AuthController {
       apellido: user.apellido,
       email: user.email,
       rol: user.rol,
+      esModerador: Boolean(user.esModerador),
+      zonaModerador: user.zonaModerador,
       token: token.value!.release(),
       refreshToken: refreshTokenValue,
     })
@@ -145,7 +150,7 @@ export default class AuthController {
   })
   @ApiBody({ type: () => refreshTokenValidator })
   @ApiResponse({ type: 'object' })
-  async refreshToken({ request, serialize }: HttpContext) {
+  async refreshToken({ request, serialize, response }: HttpContext) {
     const { refreshToken } = await request.validateUsing(refreshTokenValidator)
 
     const row = await db
@@ -155,7 +160,9 @@ export default class AuthController {
       .first()
 
     if (!row) {
-      return serialize.withoutWrapping({ error: 'Invalid or expired refresh token' })
+      return response
+        .status(401)
+        .json({ error: 'Invalid or expired refresh token' })
     }
 
     await db.from('refresh_tokens').where('id', row.id).delete()

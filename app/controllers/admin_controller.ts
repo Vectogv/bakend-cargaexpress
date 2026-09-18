@@ -80,6 +80,9 @@ export default class AdminController {
         'edad',
         'avatar',
         'suspendido',
+        'es_moderador',
+        'zona_moderador',
+        'es_lider',
         'created_at'
       )
       .orderBy('created_at', 'desc')
@@ -96,6 +99,9 @@ export default class AdminController {
         edad: u.edad,
         avatar: u.avatar,
         suspendido: u.suspendido,
+        esModerador: u.esModerador,
+        zonaModerador: u.zonaModerador,
+        esLider: u.esLider,
         createdAt: u.createdAt?.toISO(),
       }))
     )
@@ -119,10 +125,14 @@ export default class AdminController {
         placa: d.placa,
         tipoVehiculo: d.tipoVehiculo,
         capacidad: d.capacidad,
+        ciudad: d.ciudad,
         online: d.online,
         calificacion: d.calificacion,
         totalViajes: d.totalViajes,
         horasActivo: d.horasActivo,
+        ultimaUbicacion: d.ultimaUbicacionLat
+          ? { lat: d.ultimaUbicacionLat, lng: d.ultimaUbicacionLng }
+          : null,
         estadoVerificacion: d.estadoVerificacion,
         fotoCedula: d.fotoCedula,
         fotoLicencia: d.fotoLicencia,
@@ -150,7 +160,7 @@ export default class AdminController {
       .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'email'))
       .preload('conductor', (q) =>
         q
-          .select('id', 'placa', 'tipoVehiculo')
+          .select('id', 'placa', 'tipoVehiculo', 'usuario_id')
           .preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido'))
       )
       .orderBy('created_at', 'desc')
@@ -200,7 +210,7 @@ export default class AdminController {
     const result = await Ganancia.query()
       .preload('conductor', (q) =>
         q
-          .select('id', 'placa')
+          .select('id', 'placa', 'usuario_id')
           .preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'email'))
       )
       .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion', 'estado'))
@@ -258,6 +268,35 @@ export default class AdminController {
       email: user.email,
       telefono: user.telefono,
       edad: user.edad,
+    })
+  }
+
+  async updateUserRole({ params, request, response, serialize }: HttpContext) {
+    const user = await User.find(params.id)
+    if (!user) {
+      return response
+        .status(404)
+        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+    }
+    const { rol } = request.only(['rol'])
+    if (!rol || !['conductor', 'cliente', 'admin'].includes(rol)) {
+      return response
+        .status(422)
+        .send(serialize.withoutWrapping({ error: 'rol inválido (conductor, cliente, admin)' }))
+    }
+    if (rol !== 'admin' && user.rol === 'admin' && user.esModerador && !user.zonaModerador) {
+      return response
+        .status(422)
+        .send(serialize.withoutWrapping({ error: 'Asigna zonaModerador antes de quitar el rol admin' }))
+    }
+    user.rol = rol
+    await user.save()
+    RedisService.cacheDel('admin:dashboard')
+    return serialize.withoutWrapping({
+      id: user.id,
+      rol: user.rol,
+      esModerador: user.esModerador,
+      zonaModerador: user.zonaModerador,
     })
   }
 
@@ -384,17 +423,18 @@ export default class AdminController {
         'conductores.id',
         'conductores.usuario_id',
         'conductores.placa',
+        'conductores.ciudad',
         'users.nombre',
         'users.apellido',
         'users.email',
         db.raw('COALESCE(SUM(ganancias.monto_bruto), 0) as total_bruto'),
         db.raw('COALESCE(SUM(ganancias.monto_neto), 0) as total_neto'),
-        db.raw('COALESCE(SUM(CASE WHEN ganancias.comision_pagada = 0 THEN ganancias.comision ELSE 0 END), 0) as comision_pendiente')
+        db.raw("COALESCE(SUM(CASE WHEN ganancias.comision_pagada = false THEN ganancias.comision ELSE 0 END), 0) as comision_pendiente")
       )
       .leftJoin('users', 'conductores.usuario_id', 'users.id')
       .leftJoin('ganancias', 'ganancias.conductor_id', 'conductores.id')
-      .groupBy('conductores.id', 'conductores.usuario_id', 'conductores.placa', 'users.nombre', 'users.apellido', 'users.email')
-      .having(db.raw('COALESCE(SUM(CASE WHEN ganancias.comision_pagada = 0 THEN ganancias.comision ELSE 0 END), 0)'), '>', 0)
+      .groupBy('conductores.id', 'conductores.usuario_id', 'conductores.placa', 'conductores.ciudad', 'users.nombre', 'users.apellido', 'users.email')
+      .having(db.raw("COALESCE(SUM(CASE WHEN ganancias.comision_pagada = false THEN ganancias.comision ELSE 0 END), 0)"), '>', 0)
 
     return serialize.withoutWrapping(
       rows.map((r: any) => ({
@@ -402,9 +442,12 @@ export default class AdminController {
         nombre: `${r.nombre || ''} ${r.apellido || ''}`.trim(),
         email: r.email,
         placa: r.placa,
+        ciudad: r.ciudad,
         totalBruto: Number(r.total_bruto),
         totalNeto: Number(r.total_neto),
         comisionPendiente: Number(r.comision_pendiente),
+        monto: Number(r.comision_pendiente),
+        pagada: false,
       }))
     )
   }
@@ -613,6 +656,37 @@ export default class AdminController {
     })
   }
 
+  async updateDriverCity({ params, request, response, serialize }: HttpContext) {
+    const conductor = await Conductor.find(params.conductorId)
+    if (!conductor) {
+      return response
+        .status(404)
+        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+    }
+
+    const { ciudad } = request.only(['ciudad'])
+    if (!ciudad || typeof ciudad !== 'string') {
+      return response
+        .status(422)
+        .send(serialize.withoutWrapping({ error: 'ciudad es requerida' }))
+    }
+    const ciudadNormalizada = ciudad.trim().toLowerCase()
+    const validas = ['cali', 'popayan', 'pasto', 'medellin', 'bogota', 'cartagena']
+    if (!validas.includes(ciudadNormalizada)) {
+      return response
+        .status(422)
+        .send(serialize.withoutWrapping({ error: `Ciudad inválida (${validas.join(', ')})` }))
+    }
+
+    conductor.ciudad = ciudadNormalizada
+    await conductor.save()
+
+    return serialize.withoutWrapping({
+      conductorId: conductor.id,
+      ciudad: conductor.ciudad,
+    })
+  }
+
   async emergencies({ request, serialize }: HttpContext) {
     const page = Number.parseInt(request.input('page', '1'))
     const limit = Number.parseInt(request.input('limit', '20'))
@@ -642,6 +716,28 @@ export default class AdminController {
             }
           : null,
         createdAt: a.createdAt.toISO(),
+      }))
+    )
+  }
+
+  async sosAlerts({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '50'))
+    const alertas = await AlertaEmergencia.query()
+      .preload('usuario', (q) => q.select('id', 'nombre', 'apellido'))
+      .orderBy('created_at', 'desc')
+      .paginate(page, limit)
+
+    return serialize.withoutWrapping(
+      alertas.all().map((a) => ({
+        id: a.id,
+        driverId: a.userId ? String(a.userId) : null,
+        tripId: a.viajeId ? String(a.viajeId) : null,
+        latitude: a.lat !== null ? Number(a.lat) : null,
+        longitude: a.lng !== null ? Number(a.lng) : null,
+        speed: null,
+        timestamp: a.createdAt.toISO(),
+        status: a.estado === 'atendida' ? 'atendiendo' : a.estado === 'resuelta' ? 'resuelto' : 'pendiente',
       }))
     )
   }
@@ -854,9 +950,12 @@ export default class AdminController {
     return serialize.withoutWrapping(
       usuarios.map((u) => ({
         id: u.id,
+        userId: u.id,
         nombre: `${u.nombre} ${u.apellido}`.trim(),
         email: u.email,
         montoDeuda: u.montoDeuda,
+        monto: Number(u.montoDeuda ?? 0),
+        concepto: 'Deuda activa',
         deudaFechaLimite: u.deudaFechaLimite?.toISO() || null,
         comprobante: u.comprobantePago,
         createdAt: u.createdAt.toISO(),
@@ -1157,6 +1256,54 @@ export default class AdminController {
     })
   }
 
+  async listComunicados({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
+    const comunicados = await Comunicado.query()
+      .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
+      .orderBy('created_at', 'desc')
+      .paginate(page, limit)
+
+    return serialize.withoutWrapping(
+      comunicados.all().map((c) => ({
+        id: c.id,
+        title: c.titulo,
+        body: c.contenido,
+        author: c.moderador
+          ? `${c.moderador.nombre || ''} ${c.moderador.apellido || ''}`.trim()
+          : 'Admin',
+        status:
+          c.estado === 'aprobado'
+            ? 'approved'
+            : c.estado === 'rechazado'
+              ? 'rejected'
+              : 'pending',
+        createdAt: c.createdAt.toISO(),
+      }))
+    )
+  }
+
+  async listEncuestas({ request, serialize }: HttpContext) {
+    const page = Number.parseInt(request.input('page', '1'))
+    const limit = Number.parseInt(request.input('limit', '20'))
+    const encuestas = await Encuesta.query()
+      .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
+      .orderBy('created_at', 'desc')
+      .paginate(page, limit)
+
+    return serialize.withoutWrapping(
+      encuestas.all().map((e) => ({
+        id: e.id,
+        title: e.pregunta,
+        author: e.moderador
+          ? `${e.moderador.nombre || ''} ${e.moderador.apellido || ''}`.trim()
+          : 'Admin',
+        date: e.createdAt.toISO(),
+        status: e.estado === 'activa' ? 'aprobada' : 'pendiente',
+      }))
+    )
+  }
+
   async moderatorReports({ request, serialize }: HttpContext) {
     const page = Number.parseInt(request.input('page', '1'))
     const limit = Number.parseInt(request.input('limit', '20'))
@@ -1224,12 +1371,21 @@ export default class AdminController {
   }
 
   async approveCancellation({ params, response, serialize }: HttpContext) {
-    const solicitud = await SolicitudCancelacion.query()
+    let solicitud = await SolicitudCancelacion.query()
       .where('id', params.id)
       .where('estado', 'pendiente')
       .preload('viaje')
       .preload('conductor', (q) => q.preload('usuario'))
       .first()
+
+    if (!solicitud) {
+      solicitud = await SolicitudCancelacion.query()
+        .where('viaje_id', params.id)
+        .where('estado', 'pendiente')
+        .preload('viaje')
+        .preload('conductor', (q) => q.preload('usuario'))
+        .first()
+    }
 
     if (!solicitud) {
       return response.status(404).send({ error: 'Solicitud de cancelación no encontrada o ya fue procesada' })
@@ -1275,10 +1431,17 @@ export default class AdminController {
   }
 
   async rejectCancellation({ params, response, serialize }: HttpContext) {
-    const solicitud = await SolicitudCancelacion.query()
+    let solicitud = await SolicitudCancelacion.query()
       .where('id', params.id)
       .where('estado', 'pendiente')
       .first()
+
+    if (!solicitud) {
+      solicitud = await SolicitudCancelacion.query()
+        .where('viaje_id', params.id)
+        .where('estado', 'pendiente')
+        .first()
+    }
 
     if (!solicitud) {
       return response.status(404).send({ error: 'Solicitud de cancelación no encontrada o ya fue procesada' })

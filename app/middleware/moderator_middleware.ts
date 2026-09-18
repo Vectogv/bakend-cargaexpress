@@ -5,7 +5,7 @@ export default class ModeratorMiddleware {
   async handle(ctx: HttpContext, next: NextFn) {
     const user = await ctx.auth.getUserOrFail()
 
-    if (!user.esModerador) {
+    if (!user.esModerador && user.rol !== 'admin') {
       return ctx.response.status(403).send({ error: 'Acceso denegado' })
     }
 

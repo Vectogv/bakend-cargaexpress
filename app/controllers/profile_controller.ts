@@ -24,6 +24,8 @@ export default class ProfileController {
       edad: user.edad,
       avatar: user.avatar,
       rol: user.rol,
+      esModerador: Boolean(user.esModerador),
+      zonaModerador: user.zonaModerador,
       calificacion: user.calificacion,
       contactoEmergenciaNombre: user.contactoEmergenciaNombre,
       contactoEmergenciaTelefono: user.contactoEmergenciaTelefono,
@@ -107,7 +109,7 @@ export default class ProfileController {
 
   @ApiOperation({ summary: 'Subir avatar', description: 'Sube una nueva imagen de avatar del perfil' })
   @ApiResponse({ type: 'object' })
-  async avatar({ auth, request, serialize }: HttpContext) {
+  async avatar({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     const file = request.file('file', {
       size: '5mb',
@@ -115,7 +117,7 @@ export default class ProfileController {
     })
 
     if (!file) {
-      return serialize.withoutWrapping({ error: 'No file uploaded' })
+      return response.status(400).send({ error: 'No file uploaded' })
     }
 
     const fileName = `avatar-${user.id}-${randomUUID()}.${file.extname}`

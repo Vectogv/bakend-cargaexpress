@@ -4,18 +4,27 @@ import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
 import Calificacion from '#models/calificacion'
 import SolicitudCancelacion from '#models/solicitud_cancelacion'
-import ConfiguracionPlataforma from '#models/configuracion_plataforma'
-import { tripRequestValidator, tripCompleteValidator, tripCancelValidator } from '#validators/trip'
+import {
+  tripRequestValidator,
+  tripReserveValidator,
+  tripCompleteValidator,
+  tripCancelValidator,
+} from '#validators/trip'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import app from '@adonisjs/core/services/app'
 import { randomUUID } from 'node:crypto'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
-import { emitToClient, emitToDriver, emitToAdmin } from '#start/socket'
-import { sendToMultiple, sendToToken } from '#services/push_notification_service'
+import { emitToClient, emitToDriver, emitToAdmin, emitTripStatusChanged } from '#start/socket'
+import { sendToToken } from '#services/push_notification_service'
 import GeoService from '#services/geo_service'
+import TripDispatchService from '#services/trip_dispatch_service'
+import TripConflictService from '#services/trip_conflict_service'
+import reservationConfig from '#config/reservations'
+import { parseScheduledDateTime } from '#services/reservation_time'
 import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
 import TripFinalizationService from '#services/trip_finalization_service'
+import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
 
 export default class TripController {
   @ApiOperation({ summary: 'Solicitar un viaje', description: 'Crea una nueva solicitud de viaje' })
@@ -48,26 +57,12 @@ export default class TripController {
 
     const data = await request.validateUsing(tripRequestValidator)
 
-    const config = await ConfiguracionPlataforma.first()
-    const zonas = config?.zonasCobertura
-    if (zonas && Array.isArray(zonas) && zonas.length > 0) {
-      const dentro = zonas.some((z: any) => {
-        const R = 6371
-        const dLat = ((data.origen.lat - z.lat) * Math.PI) / 180
-        const dLng = ((data.origen.lng - z.lng) * Math.PI) / 180
-        const a =
-          Math.sin(dLat / 2) ** 2 +
-          Math.cos((z.lat * Math.PI) / 180) *
-            Math.cos((data.origen.lat * Math.PI) / 180) *
-            Math.sin(dLng / 2) ** 2
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        return R * c <= z.radio
-      })
-      if (!dentro) {
-        return response
-          .status(422)
-          .send({ error: 'Lo sentimos, por el momento solo operamos en Cali, Popayán y Pasto.' })
-      }
+    // Validación de cobertura compartida con las reservas programadas.
+    const dentroCobertura = await GeoService.validarCobertura(data.origen.lat, data.origen.lng)
+    if (!dentroCobertura) {
+      return response
+        .status(422)
+        .send({ error: 'Lo sentimos, por el momento solo operamos en Cali, Popayán y Pasto.' })
     }
 
     const viaje = await Viaje.create({
@@ -98,57 +93,11 @@ export default class TripController {
       estado: 'buscando_conductor',
     })
 
-    // Obtener conductores online dentro de 20km del origen usando Haversine en DB
-    // Antes: traía TODOS los conductores online sin filtro geográfico (bug de performance y spam)
-    const conductoresCercanosRaw = await GeoService.obtenerConductoresCercanos(
-      data.origen.lat,
-      data.origen.lng,
-      20
-    )
+    emitTripUpdateToModerators(viaje)
 
-    // Para emitir por socket y push, necesitamos los usuarioId y fcmToken
-    // GeoService devuelve los datos básicos; cargamos el resto con una query simple
-    const conductorIds = conductoresCercanosRaw.map((c: any) => c.id)
-
-    let conductoresCercanos: any[] = []
-    if (conductorIds.length > 0) {
-      conductoresCercanos = await Conductor.query()
-        .whereIn('id', conductorIds)
-        .whereHas('usuario', (q) => q.whereNotNull('fcm_token'))
-        .preload('usuario')
-    }
-
-    const tripSocketPayload = {
-      event: 'trip:nearby',
-      tripId: Number(viaje.id),
-      origen: viaje.origenDireccion,
-      precioEstimado: Number(viaje.precioEstimado),
-      type: 'new_trip',
-    }
-
-    const tripFcmData: Record<string, string> = {
-      type: 'new_trip',
-      event: 'trip:nearby',
-      tripId: String(viaje.id),
-      origen: viaje.origenDireccion,
-    }
-
-    // Emitir solo a conductores online en lugar de broadcast global
-    for (const c of conductoresCercanos) {
-      emitToDriver(c.usuarioId, 'trip:nearby', tripSocketPayload)
-    }
-
-    const tokens = conductoresCercanos.map((c) => c.usuario.fcmToken).filter(Boolean) as string[]
-    if (tokens.length > 0) {
-      const precioFormateado = Number(viaje.precioEstimado).toLocaleString('es-CO')
-      await sendToMultiple(
-        tokens,
-        'Nuevo viaje disponible',
-        `Cerca de tu ubicación — $${precioFormateado}`,
-        tripFcmData,
-        'default'
-      )
-    }
+    // Buscar conductores online dentro de 20km y notificarles (socket + push).
+    // Centralizado en TripDispatchService para reutilizarlo en las reservas.
+    await TripDispatchService.buscarConductores(viaje)
 
     return serialize.withoutWrapping({
       id: String(viaje.id),
@@ -166,6 +115,218 @@ export default class TripController {
       },
       precioEstimado: viaje.precioEstimado,
       createdAt: viaje.createdAt.toISO(),
+    })
+  }
+
+  @ApiOperation({
+    summary: 'Reservar un viaje programado',
+    description:
+      'Crea una reserva para una fecha/hora futura. El viaje queda en estado reservado y el scheduler inicia la búsqueda de conductor cuando llega la ventana de activación.',
+  })
+  @ApiBody({ type: () => tripReserveValidator })
+  @ApiResponse({ type: 'object' })
+  async reserve({ auth, request, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+
+    if (user.rol !== 'cliente') {
+      return response.status(403).send({ error: 'Solo los clientes pueden reservar viajes.' })
+    }
+    if (user.estadoCuenta !== 'activa') {
+      return response.status(403).send({ error: 'Tu cuenta no está activa. No puedes reservar viajes.' })
+    }
+
+    // Un cliente no puede reservar mientras tiene un viaje en curso.
+    // Las demás reservas futuras no lo bloquean: puede tener varias programadas.
+    const viajeEnCurso = await Viaje.query()
+      .where('cliente_id', user.id)
+      .whereIn('estado', [
+        'buscando_conductor',
+        'pendiente',
+        'aceptado',
+        'conductor_en_camino',
+        'conductor_llegada',
+        'en_curso',
+        'entregado',
+        'esperando_confirmacion',
+        'sos',
+        'disputa',
+      ])
+      .first()
+    if (viajeEnCurso) {
+      return response.status(409).send({
+        error: 'Ya tienes un viaje activo. Debes cancelarlo o esperar a que termine para reservar otro.',
+        viajeId: String(viajeEnCurso.id),
+      })
+    }
+
+    const data = await request.validateUsing(tripReserveValidator)
+
+    const programada = parseScheduledDateTime(data.fechaProgramada, data.horaProgramada)
+    if (!programada) {
+      return response.status(422).send({ error: 'Fecha u hora programada inválida.' })
+    }
+
+    // Anticipación mínima configurable (RESERVATION_MIN_LEAD_TIME_MINUTES).
+    const minLead = reservationConfig.minLeadMinutes
+    if (programada <= DateTime.now().plus({ minutes: minLead })) {
+      return response.status(400).send({
+        error: `La reserva debe hacerse con al menos ${minLead} minutos de anticipación.`,
+      })
+    }
+
+    // Misma validación de cobertura que el viaje inmediato.
+    const dentroCobertura = await GeoService.validarCobertura(data.origen.lat, data.origen.lng)
+    if (!dentroCobertura) {
+      return response
+        .status(422)
+        .send({ error: 'Lo sentimos, por el momento solo operamos en Cali, Popayán y Pasto.' })
+    }
+
+    // Evitar dos reservas activas del mismo cliente para el mismo horario.
+    const duplicada = await Viaje.query()
+      .where('cliente_id', user.id)
+      .where('tipo_programacion', 'programada')
+      .where('fecha_programada', data.fechaProgramada)
+      .where('hora_programada', data.horaProgramada)
+      .whereNot('estado', 'cancelado')
+      .first()
+    if (duplicada) {
+      return response.status(409).send({
+        error: 'Ya tienes una reserva para esa misma fecha y hora.',
+        viajeId: String(duplicada.id),
+      })
+    }
+
+    // La búsqueda de conductor arranca `dispatchLeadMinutes` antes de la hora programada.
+    // Se normaliza a la zona del servidor porque Lucid lee las columnas `dateTime`
+    // con `DateTime.fromSQL` (sin offset en sqlite/mysql).
+    const activacionAt = programada
+      .minus({ minutes: reservationConfig.dispatchLeadMinutes })
+      .setZone(DateTime.now().zone)
+
+    const viaje = await Viaje.create({
+      clienteId: user.id,
+      estado: 'reservado',
+      tipoProgramacion: 'programada',
+      fechaProgramada: data.fechaProgramada,
+      horaProgramada: data.horaProgramada,
+      activacionAt,
+      recordatorioEnviado: false,
+      origenDireccion: data.origen.direccion,
+      origenLat: data.origen.lat,
+      origenLng: data.origen.lng,
+      destinoDireccion: data.destino.direccion,
+      destinoLat: data.destino.lat,
+      destinoLng: data.destino.lng,
+      carga: data.descripcion || null,
+      precioCliente: data.precioCliente,
+      precioEstimado: data.precioCliente,
+    })
+
+    emitToClient(viaje.clienteId, 'trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'reservado',
+    })
+
+    emitToClient(viaje.clienteId, 'trip:reserved', {
+      id: String(viaje.id),
+      estado: viaje.estado,
+      tipoProgramacion: viaje.tipoProgramacion,
+      fechaProgramada: viaje.fechaProgramada,
+      horaProgramada: viaje.horaProgramada,
+      activacionAt: viaje.activacionAt?.toISO() ?? null,
+    })
+
+    emitTripUpdateToModerators(viaje)
+
+    if (user.fcmToken) {
+      await sendToToken(user.fcmToken, 'Reserva creada', 'Tu reserva fue creada correctamente.')
+    }
+
+    // `serialize.withoutWrapping` es asíncrono: hay que esperarlo antes de
+    // pasarlo a response.send, de lo contrario el body sale vacío.
+    const payload = await serialize.withoutWrapping({
+      id: String(viaje.id),
+        estado: viaje.estado,
+        tipoProgramacion: viaje.tipoProgramacion,
+        clienteId: String(viaje.clienteId),
+        origen: {
+          direccion: viaje.origenDireccion,
+          lat: viaje.origenLat,
+          lng: viaje.origenLng,
+        },
+        destino: {
+          direccion: viaje.destinoDireccion,
+          lat: viaje.destinoLat,
+          lng: viaje.destinoLng,
+        },
+        carga: viaje.carga,
+        precioEstimado: viaje.precioEstimado,
+        fechaProgramada: viaje.fechaProgramada,
+        horaProgramada: viaje.horaProgramada,
+      activacionAt: viaje.activacionAt?.toISO() ?? null,
+      createdAt: viaje.createdAt.toISO(),
+    })
+
+    return response.status(201).send(payload)
+  }
+
+  @ApiOperation({
+    summary: 'Listar reservas programadas',
+    description:
+      'Devuelve las reservas programadas del usuario autenticado (propias si es cliente, asignadas si es conductor).',
+  })
+  @ApiResponse({ type: 'array' })
+  async reservations({ auth, request, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const page = Number.parseInt(request.input('page', '1'))
+    const limitRaw = Number.parseInt(request.input('limit', '20'))
+    const limit = Math.min(100, Math.max(1, Number.isNaN(limitRaw) ? 20 : limitRaw))
+    const estadoFilter = request.input('estado') as string | undefined
+    const desde = request.input('desde') as string | undefined
+    const hasta = request.input('hasta') as string | undefined
+    const proximas = request.input('proximas')
+
+    const query = Viaje.query()
+      .where('tipo_programacion', 'programada')
+      .preload('cliente')
+      .preload('conductor', (q) => q.preload('usuario'))
+      .orderBy('activacion_at', 'asc')
+
+    if (user.rol === 'conductor') {
+      const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+      query.where('conductor_id', conductor.id)
+    } else {
+      query.where('cliente_id', user.id)
+    }
+
+    if (estadoFilter) {
+      const estados = estadoFilter
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      if (estados.length > 0) query.whereIn('estado', estados)
+    }
+    if (desde) query.where('fecha_programada', '>=', desde)
+    if (hasta) query.where('fecha_programada', '<=', hasta)
+    if (proximas === true || proximas === 'true') {
+      query.whereIn('estado', [
+        'reservado',
+        'buscando_conductor',
+        'pendiente',
+        'aceptado',
+        'conductor_en_camino',
+        'conductor_llegada',
+        'en_curso',
+      ])
+    }
+
+    const result = await query.paginate(page, limit)
+    return serialize.withoutWrapping({
+      data: result.all().map((v) => this.formatViajeResponse(v)),
+      total: result.total,
+      page: result.currentPage,
+      limit: result.perPage,
     })
   }
 
@@ -287,6 +448,20 @@ export default class TripController {
           )
         }
 
+        // Reservas programadas: evitar que el conductor acepte si ya tiene
+        // otro viaje incompatible en la misma franja horaria.
+        const conflicto = await TripConflictService.conductorTieneConflicto(
+          conductor.id,
+          viaje,
+          trx
+        )
+        if (conflicto) {
+          throw Object.assign(new Error('CONFLICTO_HORARIO'), {
+            statusCode: 409,
+            message: 'Tienes otro viaje incompatible en ese horario',
+          })
+        }
+
         viaje.conductorId = conductor.id
         viaje.estado = 'aceptado'
         viaje.aceptadoAt = DateTime.now()
@@ -318,21 +493,25 @@ export default class TripController {
       throw err
     }
 
-    emitToClient(resultado.viaje.clienteId, 'trip:status_changed', {
-      id: String(resultado.viaje.id),
-      estado: 'aceptado',
-      conductor: {
-        id: String(resultado.viaje.conductor.id),
-        nombre:
-          `${resultado.viaje.conductor.usuario.nombre || ''} ${resultado.viaje.conductor.usuario.apellido || ''}`.trim(),
-        telefono: resultado.viaje.conductor.usuario.telefono,
-        placa: resultado.viaje.conductor.placa,
-        foto: resultado.viaje.conductor.fotoConductor,
-        calificacion: resultado.viaje.conductor.calificacion,
-      },
-      tiempoEstimadoMinutos: resultado.viaje.tiempoEstimadoMinutos,
-      aceptadoAt: resultado.viaje.aceptadoAt?.toISO() ?? null,
-    })
+    emitTripStatusChanged(
+      resultado.viaje.clienteId,
+      resultado.viaje.conductor?.usuarioId,
+      {
+        id: String(resultado.viaje.id),
+        estado: 'aceptado',
+        conductor: {
+          id: String(resultado.viaje.conductor.id),
+          nombre:
+            `${resultado.viaje.conductor.usuario.nombre || ''} ${resultado.viaje.conductor.usuario.apellido || ''}`.trim(),
+          telefono: resultado.viaje.conductor.usuario.telefono,
+          placa: resultado.viaje.conductor.placa,
+          foto: resultado.viaje.conductor.fotoConductor,
+          calificacion: resultado.viaje.conductor.calificacion,
+        },
+        tiempoEstimadoMinutos: resultado.viaje.tiempoEstimadoMinutos ?? null,
+        aceptadoAt: resultado.viaje.aceptadoAt?.toISO() ?? null,
+      }
+    )
 
     emitToClient(resultado.viaje.clienteId, 'trip:accepted', {
       id: String(resultado.viaje.id),
@@ -355,6 +534,8 @@ export default class TripController {
       estado: resultado.viaje.estado,
       viajeId: Number(resultado.viaje.id),
     })
+
+    emitTripUpdateToModerators(resultado.viaje)
 
     const tripAcceptedPayload = {
       event: 'trip:accepted',
@@ -403,7 +584,7 @@ export default class TripController {
     viaje.enCursoAt = DateTime.now()
     await viaje.save()
 
-    emitToClient(viaje.clienteId, 'trip:status_changed', {
+    emitTripStatusChanged(viaje.clienteId, conductor.usuarioId, {
       id: String(viaje.id),
       estado: 'en_curso',
       enCursoAt: viaje.enCursoAt.toISO(),
@@ -414,6 +595,8 @@ export default class TripController {
       estado: viaje.estado,
       enCursoAt: viaje.enCursoAt.toISO(),
     })
+
+    emitTripUpdateToModerators(viaje)
 
     return serialize.withoutWrapping({
       id: String(viaje.id),
@@ -488,7 +671,7 @@ export default class TripController {
     viaje.completadoAt = DateTime.now()
     await viaje.save()
 
-    emitToClient(viaje.clienteId, 'trip:status_changed', {
+    emitTripStatusChanged(viaje.clienteId, conductor.usuarioId, {
       id: String(viaje.id),
       estado: 'entregado',
       montoFinal: viaje.precioFinal,
@@ -510,10 +693,12 @@ export default class TripController {
     viaje.estado = 'esperando_confirmacion'
     await viaje.save()
 
-    emitToClient(viaje.clienteId, 'trip:status_changed', {
+    emitTripStatusChanged(viaje.clienteId, conductor.usuarioId, {
       id: String(viaje.id),
       estado: 'esperando_confirmacion',
     })
+
+    emitTripUpdateToModerators(viaje)
 
     return serialize.withoutWrapping({
       id: String(viaje.id),
@@ -558,12 +743,19 @@ export default class TripController {
       const viaje = await Viaje.find(Number(result.viaje.id))
 
       if (viaje) {
-        emitToClient(viaje.clienteId, 'trip:status_changed', {
-          id: String(viaje.id),
-          estado: 'finalizado',
-          montoFinal: result.viaje.montoFinal,
-          finalizadoAt: result.viaje.finalizadoAt,
-        })
+        const conductorStatusChanged = viaje.conductorId
+          ? await Conductor.find(viaje.conductorId)
+          : null
+        emitTripStatusChanged(
+          viaje.clienteId,
+          conductorStatusChanged?.usuarioId,
+          {
+            id: String(viaje.id),
+            estado: 'finalizado',
+            montoFinal: result.viaje.montoFinal,
+            finalizadoAt: result.viaje.finalizadoAt,
+          }
+        )
 
         emitToClient(viaje.clienteId, 'trip:finalized', {
           id: result.viaje.id,
@@ -577,6 +769,8 @@ export default class TripController {
           estado: result.viaje.estado,
           montoFinal: result.viaje.montoFinal,
         })
+
+        emitTripUpdateToModerators(viaje)
 
         // Push notification al cliente
         const cliente = await User.find(viaje.clienteId)
@@ -687,7 +881,10 @@ export default class TripController {
       }
     }
 
-    emitToClient(viaje.clienteId, 'trip:status_changed', {
+    const conductorStatusChanged = viaje.conductorId
+      ? await Conductor.find(viaje.conductorId)
+      : null
+    emitTripStatusChanged(viaje.clienteId, conductorStatusChanged?.usuarioId, {
       id: String(viaje.id),
       estado: 'cancelado',
       motivo: viaje.motivoCancelacion,
@@ -713,6 +910,8 @@ export default class TripController {
         })
       }
     }
+
+    emitTripUpdateToModerators(viaje)
 
     return serialize.withoutWrapping({
       id: String(viaje.id),
@@ -773,6 +972,14 @@ export default class TripController {
     })
 
     emitToAdmin('admin:cancellation_requested', {
+      id: String(solicitud.id),
+      viajeId: String(viaje.id),
+      conductorId: String(conductorId),
+      solicitanteRol,
+      motivo: solicitud.motivo,
+      createdAt: solicitud.createdAt.toISO(),
+    })
+    emitToAdmin('admin:cancellation', {
       id: String(solicitud.id),
       viajeId: String(viaje.id),
       conductorId: String(conductorId),
@@ -843,7 +1050,9 @@ export default class TripController {
       .preload('conductor', (q) => q.preload('usuario'))
       .firstOrFail()
 
-    // Solo el cliente, el conductor asignado o un admin pueden ver los detalles del viaje
+    // Solo el cliente, el conductor asignado o un admin pueden ver los detalles del viaje.
+    // Excepción: un conductor puede previsualizar un viaje que aún busca conductor
+    // (buscando_conductor/pendiente) para decidir si hace una oferta.
     if (user.rol !== 'admin') {
       const esCliente = viaje.clienteId === user.id
       let esConductor = false
@@ -851,7 +1060,10 @@ export default class TripController {
         const conductor = await Conductor.findBy('usuario_id', user.id)
         esConductor = conductor !== null && viaje.conductorId === conductor.id
       }
-      if (!esCliente && !esConductor) {
+      const estado = viaje.estado as string
+      const disponibleSinAsignar = user.rol === 'conductor' && !esConductor
+        && ['buscando_conductor', 'pendiente'].includes(estado)
+      if (!esCliente && !esConductor && !disponibleSinAsignar) {
         return response.status(403).send({ error: 'No tienes permisos para ver este viaje' })
       }
     }
@@ -862,9 +1074,11 @@ export default class TripController {
   private formatViajeResponse(viaje: Viaje) {
     return {
       id: String(viaje.id),
+      _id: String(viaje.id),
       estado: viaje.estado,
       cliente: {
         id: String(viaje.cliente.id),
+        _id: String(viaje.cliente.id),
         nombre: `${viaje.cliente.nombre || ''} ${viaje.cliente.apellido || ''}`.trim(),
         telefono: viaje.cliente.telefono,
         avatar: viaje.cliente.avatar,
@@ -872,6 +1086,7 @@ export default class TripController {
       conductor: viaje.conductor
         ? {
             id: String(viaje.conductor.id),
+            _id: String(viaje.conductor.id),
             nombre:
               `${viaje.conductor.usuario.nombre || ''} ${viaje.conductor.usuario.apellido || ''}`.trim(),
             telefono: viaje.conductor.usuario.telefono,
@@ -890,11 +1105,19 @@ export default class TripController {
         lng: Number(viaje.destinoLng),
       },
       carga: viaje.carga,
+      // F models/trip.dart lee `descripcion` y `tiempoEstimado`.
+      descripcion: viaje.carga,
+      tipoProgramacion: viaje.tipoProgramacion ?? 'inmediata',
+      fechaProgramada: viaje.fechaProgramada,
+      horaProgramada: viaje.horaProgramada,
+      activacionAt: viaje.activacionAt?.toISO() ?? null,
       fotoEntrega: viaje.fotoEntrega,
-      tiempoEstimadoMinutos: Number(viaje.tiempoEstimadoMinutos),
-      precioEstimado: Number(viaje.precioEstimado),
-      precioFinal: Number(viaje.precioFinal),
-      // tiempoEstimadoMinutos ya está incluido arriba
+      tiempoEstimadoMinutos: viaje.tiempoEstimadoMinutos ?? null,
+      tiempoEstimado: viaje.tiempoEstimadoMinutos ?? null,
+      // Evitar Number(null) → 0: si el campo es null se manda null.
+      precioEstimado: viaje.precioEstimado ?? null,
+      precioFinal: viaje.precioFinal ?? null,
+      // tiempoEstimado/tempoEstimadoMinutos ya incluidos arriba
       createdAt: viaje.createdAt.toISO(),
       aceptadoAt: viaje.aceptadoAt?.toISO() || null,
       enCursoAt: viaje.enCursoAt?.toISO() || null,

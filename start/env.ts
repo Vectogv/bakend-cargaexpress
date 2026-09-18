@@ -14,13 +14,14 @@ export default await Env.create(new URL('../', import.meta.url), {
 
   SESSION_DRIVER: Env.schema.enum(['cookie', 'memory', 'database'] as const),
 
-  DB_CONNECTION: Env.schema.enum.optional(['mysql', 'sqlite'] as const),
-  DB_HOST: Env.schema.string({ format: 'host' }),
-  DB_PORT: Env.schema.number(),
-  DB_USER: Env.schema.string(),
-  DB_PASSWORD: Env.schema.string(),
-  DB_DATABASE: Env.schema.string(),
+  DB_CONNECTION: Env.schema.enum.optional(['mysql', 'sqlite', 'pg'] as const),
+  DB_HOST: Env.schema.string.optional({ format: 'host' }),
+  DB_PORT: Env.schema.number.optional(),
+  DB_USER: Env.schema.string.optional(),
+  DB_PASSWORD: Env.schema.string.optional(),
+  DB_DATABASE: Env.schema.string.optional(),
   DB_SSL: Env.schema.boolean.optional(),
+  DATABASE_URL: Env.schema.string.optional(),
 
   CORS_ORIGIN: Env.schema.string.optional(),
 
@@ -36,4 +37,13 @@ export default await Env.create(new URL('../', import.meta.url), {
   REDIS_PASSWORD: Env.schema.string.optional(),
 
   SENTRY_DSN: Env.schema.string.optional(),
+
+  // ── Reservas programadas ──────────────────────────────────────
+  RESERVATION_MIN_LEAD_TIME_MINUTES: Env.schema.number.optional(),
+  RESERVATION_DISPATCH_LEAD_MINUTES: Env.schema.number.optional(),
+  RESERVATION_CONFLICT_WINDOW_MINUTES: Env.schema.number.optional(),
+  RESERVATION_REMINDER_LEAD_MINUTES: Env.schema.number.optional(),
+  RESERVATION_ACTIVATION_BATCH_SIZE: Env.schema.number.optional(),
+  RESERVATION_TIMEZONE: Env.schema.string.optional(),
+  RESERVATION_SCHEDULER_ENABLED: Env.schema.boolean.optional(),
 })

@@ -54,6 +54,7 @@ export default defineConfig({
     () => import('@adonisjs/auth/auth_provider'),
     () => import('@foadonis/openapi/openapi_provider'),
     () => import('#providers/api_provider'),
+    () => import('#providers/reservation_scheduler_provider'),
   ],
 
   /*

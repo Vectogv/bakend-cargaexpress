@@ -18,6 +18,11 @@ export default class Viaje extends BaseModel {
     'destinoLat',
     'destinoLng',
     'carga',
+    'tipoProgramacion',
+    'fechaProgramada',
+    'horaProgramada',
+    'activacionAt',
+    'recordatorioEnviado',
     'precioCliente',
     'precioEstimado',
     'precioFinal',
@@ -77,6 +82,29 @@ export default class Viaje extends BaseModel {
   @ApiProperty()
   @column()
   declare carga: string | null
+
+  /** 'inmediata' | 'programada' */
+  @ApiProperty()
+  @column()
+  declare tipoProgramacion: string
+
+  /** Fecha elegida por el cliente en formato YYYY-MM-DD (solo reservas). */
+  @ApiProperty()
+  @column()
+  declare fechaProgramada: string | null
+
+  /** Hora elegida por el cliente en formato HH:mm (solo reservas). */
+  @ApiProperty()
+  @column()
+  declare horaProgramada: string | null
+
+  /** Momento en que el scheduler inicia la búsqueda de conductor. */
+  @ApiProperty()
+  @column.dateTime()
+  declare activacionAt: DateTime | null
+
+  @column()
+  declare recordatorioEnviado: boolean
 
   @ApiProperty()
   @column()

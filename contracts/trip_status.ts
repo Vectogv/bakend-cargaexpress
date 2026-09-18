@@ -1,5 +1,6 @@
 export const TRIP_STATUS = {
   CREADO: 'creado',
+  RESERVADO: 'reservado',
   BUSCANDO: 'buscando_conductor',
   PENDIENTE: 'pendiente',
   ACEPTADO: 'aceptado',

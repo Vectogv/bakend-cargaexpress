@@ -22,6 +22,12 @@ export default class Oferta extends BaseModel {
   @column()
   declare estado: string
 
+  @column()
+  declare placa: string | null
+
+  @column()
+  declare mensaje: string | null
+
   @column.dateTime()
   declare expiraAt: DateTime | null
 

@@ -337,7 +337,7 @@ test.group('Drivers - Photos', (group) => {
 
     const response = await client.post('/api/drivers/vehicle-photo').bearerToken(token)
 
-    response.assertStatus(200)
+    response.assertStatus(400)
     response.assertBodyContains({ error: 'No file uploaded' })
   })
 
@@ -346,7 +346,7 @@ test.group('Drivers - Photos', (group) => {
 
     const response = await client.post('/api/drivers/driver-photo').bearerToken(token)
 
-    response.assertStatus(200)
+    response.assertStatus(400)
     response.assertBodyContains({ error: 'No file uploaded' })
   })
 
@@ -384,7 +384,7 @@ test.group('Drivers - Verification', (group) => {
 
     const response = await client.post('/api/drivers/verification/cedula').bearerToken(token)
 
-    response.assertStatus(200)
+    response.assertStatus(400)
     response.assertBodyContains({ error: 'No file uploaded' })
   })
 
@@ -393,7 +393,7 @@ test.group('Drivers - Verification', (group) => {
 
     const response = await client.post('/api/drivers/verification/licencia').bearerToken(token)
 
-    response.assertStatus(200)
+    response.assertStatus(400)
     response.assertBodyContains({ error: 'No file uploaded' })
   })
 
@@ -402,7 +402,7 @@ test.group('Drivers - Verification', (group) => {
 
     const response = await client.post('/api/drivers/verification/vehiculo').bearerToken(token)
 
-    response.assertStatus(200)
+    response.assertStatus(400)
     response.assertBodyContains({ error: 'No file uploaded' })
   })
 

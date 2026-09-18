@@ -4,6 +4,7 @@ export type EstadoViaje = (typeof TRIP_STATUS)[keyof typeof TRIP_STATUS]
 
 const transiciones: Record<EstadoViaje, EstadoViaje[]> = {
   creado: ['buscando_conductor', 'cancelado'],
+  reservado: ['buscando_conductor', 'cancelado'],
   buscando_conductor: ['pendiente', 'aceptado', 'cancelado', 'rechazado'],
   pendiente: ['aceptado', 'cancelado', 'rechazado'],
   aceptado: ['conductor_en_camino', 'en_curso', 'cancelado', 'sos'],

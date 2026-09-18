@@ -2,7 +2,7 @@ import MensajeChat from '#models/mensaje_chat'
 import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
 import type { HttpContext } from '@adonisjs/core/http'
-import { getIO } from '#start/socket'
+import { emitToClient, emitToDriver } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 
 export default class ChatController {
@@ -20,7 +20,7 @@ export default class ChatController {
           .send(serialize.withoutWrapping({ error: 'No participas en este viaje' }))
       }
     }
-    if (!['aceptado', 'en_curso'].includes(viaje.estado)) {
+    if (!['aceptado', 'en_curso', 'conductor_en_camino', 'conductor_llegada', 'sos'].includes(viaje.estado)) {
       return response
         .status(422)
         .send(serialize.withoutWrapping({ error: 'El chat solo está disponible durante el viaje' }))
@@ -49,7 +49,10 @@ export default class ChatController {
     return serialize.withoutWrapping(
       mensajes.map((m) => ({
         id: m.id,
+        tripId: String(m.viajeId),
         viajeId: m.viajeId,
+        senderId: String(m.remitente.id),
+        isSent: m.remitente.id === user.id,
         remitente: {
           id: m.remitente.id,
           nombre: `${m.remitente.nombre || ''} ${m.remitente.apellido || ''}`.trim(),
@@ -78,7 +81,7 @@ export default class ChatController {
         .status(403)
         .send(serialize.withoutWrapping({ error: 'No participas en este viaje' }))
     }
-    if (!['aceptado', 'en_curso'].includes(viaje.estado)) {
+    if (!['aceptado', 'en_curso', 'conductor_en_camino', 'conductor_llegada', 'sos'].includes(viaje.estado)) {
       return response
         .status(422)
         .send(serialize.withoutWrapping({ error: 'El chat solo está disponible durante el viaje' }))
@@ -99,9 +102,10 @@ export default class ChatController {
 
     await msg.load('remitente', (q) => q.select('id', 'nombre', 'apellido'))
 
-    const io = getIO()
-    io.to(`client:${viaje.clienteId}`).emit('chat:message', {
+    emitToClient(viaje.clienteId, 'chat:message', {
       id: msg.id,
+      tripId: String(msg.viajeId),
+      senderId: String(msg.remitente.id),
       viajeId: msg.viajeId,
       remitente: {
         id: msg.remitente.id,
@@ -113,8 +117,10 @@ export default class ChatController {
     if (viaje.conductorId) {
       const conductor = await Conductor.find(viaje.conductorId)
       if (conductor) {
-        io.to(`driver:${conductor.usuarioId}`).emit('chat:message', {
+        emitToDriver(conductor.usuarioId, 'chat:message', {
           id: msg.id,
+          tripId: String(msg.viajeId),
+          senderId: String(msg.remitente.id),
           viajeId: msg.viajeId,
           remitente: {
             id: msg.remitente.id,
@@ -140,6 +146,8 @@ export default class ChatController {
 
     return serialize.withoutWrapping({
       id: msg.id,
+      tripId: String(msg.viajeId),
+      senderId: String(msg.remitente.id),
       viajeId: msg.viajeId,
       remitente: {
         id: msg.remitente.id,

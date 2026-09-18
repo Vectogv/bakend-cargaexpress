@@ -13,6 +13,7 @@ export default class Conductor extends BaseModel {
     'placa',
     'tipoVehiculo',
     'capacidad',
+    'ciudad',
     'fotoConductor',
     'fotoVehiculo',
     'online',
@@ -55,6 +56,10 @@ export default class Conductor extends BaseModel {
 
   @ApiProperty()
   @column()
+  declare ciudad: string | null
+
+  @ApiProperty()
+  @column()
   declare fotoConductor: string | null
 
   @ApiProperty()
@@ -66,16 +71,20 @@ export default class Conductor extends BaseModel {
   declare online: boolean
 
   @ApiProperty()
-  @column()
-  declare calificacion: number
+  @column({
+    consume: (v: unknown) => (v === null || v === undefined ? null : Number(v)),
+  })
+  declare calificacion: number | null
 
   @ApiProperty()
   @column()
   declare totalViajes: number
 
   @ApiProperty()
-  @column()
-  declare horasActivo: number
+  @column({
+    consume: (v: unknown) => (v === null || v === undefined ? null : Number(v)),
+  })
+  declare horasActivo: number | null
 
   @ApiProperty()
   @column()

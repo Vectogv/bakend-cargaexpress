@@ -33,19 +33,27 @@ export default class Ganancia extends BaseModel {
   declare viajeId: number | null
 
   @ApiProperty()
-  @column()
-  declare monto: number
+  @column({
+    consume: (v: unknown) => (v === null || v === undefined ? null : Number(v)),
+  })
+  declare monto: number | null
 
   @ApiProperty()
-  @column()
+  @column({
+    consume: (v: unknown) => (v === null || v === undefined ? null : Number(v)),
+  })
   declare montoBruto: number | null
 
   @ApiProperty()
-  @column()
+  @column({
+    consume: (v: unknown) => (v === null || v === undefined ? null : Number(v)),
+  })
   declare comision: number | null
 
   @ApiProperty()
-  @column()
+  @column({
+    consume: (v: unknown) => (v === null || v === undefined ? null : Number(v)),
+  })
   declare montoNeto: number | null
 
   @ApiProperty()

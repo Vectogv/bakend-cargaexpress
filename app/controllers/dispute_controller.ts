@@ -95,6 +95,7 @@ export default class DisputeController {
       }
 
       emitToAdmin('admin:new_dispute', createdPayload)
+      emitToAdmin('admin:dispute:new', createdPayload)
       emitToClient(viaje.clienteId, 'dispute:updated', createdPayload)
 
       return response.status(201).send(
@@ -144,6 +145,7 @@ export default class DisputeController {
     }
 
     emitToAdmin('admin:new_dispute', createdPayloadCliente)
+    emitToAdmin('admin:dispute:new', createdPayloadCliente)
     const conductorUserObj = await Conductor.find(conductor.id)
     if (conductorUserObj) {
       emitToDriver(conductorUserObj.usuarioId, 'dispute:updated', createdPayloadCliente)
@@ -196,6 +198,8 @@ export default class DisputeController {
         .send(serialize.withoutWrapping({ error: 'Debes describir tu versión de los hechos' }))
     }
 
+    const fotos = (descripcion || '').match(/https?:\/\/\S+/g) || []
+
     if (user.rol === 'conductor') {
       const conductor = await Conductor.findByOrFail('usuario_id', user.id)
       if (viaje.conductorId !== conductor.id) {
@@ -209,10 +213,21 @@ export default class DisputeController {
         conductorId: conductor.id,
         clienteId: viaje.clienteId,
         versionConductor: description,
+        problema: motivo || version || null,
+        descripcion: descripcion || version || null,
+        fotos: fotos.length > 0 ? fotos : null,
         estado: 'abierta',
       })
 
       emitToAdmin('admin:new_dispute', {
+        id: String(disputa.id),
+        viajeId: String(viaje.id),
+        conductorId: String(conductor.id),
+        clienteId: String(viaje.clienteId),
+        estado: disputa.estado,
+        createdAt: disputa.createdAt.toISO(),
+      })
+      emitToAdmin('admin:dispute:new', {
         id: String(disputa.id),
         viajeId: String(viaje.id),
         conductorId: String(conductor.id),
@@ -255,10 +270,21 @@ export default class DisputeController {
       conductorId: conductor.id,
       clienteId: viaje.clienteId,
       versionCliente: description,
+      problema: motivo || version || null,
+      descripcion: descripcion || version || null,
+      fotos: fotos.length > 0 ? fotos : null,
       estado: 'abierta',
     })
 
     emitToAdmin('admin:new_dispute', {
+      id: String(disputa.id),
+      viajeId: String(viaje.id),
+      conductorId: String(conductor.id),
+      clienteId: String(viaje.clienteId),
+      estado: disputa.estado,
+      createdAt: disputa.createdAt.toISO(),
+    })
+    emitToAdmin('admin:dispute:new', {
       id: String(disputa.id),
       viajeId: String(viaje.id),
       conductorId: String(conductor.id),
@@ -384,32 +410,53 @@ export default class DisputeController {
 
   async uploadSupport({ auth, params, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const disputa = await Disputa.query().where('viaje_id', params.id).first()
-    if (!disputa) {
+    const viaje = await Viaje.find(params.id)
+    if (!viaje) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
+        .send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
-    if (disputa.clienteId !== user.id) {
+
+    let esParticipante = viaje.clienteId === user.id
+    if (!esParticipante && viaje.conductorId) {
+      const conductor = await Conductor.find(viaje.conductorId)
+      esParticipante = conductor?.usuarioId === user.id
+    }
+    if (!esParticipante) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No eres el cliente de esta disputa' }))
+        .send(serialize.withoutWrapping({ error: 'No participas en este viaje' }))
     }
 
     const file = request.file('file', {
-      size: '5mb',
-      extnames: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'],
+      size: '10mb',
+      extnames: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'pdf'],
     })
     if (!file) {
-      return serialize.withoutWrapping({ error: 'No file uploaded' })
+      return response
+        .status(400)
+        .json({ error: 'No file uploaded' })
+    }
+    if (file.isValid === false) {
+      return response
+        .status(422)
+        .json({ error: 'Solo se permiten imágenes (jpg, png, webp, heic) y PDF, máx. 10MB' })
     }
 
-    const fileName = `dispute-${disputa.id}-${randomUUID()}.${file.extname}`
+    const fileName = `dispute-${viaje.id}-${randomUUID()}.${file.extname}`
     await file.move(app.makePath('storage', 'uploads'), { name: fileName })
 
-    disputa.soporteCliente = `/storage/uploads/${fileName}`
-    await disputa.save()
+    const soporteUrl = `/storage/uploads/${fileName}`
+    const disputa = await Disputa.query().where('viaje_id', viaje.id).first()
+    if (disputa) {
+      const fotos = Array.isArray(disputa.fotos) ? [...disputa.fotos] : []
+      if (!fotos.includes(soporteUrl)) {
+        fotos.push(soporteUrl)
+        disputa.fotos = fotos
+        await disputa.save()
+      }
+    }
 
-    return serialize.withoutWrapping({ soporte: disputa.soporteCliente })
+    return serialize.withoutWrapping({ soporte: soporteUrl })
   }
 }

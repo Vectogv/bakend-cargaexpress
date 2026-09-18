@@ -107,8 +107,11 @@ router
   .group(() => {
     router.post('request', [controllers.Trip, 'request'])
       .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
+    router.post('reserve', [controllers.Trip, 'reserve'])
+      .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
     router.get('nearby', [controllers.Trip, 'nearby'])
     router.get('active', [controllers.Trip, 'active'])
+    router.get('reservations', [controllers.Trip, 'reservations'])
     router.get('history', [controllers.Trip, 'history'])
     router.get(':id', [controllers.Trip, 'show'])
     router.post(':id/accept', [controllers.Trip, 'accept']) // @deprecated — usar POST :id/offers/:offerId/accept
@@ -143,7 +146,9 @@ router
 router
   .group(() => {
     router.get('', [controllers.Notification, 'index'])
+    router.post('', [controllers.Notification, 'store'])
     router.put(':id/read', [controllers.Notification, 'read'])
+    router.delete(':id', [controllers.Notification, 'destroy'])
   })
   .prefix('/api/notifications')
   .as('notifications')
@@ -176,6 +181,7 @@ router
     router.get('verifications', [controllers.Admin, 'pendingVerifications'])
     router.put('verifications/:conductorId/approve', [controllers.Admin, 'approveDriver'])
     router.put('verifications/:conductorId/reject', [controllers.Admin, 'rejectDriver'])
+    router.put('drivers/:conductorId/city', [controllers.Admin, 'updateDriverCity'])
     router.get('payments/pending', [controllers.Admin, 'pendingPayments'])
     router.put('payments/:userId/confirm', [controllers.Admin, 'confirmPayment'])
     router.put('payments/:userId/reject', [controllers.Admin, 'rejectPayment'])
@@ -183,7 +189,10 @@ router
     router.put('config/coverage', [controllers.Admin, 'updateCoverage'])
     router.put('config/banner', [controllers.Admin, 'updateBanner'])
     router.put('users/:id/moderator', [controllers.Admin, 'assignModerator'])
+    router.put('users/:id/role', [controllers.Admin, 'updateUserRole'])
     router.put('users/:id/leader', [controllers.Admin, 'assignLeader'])     // Asignar/quitar rol leader a conductor
+    router.get('comunicados', [controllers.Admin, 'listComunicados'])
+    router.get('encuestas', [controllers.Admin, 'listEncuestas'])
     router.put('comunicados/:id/approve', [controllers.Admin, 'approveComunicado'])
     router.put('comunicados/:id/reject', [controllers.Admin, 'rejectComunicado'])
     router.put('encuestas/:id/approve', [controllers.Admin, 'approveEncuesta'])
@@ -277,9 +286,27 @@ router
     router.get('drivers/inactive', [controllers.Moderator, 'inactiveDrivers'])
     router.post('drivers/:id/notify', [controllers.Moderator, 'notifyDriver'])
     router.post('drivers/:id/report', [controllers.Moderator, 'reportDriver'])
+    router.post('drivers/:id/approve', [controllers.Moderator, 'approveDriver'])
+    router.post('drivers/:id/reject', [controllers.Moderator, 'rejectDriver'])
     router.post('encuestas', [controllers.Moderator, 'storeEncuesta'])
     router.get('encuestas/:id/results', [controllers.Moderator, 'encuestaResults'])
     router.post('encuestas/:id/answer', [controllers.Moderator, 'answerEncuesta'])
+    router.get('encuestas', [controllers.Moderator, 'myEncuestas'])
+    router.get('reports', [controllers.Moderator, 'myReports'])
+    router.get('dashboard', [controllers.Moderator, 'dashboard'])
+    router.get('trips', [controllers.Moderator, 'trips'])
+    router.get('trips/:id', [controllers.Moderator, 'tripShow'])
+    router.get('reservations', [controllers.Moderator, 'reservations'])
+    router.get('emergency', [controllers.Moderator, 'emergencies'])
+    router.get('emergency/count', [controllers.Moderator, 'emergencyCount'])
+    router.post('emergency/:id/acknowledge', [controllers.Moderator, 'emergencyAcknowledge'])
+    router.post('emergency/:id/resolve', [controllers.Moderator, 'emergencyResolve'])
+    router.get('contactable-users', [controllers.Conversacion, 'contactableUsers'])
+    router.get('conversations/unread-count', [controllers.Conversacion, 'unreadCount'])
+    router.get('conversations', [controllers.Conversacion, 'index'])
+    router.post('conversations', [controllers.Conversacion, 'store'])
+    router.get('conversations/:id/messages', [controllers.Conversacion, 'messages'])
+    router.post('conversations/:id/messages', [controllers.Conversacion, 'storeMessage'])
   })
   .prefix('/api/moderator')
   .as('moderator')
@@ -299,6 +326,36 @@ router
 router
   .post('/api/emergency', [controllers.Emergency, 'trigger'])
   .as('emergency.trigger')
+  .use(middleware.auth())
+
+router
+  .get('/api/sos', [controllers.Admin, 'sosAlerts'])
+  .as('sos.alerts')
+  .use([middleware.auth(), middleware.admin()])
+
+router
+  .post('/api/fraud/alerts', [controllers.FraudAlert, 'store'])
+  .as('fraud.alerts.store')
+  .use(middleware.auth())
+
+router
+  .group(() => {
+    router.get(':id/messages', [controllers.EmergencyChat, 'index'])
+    router.post(':id/messages', [controllers.EmergencyChat, 'store'])
+  })
+  .prefix('/api/emergency')
+  .as('emergency.chat')
+  .use(middleware.auth())
+
+router
+  .group(() => {
+    router.get('unread-count', [controllers.Conversacion, 'unreadCount'])
+    router.get('', [controllers.Conversacion, 'index'])
+    router.get(':id/messages', [controllers.Conversacion, 'messages'])
+    router.post(':id/messages', [controllers.Conversacion, 'storeMessage'])
+  })
+  .prefix('/api/conversations')
+  .as('conversations')
   .use(middleware.auth())
 
 // Documentación OpenAPI generada desde los decorators @foadonis/openapi

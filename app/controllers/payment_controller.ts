@@ -43,7 +43,7 @@ export default class PaymentController {
       extnames: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'],
     })
     if (!file) {
-      return serialize.withoutWrapping({ error: 'No file uploaded' })
+      return response.status(400).send({ error: 'No file uploaded' })
     }
 
     const fileName = `comprobante-${user.id}-${randomUUID()}.${file.extname}`

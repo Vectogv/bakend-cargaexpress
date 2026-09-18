@@ -9,7 +9,7 @@ import app from '@adonisjs/core/services/app'
 import { randomUUID } from 'node:crypto'
 import { DateTime } from 'luxon'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
-import { emitToClient } from '#start/socket'
+import { emitToClient, emitToAdmin } from '#start/socket'
 import GpsRateLimitService from '#services/gps_rate_limit_service'
 import FraudDetectionService from '#services/fraud_detection_service'
 import RedisService from '#services/redis_service'
@@ -141,7 +141,7 @@ export default class DriverController {
 
   @ApiOperation({ summary: 'Subir foto del vehículo', description: 'Sube una foto del vehículo' })
   @ApiResponse({ type: 'object' })
-  async vehiclePhoto({ auth, request, serialize }: HttpContext) {
+  async vehiclePhoto({ auth, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
@@ -151,7 +151,7 @@ export default class DriverController {
     })
 
     if (!file) {
-      return serialize.withoutWrapping({ error: 'No file uploaded' })
+      return response.status(400).send({ error: 'No file uploaded' })
     }
 
     const fileName = `vehicle-${user.id}-${randomUUID()}.${file.extname}`
@@ -215,6 +215,14 @@ export default class DriverController {
       }
 
       emitToClient(viajeActivo.clienteId, 'driver:location', {
+        lat: data.lat,
+        lng: data.lng,
+      })
+      emitToAdmin('admin:driver:location', {
+        id: String(conductor.id),
+        _id: String(conductor.id),
+        conductorId: String(conductor.id),
+        usuarioId: String(user.id),
         lat: data.lat,
         lng: data.lng,
       })
@@ -308,7 +316,7 @@ export default class DriverController {
 
   @ApiOperation({ summary: 'Subir foto del conductor', description: 'Sube una foto del conductor' })
   @ApiResponse({ type: 'object' })
-  async driverPhoto({ auth, request, serialize }: HttpContext) {
+  async driverPhoto({ auth, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
@@ -318,7 +326,7 @@ export default class DriverController {
     })
 
     if (!file) {
-      return serialize.withoutWrapping({ error: 'No file uploaded' })
+      return response.status(400).send({ error: 'No file uploaded' })
     }
 
     const fileName = `driver-${user.id}-${randomUUID()}.${file.extname}`
@@ -330,7 +338,7 @@ export default class DriverController {
     return serialize.withoutWrapping({ fotoConductor: conductor.fotoConductor })
   }
 
-  async uploadCedula({ auth, request, serialize }: HttpContext) {
+  async uploadCedula({ auth, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
@@ -338,7 +346,7 @@ export default class DriverController {
       size: '5mb',
       extnames: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
     })
-    if (!file) return serialize.withoutWrapping({ error: 'No file uploaded' })
+    if (!file) return response.status(400).send({ error: 'No file uploaded' })
 
     const fileName = `cedula-${user.id}-${randomUUID()}.${file.extname}`
     await file.move(app.makePath('storage', 'uploads'), { name: fileName })
@@ -349,7 +357,7 @@ export default class DriverController {
     return serialize.withoutWrapping({ fotoCedula: conductor.fotoCedula })
   }
 
-  async uploadLicencia({ auth, request, serialize }: HttpContext) {
+  async uploadLicencia({ auth, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
@@ -357,7 +365,7 @@ export default class DriverController {
       size: '5mb',
       extnames: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
     })
-    if (!file) return serialize.withoutWrapping({ error: 'No file uploaded' })
+    if (!file) return response.status(400).send({ error: 'No file uploaded' })
 
     const fileName = `licencia-${user.id}-${randomUUID()}.${file.extname}`
     await file.move(app.makePath('storage', 'uploads'), { name: fileName })
@@ -368,7 +376,7 @@ export default class DriverController {
     return serialize.withoutWrapping({ fotoLicencia: conductor.fotoLicencia })
   }
 
-  async uploadVehiculo({ auth, request, serialize }: HttpContext) {
+  async uploadVehiculo({ auth, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
@@ -376,7 +384,7 @@ export default class DriverController {
       size: '5mb',
       extnames: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
     })
-    if (!file) return serialize.withoutWrapping({ error: 'No file uploaded' })
+    if (!file) return response.status(400).send({ error: 'No file uploaded' })
 
     const fileName = `verif-vehiculo-${user.id}-${randomUUID()}.${file.extname}`
     await file.move(app.makePath('storage', 'uploads'), { name: fileName })

@@ -9,12 +9,19 @@ export const registerValidator = vine.create({
   email: email().unique({ table: 'users', column: 'email' }),
   password: password(),
   telefono: vine.string().maxLength(20).nullable().optional(),
-  rol: vine.enum(['conductor', 'cliente', 'admin']),
-  edad: vine.number().min(18).max(120).nullable().optional(),
+  rol: vine.enum(['conductor', 'cliente']),
+  // F envía 0 cuando la edad no es numérica; los mensajes en español evitan el 422 confuso.
+  edad: vine
+    .number()
+    .min(18, 'Debes ser mayor de 18 años')
+    .max(120, 'Edad inválida')
+    .nullable()
+    .optional(),
   cedula: vine.string().maxLength(20).nullable().optional(),
   placa: vine.string().maxLength(20).nullable().optional(),
   tipoVehiculo: vine.string().maxLength(50).nullable().optional(),
   capacidad: vine.string().maxLength(50).nullable().optional(),
+  ciudad: vine.string().maxLength(100).nullable().optional(),
 })
 
 export const loginValidator = vine.create({

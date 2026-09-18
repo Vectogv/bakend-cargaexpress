@@ -15,6 +15,25 @@ export const tripRequestValidator = vine.create({
   precioCliente: vine.number().min(0),
 })
 
+export const tripReserveValidator = vine.create({
+  origen: vine.object({
+    direccion: vine.string(),
+    lat: vine.number().min(-90).max(90),
+    lng: vine.number().min(-180).max(180),
+  }),
+  destino: vine.object({
+    direccion: vine.string(),
+    lat: vine.number().min(-90).max(90),
+    lng: vine.number().min(-180).max(180),
+  }),
+  descripcion: vine.string().nullable().optional(),
+  precioCliente: vine.number().min(0),
+  // Fecha/hora programada. Se validan además contra la anticipación mínima
+  // en el controlador (depende de la configuración de la plataforma).
+  fechaProgramada: vine.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  horaProgramada: vine.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+})
+
 export const tripCompleteValidator = vine.create({
   montoFinal: vine.number().min(0),
 })

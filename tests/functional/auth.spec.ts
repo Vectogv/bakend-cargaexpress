@@ -1,5 +1,6 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
+import User from '#models/user'
 
 test.group('Auth - Register', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
@@ -108,6 +109,22 @@ test.group('Auth - Register', (group) => {
     })
 
     response.assertStatus(422)
+  })
+
+  test('fail registration with rol admin — el registro publico no crea administradores', async ({ client, assert }) => {
+    const email = `admin-rejected-${Date.now()}@test.com`
+    const response = await client.post('/api/auth/register').json({
+      nombre: 'Test',
+      apellido: 'User',
+      email,
+      password: '123456',
+      rol: 'admin',
+    })
+
+    response.assertStatus(422)
+
+    const user = await User.findBy('email', email)
+    assert.isNull(user)
   })
 })
 
@@ -221,7 +238,7 @@ test.group('Auth - Refresh Token', (group) => {
       refreshToken: 'invalid-token-123',
     })
 
-    response.assertStatus(200)
+    response.assertStatus(401)
     assert.isDefined(response.body().error)
   })
 

@@ -2,10 +2,13 @@ import Oferta from '#models/oferta'
 import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
 import User from '#models/user'
+import db from '@adonisjs/lucid/services/db'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
-import { getIO, emitToDriver } from '#start/socket'
+import { getIO, emitToClient, emitToDriver, emitTripStatusChanged } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
+import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
+import TripConflictService from '#services/trip_conflict_service'
 
 export default class OfferController {
   async store({ auth, request, response, params }: HttpContext) {
@@ -59,13 +62,24 @@ export default class OfferController {
     if (ofertaAnterior) {
       ofertaAnterior.estado = 'cancelada'
       await ofertaAnterior.save()
+
+      emitToClient(viaje.clienteId, 'offer:cancelled', {
+        viajeId: String(viaje.id),
+        ofertaId: String(ofertaAnterior.id),
+      })
     }
+
+    // placa y mensaje vienen de F para que el cliente vea el vehículo y la nota.
+    const placa = request.input('placa') ? String(request.input('placa')).trim() : null
+    const mensaje = request.input('mensaje') ? String(request.input('mensaje')).trim() : null
 
     const oferta = await Oferta.create({
       viajeId: viaje.id,
       conductorId: conductor.id,
       monto,
       estado: 'pendiente',
+      placa,
+      mensaje,
       expiraAt: DateTime.now().plus({ seconds: 28 }),
     })
 
@@ -73,51 +87,37 @@ export default class OfferController {
     if (viaje.estado === 'buscando_conductor') {
       viaje.estado = 'pendiente'
       await viaje.save()
-      try {
-        const ioPrev = getIO()
-        ioPrev.to(`client:${viaje.clienteId}`).emit('trip:status_changed', {
-          id: String(viaje.id),
-          estado: 'pendiente',
-        })
-      } catch (_e) { /* no crítico */ }
+      emitToClient(viaje.clienteId, 'trip:status_changed', {
+        id: String(viaje.id),
+        estado: 'pendiente',
+      })
     }
 
-    try {
-      const io = getIO()
-      io.to(`client:${viaje.clienteId}`).emit('new:offer', {
-        id: String(oferta.id),
-        viajeId: String(oferta.viajeId),
-        monto: oferta.monto,
-        conductor: {
-          id: String(conductor.id),
-          nombre: `${datosConductor.nombre} ${datosConductor.apellido}`.trim() || 'Sin nombre',
-          foto: conductor.fotoConductor,
-          calificacion: conductor.calificacion,
-          placa: conductor.placa,
-          tipoVehiculo: conductor.tipoVehiculo,
-        },
-        createdAt: oferta.createdAt ? oferta.createdAt.toISO() : new Date().toISOString(),
-      })
-
-      // Alias del documento
-      io.to(`client:${viaje.clienteId}`).emit('trip:offer_received', {
-        id: String(oferta.id),
-        viajeId: String(oferta.viajeId),
-        monto: oferta.monto,
-        conductor: {
-          id: String(conductor.id),
-          nombre: `${datosConductor.nombre} ${datosConductor.apellido}`.trim() || 'Sin nombre',
-          foto: conductor.fotoConductor,
-          calificacion: conductor.calificacion,
-          placa: conductor.placa,
-          tipoVehiculo: conductor.tipoVehiculo,
-        },
-        expiresAt: oferta.expiraAt ? oferta.expiraAt.toISO() : null,
-        createdAt: oferta.createdAt ? oferta.createdAt.toISO() : new Date().toISOString(),
-      })
-    } catch (e) {
-      console.error('Socket emit error (no crítico):', e)
+    const conductorPayload = {
+      id: String(conductor.id),
+      nombre: `${datosConductor.nombre} ${datosConductor.apellido}`.trim() || 'Sin nombre',
+      foto: conductor.fotoConductor,
+      calificacion: conductor.calificacion,
+      rating: conductor.calificacion,
+      placa: conductor.placa,
+      tipoVehiculo: conductor.tipoVehiculo,
     }
+    const offerPayload = {
+      id: String(oferta.id),
+      _id: String(oferta.id),
+      viajeId: String(oferta.viajeId),
+      monto: oferta.monto,
+      conductor: conductorPayload,
+      placa: oferta.placa ?? conductor.placa,
+      mensaje: oferta.mensaje ?? null,
+      expiresAt: oferta.expiraAt ? oferta.expiraAt.toISO() : null,
+      createdAt: oferta.createdAt ? oferta.createdAt.toISO() : new Date().toISOString(),
+    }
+
+    emitToClient(viaje.clienteId, 'new:offer', offerPayload)
+
+    // Alias del documento
+    emitToClient(viaje.clienteId, 'trip:offer_received', offerPayload)
 
     try {
       const cliente = await User.find(viaje.clienteId)
@@ -161,15 +161,20 @@ export default class OfferController {
     return response.json(
       ofertas.map((o) => ({
         id: String(o.id),
+        _id: String(o.id),
         monto: o.monto,
         conductor: {
           id: String(o.conductor.id),
           nombre: `${o.conductor.usuario?.nombre || ''} ${o.conductor.usuario?.apellido || ''}`.trim(),
           foto: o.conductor.fotoConductor,
           calificacion: o.conductor.calificacion,
+          rating: o.conductor.calificacion,
           placa: o.conductor.placa,
           tipoVehiculo: o.conductor.tipoVehiculo,
         },
+        placa: o.placa ?? o.conductor.placa,
+        mensaje: o.mensaje ?? null,
+        expiresAt: o.expiraAt ? o.expiraAt.toISO() : null,
         createdAt: o.createdAt.toISO(),
       }))
     )
@@ -177,54 +182,115 @@ export default class OfferController {
 
   async accept({ auth, params, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    const viaje = await Viaje.find(params.id)
 
-    if (!viaje) {
-      return response.status(404).send({ error: 'Viaje no encontrado' })
-    }
-    if (viaje.clienteId !== user.id) {
-      return response.status(403).send({ error: 'Este viaje no te pertenece' })
+    // ── Transacción con bloqueo pesimista ───────────────────────────
+    // Evita que la misma oferta se acepte dos veces (doble tap) y que el viaje
+    // cambie de estado mientras se procesa la aceptación.
+    let resultado: { viaje: Viaje; oferta: Oferta }
+    try {
+      resultado = await db.transaction(async (trx) => {
+        const viaje = await Viaje.query({ client: trx })
+          .where('id', params.id)
+          .forUpdate()
+          .first()
+
+        if (!viaje) {
+          throw Object.assign(new Error('NO_ENCONTRADO'), {
+            statusCode: 404,
+            message: 'Viaje no encontrado',
+          })
+        }
+        if (viaje.clienteId !== user.id) {
+          throw Object.assign(new Error('NO_PROPIO'), {
+            statusCode: 403,
+            message: 'Este viaje no te pertenece',
+          })
+        }
+
+        // Verificar (bajo lock) que el viaje sigue aceptando ofertas
+        if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
+          throw Object.assign(new Error('YA_ASIGNADO'), {
+            statusCode: 400,
+            message: 'El viaje ya no acepta ofertas',
+          })
+        }
+
+        const oferta = await Oferta.query({ client: trx })
+          .where('id', params.offerId)
+          .where('viaje_id', viaje.id)
+          .where('estado', 'pendiente')
+          .forUpdate()
+          .first()
+
+        if (!oferta) {
+          throw Object.assign(new Error('OFERTA'), {
+            statusCode: 404,
+            message: 'Oferta no encontrada o ya procesada',
+          })
+        }
+
+        // Oferta expirada: no se puede aceptar (Re-enviar una oferta nueva).
+        if (oferta.expiraAt && oferta.expiraAt.toMillis() <= DateTime.now().toMillis()) {
+          throw Object.assign(new Error('OFERTA_EXPIRADA'), {
+            statusCode: 422,
+            message: 'La oferta ha expirado',
+          })
+        }
+
+        // Reservas programadas: evitar asignar un conductor con conflicto de horario.
+        const conflicto = await TripConflictService.conductorTieneConflicto(
+          oferta.conductorId,
+          viaje,
+          trx
+        )
+        if (conflicto) {
+          throw Object.assign(new Error('CONFLICTO_HORARIO'), {
+            statusCode: 409,
+            message: 'El conductor tiene otro viaje incompatible en ese horario',
+          })
+        }
+
+        oferta.estado = 'aceptada'
+        await oferta.useTransaction(trx).save()
+
+        await Oferta.query({ client: trx })
+          .where('viaje_id', viaje.id)
+          .where('id', '!=', oferta.id)
+          .where('estado', 'pendiente')
+          .update({ estado: 'rechazada' })
+
+        viaje.conductorId = oferta.conductorId
+        viaje.estado = 'aceptado'
+        viaje.precioFinal = oferta.monto
+        viaje.aceptadoAt = DateTime.now()
+        await viaje.useTransaction(trx).save()
+
+        return { viaje, oferta }
+      })
+    } catch (err: any) {
+      if (err?.statusCode) {
+        return response.status(err.statusCode).send({ error: err.message })
+      }
+      throw err
     }
 
-    // Verificar que el viaje sigue aceptando ofertas
-    if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
-      return response.status(400).send({ error: 'El viaje ya no acepta ofertas' })
-    }
-
+    const viaje = resultado.viaje
     const oferta = await Oferta.query()
-      .where('id', params.offerId)
-      .where('viaje_id', viaje.id)
-      .where('estado', 'pendiente')
+      .where('id', resultado.oferta.id)
       .preload('conductor', (q) => q.preload('usuario'))
-      .preload('viaje')
-      .first()
+      .firstOrFail()
 
-    if (!oferta) {
-      return response.status(404).send({ error: 'Oferta no encontrada o ya procesada' })
-    }
+    emitTripUpdateToModerators(viaje)
 
-    oferta.estado = 'aceptada'
-    await oferta.save()
-
-    await Oferta.query()
-      .where('viaje_id', viaje.id)
-      .where('id', '!=', oferta.id)
-      .where('estado', 'pendiente')
-      .update({ estado: 'rechazada' })
-
-    viaje.conductorId = oferta.conductorId
-    viaje.estado = 'aceptado'
-    viaje.precioFinal = oferta.monto
-    viaje.aceptadoAt = DateTime.now()
-    await viaje.save()
-
-    const io = getIO()
-    io.to(`client:${viaje.clienteId}`).emit('trip:status_changed', {
+    // Se usan los helpers (no `getIO()` directo) para que el endpoint siga
+    // respondiendo aunque Socket.IO no esté inicializado. Eventos y rooms
+    // son exactamente los mismos que antes.
+    emitTripStatusChanged(viaje.clienteId, oferta.conductor.usuarioId, {
       id: String(viaje.id),
       estado: 'aceptado',
     })
 
-    io.to(`client:${viaje.clienteId}`).emit('offer:accepted', {
+    emitToClient(viaje.clienteId, 'offer:accepted', {
       viajeId: String(viaje.id),
       ofertaId: String(oferta.id),
       monto: oferta.monto,
@@ -238,14 +304,14 @@ export default class OfferController {
       estado: 'aceptado',
     })
 
-    io.to(`driver:${oferta.conductor.usuarioId}`).emit('offer:accepted', {
+    emitToDriver(oferta.conductor.usuarioId, 'offer:accepted', {
       viajeId: String(viaje.id),
       ofertaId: String(oferta.id),
       monto: oferta.monto,
       estado: 'aceptado',
     })
 
-    io.to(`driver:${oferta.conductor.usuarioId}`).emit('trip:offer_accepted', {
+    emitToDriver(oferta.conductor.usuarioId, 'trip:offer_accepted', {
       viajeId: String(viaje.id),
       ofertaId: String(oferta.id),
       monto: oferta.monto,
@@ -266,7 +332,7 @@ export default class OfferController {
       .preload('conductor')
 
     for (const otra of otrasOfertas) {
-      io.to(`driver:${otra.conductor.usuarioId}`).emit('offer:rejected', {
+      emitToDriver(otra.conductor.usuarioId, 'offer:rejected', {
         viajeId: String(viaje.id),
         ofertaId: String(otra.id),
       })
@@ -325,16 +391,14 @@ export default class OfferController {
     viaje.estado = 'conductor_en_camino'
     await viaje.save()
 
-    try {
-      const io = getIO()
-      io.to(`client:${viaje.clienteId}`).emit('trip:status_changed', {
-        id: String(viaje.id),
-        estado: 'conductor_en_camino',
-      })
-      io.to(`client:${viaje.clienteId}`).emit('driver:on_the_way', {
-        viajeId: String(viaje.id),
-      })
-    } catch (_e) { /* no crítico */ }
+    emitTripStatusChanged(viaje.clienteId, conductor.usuarioId, {
+      id: String(viaje.id),
+      estado: 'conductor_en_camino',
+    })
+
+    emitToClient(viaje.clienteId, 'driver:on_the_way', {
+      viajeId: String(viaje.id),
+    })
 
     const clienteUser = await User.find(viaje.clienteId)
     if (clienteUser?.fcmToken) {
@@ -344,6 +408,8 @@ export default class OfferController {
         'Tu conductor está en camino al punto de recogida'
       ).catch(() => {})
     }
+
+    emitTripUpdateToModerators(viaje)
 
     return { id: String(viaje.id), estado: viaje.estado }
   }
@@ -371,16 +437,14 @@ export default class OfferController {
     viaje.estado = 'conductor_llegada'
     await viaje.save()
 
-    try {
-      const io = getIO()
-      io.to(`client:${viaje.clienteId}`).emit('trip:status_changed', {
-        id: String(viaje.id),
-        estado: 'conductor_llegada',
-      })
-      io.to(`client:${viaje.clienteId}`).emit('driver:arrived', {
-        viajeId: String(viaje.id),
-      })
-    } catch (_e) { /* no crítico */ }
+    emitTripStatusChanged(viaje.clienteId, conductor.usuarioId, {
+      id: String(viaje.id),
+      estado: 'conductor_llegada',
+    })
+
+    emitToClient(viaje.clienteId, 'driver:arrived', {
+      viajeId: String(viaje.id),
+    })
 
     const clienteUser = await User.find(viaje.clienteId)
     if (clienteUser?.fcmToken) {
@@ -390,6 +454,8 @@ export default class OfferController {
         'Tu conductor ha llegado al punto de recogida'
       ).catch(() => {})
     }
+
+    emitTripUpdateToModerators(viaje)
 
     return { id: String(viaje.id), estado: viaje.estado }
   }
