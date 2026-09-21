@@ -13,6 +13,33 @@ import { emitToClient, emitToAdmin } from '#start/socket'
 import GpsRateLimitService from '#services/gps_rate_limit_service'
 import FraudDetectionService from '#services/fraud_detection_service'
 import RedisService from '#services/redis_service'
+import db from '@adonisjs/lucid/services/db'
+import reservationConfig from '#config/reservations'
+
+/**
+ * Totales de ganancias de UN conductor (opcionalmente desde una fecha). Las subconsultas
+ * `Ganancia.query().count()` dentro de `.select()` ignoraban el where y sumaban las
+ * ganancias de todos los conductores.
+ */
+async function resumenGanancias(conductorId: number, desde?: string) {
+  const q = db.from('ganancias').where('conductor_id', conductorId)
+  if (desde) q.where('created_at', '>=', desde)
+  const fila = await q
+    .select(
+      db.raw('COUNT(*) as viajes'),
+      db.raw('COALESCE(SUM(monto_bruto), 0) as bruto'),
+      db.raw('COALESCE(SUM(comision), 0) as comision'),
+      db.raw('COALESCE(SUM(monto_neto), 0) as neto'),
+      db.raw('COALESCE(SUM(CASE WHEN comision_pagada = ? THEN comision ELSE 0 END), 0) as pendiente', [false])
+    )
+    .first()
+  return (fila || {}) as Record<string, any>
+}
+
+/** Inicio de día/semana/mes en la zona horaria del negocio, expresado en UTC. */
+function inicioDe(unidad: 'day' | 'week' | 'month') {
+  return DateTime.now().setZone(reservationConfig.timezone).startOf(unidad).toUTC().toSQL()!
+}
 
 export default class DriverController {
   @ApiOperation({
@@ -56,44 +83,12 @@ export default class DriverController {
 
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
-    const now = DateTime.now()
-    const startOfDay = now.startOf('day').toSQL()
-    const startOfWeek = now.startOf('week').toSQL()
-    const startOfMonth = now.startOf('month').toSQL()
-
-    async function periodStats(since: string) {
-      const rows = await Ganancia.query()
-        .where('conductor_id', conductor.id)
-        .where('created_at', '>=', since)
-        .select(
-          Ganancia.query().count('*').as('viajes'),
-          Ganancia.query().sum('monto_bruto').as('bruto'),
-          Ganancia.query().sum('comision').as('comision'),
-          Ganancia.query().sum('monto_neto').as('neto'),
-          Ganancia.query().where('comision_pagada', false).sum('comision').as('pendiente')
-        )
-        .first()
-      return rows?.$extras || {}
-    }
-
-    const [hoy, semana, mes] = await Promise.all([
-      periodStats(startOfDay),
-      periodStats(startOfWeek),
-      periodStats(startOfMonth),
+    const [hoy, semana, mes, total] = await Promise.all([
+      resumenGanancias(conductor.id, inicioDe('day')),
+      resumenGanancias(conductor.id, inicioDe('week')),
+      resumenGanancias(conductor.id, inicioDe('month')),
+      resumenGanancias(conductor.id),
     ])
-
-    const totales = await Ganancia.query()
-      .where('conductor_id', conductor.id)
-      .select(
-        Ganancia.query().count('*').as('viajes'),
-        Ganancia.query().sum('monto_bruto').as('bruto'),
-        Ganancia.query().sum('comision').as('comision'),
-        Ganancia.query().sum('monto_neto').as('neto'),
-        Ganancia.query().where('comision_pagada', false).sum('comision').as('pendiente')
-      )
-      .first()
-
-    const total = totales?.$extras || {}
 
     function mapPeriod(p: Record<string, any>) {
       return {
@@ -285,21 +280,7 @@ export default class DriverController {
 
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
-    const now = DateTime.now()
-    const startOfDay = now.startOf('day').toSQL()
-
-    const stats = await Ganancia.query()
-      .where('conductor_id', conductor.id)
-      .where('created_at', '>=', startOfDay)
-      .select(
-        Ganancia.query().count('*').as('viajes'),
-        Ganancia.query().sum('monto_bruto').as('bruto'),
-        Ganancia.query().sum('comision').as('comision'),
-        Ganancia.query().sum('monto_neto').as('neto')
-      )
-      .first()
-
-    const s = stats?.$extras || {}
+    const s = await resumenGanancias(conductor.id, inicioDe('day'))
 
     const data = {
       viajesHoy: Number(s.viajes || 0),
