@@ -132,6 +132,7 @@ router
     router.post(':id/dispute', [controllers.Dispute, 'store'])
     router.post(':id/dispute/appeal', [controllers.Dispute, 'appeal'])
     router.post(':id/dispute/support', [controllers.Dispute, 'uploadSupport'])
+    router.get(':id/nearby-drivers', [controllers.Trip, 'nearbyDrivers'])
     router.get(':id/offers', [controllers.Offer, 'index'])
     router.post(':id/offers', [controllers.Offer, 'store'])
       .use(middleware.rateLimit({ max: 10, windowMs: 60_000 }))

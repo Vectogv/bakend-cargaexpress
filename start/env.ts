@@ -52,6 +52,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   ANTIFRAUDE_RADIO_RECOGIDA_KM: Env.schema.number.optional(),
   ANTIFRAUDE_UBICACION_MAX_SEG: Env.schema.number.optional(),
   ANTIFRAUDE_RADIO_OFERTA_KM: Env.schema.number.optional(),
+  CONDUCTORES_VISIBLES_RADIO_KM: Env.schema.number.optional(),
   ANTIFRAUDE_CONFIRMACION_TIMEOUT_MIN: Env.schema.number.optional(),
   ANTIFRAUDE_PENALIZACION_CANCELACION: Env.schema.number.optional(),
 })

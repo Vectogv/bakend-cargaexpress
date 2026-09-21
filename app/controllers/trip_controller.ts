@@ -335,6 +335,54 @@ export default class TripController {
     })
   }
 
+  /**
+   * Vehículos disponibles cerca del origen de un viaje, para que el cliente los vea
+   * en el mapa mientras busca conductor. Solo posiciones aproximadas y tipo de vehículo.
+   */
+  async nearbyDrivers({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const viaje = await Viaje.find(params.id)
+    if (!viaje) return response.status(404).json({ error: 'Viaje no encontrado' })
+    if (viaje.clienteId !== user.id) {
+      return response.status(403).json({ error: 'No tienes acceso a este viaje' })
+    }
+    const radioKm = antifraudeConfig.radioConductoresVisiblesKm
+    if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
+      return response.json({ radioKm, conductores: [] })
+    }
+
+    const desde = DateTime.now().minus({ seconds: antifraudeConfig.ubicacionMaxSeg })
+    const candidatos = await Conductor.query()
+      .where('online', true)
+      .where('estado_verificacion', 'aprobado')
+      .whereNotNull('ultima_ubicacion_lat')
+      .whereNotNull('ultima_ubicacion_lng')
+      .where('ubicacion_actualizada_en', '>=', desde.toSQL()!)
+
+    const conductores = candidatos
+      .map((c) => ({
+        c,
+        distancia: distanciaKm(
+          Number(viaje.origenLat),
+          Number(viaje.origenLng),
+          Number(c.ultimaUbicacionLat),
+          Number(c.ultimaUbicacionLng)
+        ),
+      }))
+      .filter(({ distancia }) => distancia <= radioKm)
+      .sort((a, b) => a.distancia - b.distancia)
+      .slice(0, 30)
+      .map(({ c, distancia }) => ({
+        // Redondeado a ~11 m: suficiente para el mapa sin exponer la posición exacta.
+        lat: Math.round(Number(c.ultimaUbicacionLat) * 1e4) / 1e4,
+        lng: Math.round(Number(c.ultimaUbicacionLng) * 1e4) / 1e4,
+        tipoVehiculo: c.tipoVehiculo,
+        distanciaKm: Math.round(distancia * 100) / 100,
+      }))
+
+    return response.json({ radioKm, conductores })
+  }
+
   @ApiOperation({
     summary: 'Obtener viajes cercanos',
     description: 'Devuelve los viajes cerca de una ubicación dentro de un radio. Usa la fórmula de Haversine con filtrado en memoria.',

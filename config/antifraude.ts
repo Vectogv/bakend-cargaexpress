@@ -30,6 +30,12 @@ const antifraudeConfig = {
   radioOfertaKm: Number(env.get('ANTIFRAUDE_RADIO_OFERTA_KM', 20)),
 
   /**
+   * Radio (km) alrededor del ORIGEN en el que el cliente ve los vehículos
+   * disponibles mientras busca conductor.
+   */
+  radioConductoresVisiblesKm: Number(env.get('CONDUCTORES_VISIBLES_RADIO_KM', 2)),
+
+  /**
    * H1: Minutos que un viaje puede permanecer en 'pendiente_confirmacion'
    * sin respuesta del cliente antes de notificar al moderador de zona.
    */
