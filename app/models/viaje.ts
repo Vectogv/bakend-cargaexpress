@@ -62,11 +62,11 @@ export default class Viaje extends BaseModel {
   declare origenDireccion: string
 
   @ApiProperty()
-  @column()
+  @column({ consume: (v) => (v === null || v === undefined ? v : Number(v)) })
   declare origenLat: number
 
   @ApiProperty()
-  @column()
+  @column({ consume: (v) => (v === null || v === undefined ? v : Number(v)) })
   declare origenLng: number
 
   @ApiProperty()
@@ -74,11 +74,11 @@ export default class Viaje extends BaseModel {
   declare destinoDireccion: string
 
   @ApiProperty()
-  @column()
+  @column({ consume: (v) => (v === null || v === undefined ? v : Number(v)) })
   declare destinoLat: number
 
   @ApiProperty()
-  @column()
+  @column({ consume: (v) => (v === null || v === undefined ? v : Number(v)) })
   declare destinoLng: number
 
   @ApiProperty()
@@ -109,15 +109,15 @@ export default class Viaje extends BaseModel {
   declare recordatorioEnviado: boolean
 
   @ApiProperty()
-  @column()
+  @column({ consume: (v) => (v === null || v === undefined ? v : Number(v)) })
   declare precioCliente: number | null
 
   @ApiProperty()
-  @column()
+  @column({ consume: (v) => (v === null || v === undefined ? v : Number(v)) })
   declare precioEstimado: number | null
 
   @ApiProperty()
-  @column()
+  @column({ consume: (v) => (v === null || v === undefined ? v : Number(v)) })
   declare precioFinal: number | null
 
   @ApiProperty()

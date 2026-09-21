@@ -16,7 +16,7 @@ export default class Oferta extends BaseModel {
   @column()
   declare conductorId: number
 
-  @column()
+  @column({ consume: (v) => (v === null || v === undefined ? v : Number(v)) })
   declare monto: number
 
   @column()
