@@ -25,8 +25,10 @@ export type ScannedRoutes = {
     'drivers.driver.upload_licencia': { paramsTuple?: []; params?: {} }
     'drivers.driver.upload_vehiculo': { paramsTuple?: []; params?: {} }
     'trips.trip.request': { paramsTuple?: []; params?: {} }
+    'trips.trip.reserve': { paramsTuple?: []; params?: {} }
     'trips.trip.nearby': { paramsTuple?: []; params?: {} }
     'trips.trip.active': { paramsTuple?: []; params?: {} }
+    'trips.trip.reservations': { paramsTuple?: []; params?: {} }
     'trips.trip.history': { paramsTuple?: []; params?: {} }
     'trips.trip.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.accept': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -34,6 +36,7 @@ export type ScannedRoutes = {
     'trips.trip.start_trip': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.complete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.finalize': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'trips.trip.confirm_close': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.cancel': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.request_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.rate': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -51,7 +54,9 @@ export type ScannedRoutes = {
     'trips.offer.confirm_pickup': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.report.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'notifications.notification.index': { paramsTuple?: []; params?: {} }
+    'notifications.notification.store': { paramsTuple?: []; params?: {} }
     'notifications.notification.read': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'notifications.notification.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.dashboard': { paramsTuple?: []; params?: {} }
     'admin.admin.users': { paramsTuple?: []; params?: {} }
     'admin.admin.drivers': { paramsTuple?: []; params?: {} }
@@ -77,6 +82,7 @@ export type ScannedRoutes = {
     'admin.admin.pending_verifications': { paramsTuple?: []; params?: {} }
     'admin.admin.approve_driver': { paramsTuple: [ParamValue]; params: {'conductorId': ParamValue} }
     'admin.admin.reject_driver': { paramsTuple: [ParamValue]; params: {'conductorId': ParamValue} }
+    'admin.admin.update_driver_city': { paramsTuple: [ParamValue]; params: {'conductorId': ParamValue} }
     'admin.admin.pending_payments': { paramsTuple?: []; params?: {} }
     'admin.admin.confirm_payment': { paramsTuple: [ParamValue]; params: {'userId': ParamValue} }
     'admin.admin.reject_payment': { paramsTuple: [ParamValue]; params: {'userId': ParamValue} }
@@ -84,7 +90,10 @@ export type ScannedRoutes = {
     'admin.admin.update_coverage': { paramsTuple?: []; params?: {} }
     'admin.admin.update_banner': { paramsTuple?: []; params?: {} }
     'admin.admin.assign_moderator': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'admin.admin.update_user_role': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.assign_leader': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'admin.admin.list_comunicados': { paramsTuple?: []; params?: {} }
+    'admin.admin.list_encuestas': { paramsTuple?: []; params?: {} }
     'admin.admin.approve_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.reject_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -114,14 +123,41 @@ export type ScannedRoutes = {
     'moderator.moderator.inactive_drivers': { paramsTuple?: []; params?: {} }
     'moderator.moderator.notify_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'moderator.moderator.report_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.approve_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.reject_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'moderator.moderator.store_encuesta': { paramsTuple?: []; params?: {} }
     'moderator.moderator.encuesta_results': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'moderator.moderator.answer_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.my_encuestas': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.my_reports': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.dashboard': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.trips': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.trip_show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.resolve_pending_close': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.reservations': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.emergencies': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.emergency_count': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.emergency_acknowledge': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.emergency_resolve': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.conversacion.contactable_users': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.unread_count': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.index': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.store': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.messages': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.conversacion.store_message': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'avisos.moderator.avisos_index': { paramsTuple?: []; params?: {} }
     'avisos.moderator.avisos_store': { paramsTuple?: []; params?: {} }
     'avisos.moderator.avisos_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'avisos.moderator.avisos_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'emergency.trigger': { paramsTuple?: []; params?: {} }
+    'sos.alerts': { paramsTuple?: []; params?: {} }
+    'fraud.alerts.store': { paramsTuple?: []; params?: {} }
+    'emergency.chat.emergency_chat.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'emergency.chat.emergency_chat.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.conversacion.unread_count': { paramsTuple?: []; params?: {} }
+    'conversations.conversacion.index': { paramsTuple?: []; params?: {} }
+    'conversations.conversacion.messages': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.conversacion.store_message': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'leader.leader.avisos_index': { paramsTuple?: []; params?: {} }
     'leader.leader.avisos_store': { paramsTuple?: []; params?: {} }
     'leader.leader.avisos_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -140,6 +176,7 @@ export type ScannedRoutes = {
     'drivers.driver.earnings_pdf': { paramsTuple?: []; params?: {} }
     'trips.trip.nearby': { paramsTuple?: []; params?: {} }
     'trips.trip.active': { paramsTuple?: []; params?: {} }
+    'trips.trip.reservations': { paramsTuple?: []; params?: {} }
     'trips.trip.history': { paramsTuple?: []; params?: {} }
     'trips.trip.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.chat.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -158,6 +195,8 @@ export type ScannedRoutes = {
     'admin.admin.disputes': { paramsTuple?: []; params?: {} }
     'admin.admin.pending_verifications': { paramsTuple?: []; params?: {} }
     'admin.admin.pending_payments': { paramsTuple?: []; params?: {} }
+    'admin.admin.list_comunicados': { paramsTuple?: []; params?: {} }
+    'admin.admin.list_encuestas': { paramsTuple?: []; params?: {} }
     'admin.admin.moderator_reports': { paramsTuple?: []; params?: {} }
     'admin.admin.backup_logs': { paramsTuple?: []; params?: {} }
     'admin.admin.cancellation_requests': { paramsTuple?: []; params?: {} }
@@ -173,7 +212,24 @@ export type ScannedRoutes = {
     'moderator.moderator.drivers_list': { paramsTuple?: []; params?: {} }
     'moderator.moderator.inactive_drivers': { paramsTuple?: []; params?: {} }
     'moderator.moderator.encuesta_results': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.my_encuestas': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.my_reports': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.dashboard': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.trips': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.trip_show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.reservations': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.emergencies': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.emergency_count': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.contactable_users': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.unread_count': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.index': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.messages': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'avisos.moderator.avisos_index': { paramsTuple?: []; params?: {} }
+    'sos.alerts': { paramsTuple?: []; params?: {} }
+    'emergency.chat.emergency_chat.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.conversacion.unread_count': { paramsTuple?: []; params?: {} }
+    'conversations.conversacion.index': { paramsTuple?: []; params?: {} }
+    'conversations.conversacion.messages': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'leader.leader.avisos_index': { paramsTuple?: []; params?: {} }
     'leader.leader.my_comunicados': { paramsTuple?: []; params?: {} }
     'leader.leader.drivers_list': { paramsTuple?: []; params?: {} }
@@ -188,6 +244,7 @@ export type ScannedRoutes = {
     'drivers.driver.earnings_pdf': { paramsTuple?: []; params?: {} }
     'trips.trip.nearby': { paramsTuple?: []; params?: {} }
     'trips.trip.active': { paramsTuple?: []; params?: {} }
+    'trips.trip.reservations': { paramsTuple?: []; params?: {} }
     'trips.trip.history': { paramsTuple?: []; params?: {} }
     'trips.trip.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.chat.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -206,6 +263,8 @@ export type ScannedRoutes = {
     'admin.admin.disputes': { paramsTuple?: []; params?: {} }
     'admin.admin.pending_verifications': { paramsTuple?: []; params?: {} }
     'admin.admin.pending_payments': { paramsTuple?: []; params?: {} }
+    'admin.admin.list_comunicados': { paramsTuple?: []; params?: {} }
+    'admin.admin.list_encuestas': { paramsTuple?: []; params?: {} }
     'admin.admin.moderator_reports': { paramsTuple?: []; params?: {} }
     'admin.admin.backup_logs': { paramsTuple?: []; params?: {} }
     'admin.admin.cancellation_requests': { paramsTuple?: []; params?: {} }
@@ -221,7 +280,24 @@ export type ScannedRoutes = {
     'moderator.moderator.drivers_list': { paramsTuple?: []; params?: {} }
     'moderator.moderator.inactive_drivers': { paramsTuple?: []; params?: {} }
     'moderator.moderator.encuesta_results': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.my_encuestas': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.my_reports': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.dashboard': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.trips': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.trip_show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.reservations': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.emergencies': { paramsTuple?: []; params?: {} }
+    'moderator.moderator.emergency_count': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.contactable_users': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.unread_count': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.index': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.messages': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'avisos.moderator.avisos_index': { paramsTuple?: []; params?: {} }
+    'sos.alerts': { paramsTuple?: []; params?: {} }
+    'emergency.chat.emergency_chat.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.conversacion.unread_count': { paramsTuple?: []; params?: {} }
+    'conversations.conversacion.index': { paramsTuple?: []; params?: {} }
+    'conversations.conversacion.messages': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'leader.leader.avisos_index': { paramsTuple?: []; params?: {} }
     'leader.leader.my_comunicados': { paramsTuple?: []; params?: {} }
     'leader.leader.drivers_list': { paramsTuple?: []; params?: {} }
@@ -239,11 +315,13 @@ export type ScannedRoutes = {
     'drivers.driver.upload_licencia': { paramsTuple?: []; params?: {} }
     'drivers.driver.upload_vehiculo': { paramsTuple?: []; params?: {} }
     'trips.trip.request': { paramsTuple?: []; params?: {} }
+    'trips.trip.reserve': { paramsTuple?: []; params?: {} }
     'trips.trip.accept': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.decline': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.start_trip': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.complete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.finalize': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'trips.trip.confirm_close': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.cancel': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.request_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.trip.rate': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -258,6 +336,7 @@ export type ScannedRoutes = {
     'trips.offer.confirm_arrival': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.confirm_pickup': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.report.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'notifications.notification.store': { paramsTuple?: []; params?: {} }
     'admin.admin.upload_profile_avatar': { paramsTuple?: []; params?: {} }
     'admin.admin.manual_backup': { paramsTuple?: []; params?: {} }
     'admin.admin.approve_cancellation': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -269,10 +348,20 @@ export type ScannedRoutes = {
     'moderator.moderator.store_comunicado': { paramsTuple?: []; params?: {} }
     'moderator.moderator.notify_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'moderator.moderator.report_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.approve_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.reject_driver': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'moderator.moderator.store_encuesta': { paramsTuple?: []; params?: {} }
     'moderator.moderator.answer_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.resolve_pending_close': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.emergency_acknowledge': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.moderator.emergency_resolve': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'moderator.conversacion.store': { paramsTuple?: []; params?: {} }
+    'moderator.conversacion.store_message': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'avisos.moderator.avisos_store': { paramsTuple?: []; params?: {} }
     'emergency.trigger': { paramsTuple?: []; params?: {} }
+    'fraud.alerts.store': { paramsTuple?: []; params?: {} }
+    'emergency.chat.emergency_chat.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.conversacion.store_message': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'leader.leader.avisos_store': { paramsTuple?: []; params?: {} }
     'leader.leader.store_comunicado': { paramsTuple?: []; params?: {} }
   }
@@ -293,12 +382,14 @@ export type ScannedRoutes = {
     'admin.admin.clear_debt': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_driver': { paramsTuple: [ParamValue]; params: {'conductorId': ParamValue} }
     'admin.admin.reject_driver': { paramsTuple: [ParamValue]; params: {'conductorId': ParamValue} }
+    'admin.admin.update_driver_city': { paramsTuple: [ParamValue]; params: {'conductorId': ParamValue} }
     'admin.admin.confirm_payment': { paramsTuple: [ParamValue]; params: {'userId': ParamValue} }
     'admin.admin.reject_payment': { paramsTuple: [ParamValue]; params: {'userId': ParamValue} }
     'admin.admin.update_config': { paramsTuple?: []; params?: {} }
     'admin.admin.update_coverage': { paramsTuple?: []; params?: {} }
     'admin.admin.update_banner': { paramsTuple?: []; params?: {} }
     'admin.admin.assign_moderator': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'admin.admin.update_user_role': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.assign_leader': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.reject_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -308,6 +399,7 @@ export type ScannedRoutes = {
     'leader.leader.avisos_pin': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   DELETE: {
+    'notifications.notification.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.delete_user': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'favorites.favorite_route.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'avisos.moderator.avisos_delete': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

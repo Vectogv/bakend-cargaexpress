@@ -80,7 +80,7 @@ export function emitToAdmin(event: string, data: unknown) {
 
 export function emitToModerators(zona: string, event: string, data: unknown) {
   try {
-    getIO().to(`moderator:${zona}`).emit(event, data)
+    getIO().to(`moderator:${zona.trim().toLowerCase()}`).emit(event, data)
   } catch {
     logger.warn(`Socket.io not available, skipping emitToModerators event: ${event}`)
   }
@@ -180,7 +180,7 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
 
     // Unirse a rooms según rol
     if (user.esModerador && user.zonaModerador) {
-      socket.join(`moderator:${user.zonaModerador}`)
+      socket.join(`moderator:${user.zonaModerador.trim().toLowerCase()}`)
       logger.info(`Moderator ${user.id} joined room moderator:${user.zonaModerador}`)
     }
     if (user.esLider) {

@@ -14,7 +14,7 @@ test.group('Admin - listar comunicados y encuestas', (group) => {
         apellido: 'Token',
         email: `admin-token-${Date.now()}@test.com`,
         password: '123456',
-        rol: 'admin',
+        rol: 'admin', edad: 30,
       })
       const login = await client.post('/api/auth/login').json({
         email: admin.email,
@@ -28,6 +28,7 @@ test.group('Admin - listar comunicados y encuestas', (group) => {
       email: `test-content-${rol}-${Date.now()}@test.com`,
       password: '123456',
       rol,
+      edad: 30,
     })
     return res.body().token
   }

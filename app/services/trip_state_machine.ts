@@ -10,14 +10,15 @@ const transiciones: Record<EstadoViaje, EstadoViaje[]> = {
   aceptado: ['conductor_en_camino', 'en_curso', 'cancelado', 'sos'],
   conductor_en_camino: ['conductor_llegada', 'cancelado', 'sos'],
   conductor_llegada: ['en_curso', 'cancelado', 'sos'],
-  en_curso: ['entregado', 'cancelado', 'sos'],
+  en_curso: ['entregado', 'pendiente_confirmacion', 'cancelado', 'sos'],
   entregado: ['esperando_confirmacion', 'disputa'],
   esperando_confirmacion: ['finalizado', 'disputa'],
+  pendiente_confirmacion: ['finalizado', 'disputa'],
   finalizado: [],
   cancelado: [],
   rechazado: [],
   sos: ['conductor_en_camino', 'conductor_llegada', 'en_curso', 'finalizado', 'cancelado'],
-  disputa: ['finalizado'],
+  disputa: ['finalizado', 'en_curso'],
 }
 
 export default class TripStateMachine {

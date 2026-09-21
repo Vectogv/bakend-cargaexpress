@@ -2,6 +2,7 @@ import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import db from '@adonisjs/lucid/services/db'
 import { setTimeout } from 'node:timers/promises'
+import GpsRateLimitService from '#services/gps_rate_limit_service'
 
 test.group('Socket.IO Reconnection', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
@@ -10,7 +11,7 @@ test.group('Socket.IO Reconnection', (group) => {
     const clientReg = await client.post('/api/auth/register').json({
       nombre: 'Recon Client', apellido: 'Test',
       email: `recon-client-${Date.now()}@test.com`,
-      password: '123456', rol: 'cliente',
+      password: '123456', rol: 'cliente', edad: 30,
     })
     clientReg.assertStatus(200)
     const clientToken = clientReg.body().token
@@ -18,7 +19,7 @@ test.group('Socket.IO Reconnection', (group) => {
     const driverReg = await client.post('/api/auth/register').json({
       nombre: 'Recon Driver', apellido: 'Test',
       email: `recon-driver-${Date.now()}@test.com`,
-      password: '123456', rol: 'conductor',
+      password: '123456', rol: 'conductor', edad: 30,
       cedula: `${Date.now()}`, placa: `RC-${Date.now()}`,
       tipoVehiculo: 'camioneta', capacidad: '1000 kg',
     })
@@ -38,9 +39,12 @@ test.group('Socket.IO Reconnection', (group) => {
     trip.assertStatus(200)
     const tripId = trip.body().id
 
-    await client.put('/api/drivers/location')
+    const conductor = await db.from('conductores').where('usuario_id', driverUserId).first()
+    await GpsRateLimitService.reset(conductor.id)
+    const locationRes = await client.put('/api/drivers/location')
       .header('Authorization', `Bearer ${driverToken}`)
       .json({ lat: 3.4516, lng: -76.5320, heading: 0, accuracy: 10 })
+    locationRes.assertStatus(200)
 
     // Simulate socket disconnect → reconnect: verify state via HTTP
     // (1st connection) Driver accepts via API
@@ -70,9 +74,9 @@ test.group('Socket.IO Reconnection', (group) => {
       .json({ montoFinal: 50000 })
     complete.assertStatus(200)
 
-    // Verify final state persists
+    // Verify final state persists (pending client confirmation)
     viaje = await db.from('viajes').where('id', tripId).first()
-    assert.equal(viaje.estado, 'esperando_confirmacion')
+    assert.equal(viaje.estado, 'pendiente_confirmacion')
   })
 
   test('rejoin rules: socket.ts auto-joins rooms by role', ({ assert }) => {

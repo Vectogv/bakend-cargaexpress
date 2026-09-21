@@ -36,6 +36,8 @@ export default class Viaje extends BaseModel {
     'canceladoAt',
     'enCursoAt',
     'finalizadoAt',
+    'pendienteConfirmacionDesde',
+    'moderadorNotificadoEn',
   ] as const
   $columns = Viaje.$columns
 
@@ -151,6 +153,12 @@ export default class Viaje extends BaseModel {
 
   @column.dateTime()
   declare finalizadoAt: DateTime | null
+
+  @column.dateTime()
+  declare pendienteConfirmacionDesde: DateTime | null
+
+  @column.dateTime()
+  declare moderadorNotificadoEn: DateTime | null
 
   @belongsTo(() => User, { foreignKey: 'clienteId' })
   declare cliente: BelongsTo<typeof User>

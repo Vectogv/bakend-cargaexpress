@@ -129,7 +129,7 @@ export class ComunicadoSchema extends BaseModel {
 }
 
 export class ConductoreSchema extends BaseModel {
-  static $columns = ['calificacion', 'capacidad', 'cedula', 'ciudad', 'createdAt', 'estadoVerificacion', 'fotoCedula', 'fotoConductor', 'fotoLicencia', 'fotoVehiculo', 'horasActivo', 'id', 'notaRechazo', 'online', 'placa', 'tipoVehiculo', 'totalViajes', 'ultimaUbicacionLat', 'ultimaUbicacionLng', 'usuarioId'] as const
+  static $columns = ['calificacion', 'capacidad', 'cedula', 'ciudad', 'createdAt', 'estadoVerificacion', 'fotoCedula', 'fotoConductor', 'fotoLicencia', 'fotoVehiculo', 'horasActivo', 'id', 'notaRechazo', 'online', 'placa', 'tipoVehiculo', 'totalViajes', 'ubicacionActualizadaEn', 'ultimaUbicacionLat', 'ultimaUbicacionLng', 'updatedAt', 'usuarioId'] as const
   $columns = ConductoreSchema.$columns
   @column()
   declare calificacion: number | null
@@ -165,10 +165,14 @@ export class ConductoreSchema extends BaseModel {
   declare tipoVehiculo: string | null
   @column()
   declare totalViajes: number | null
+  @column.dateTime()
+  declare ubicacionActualizadaEn: DateTime | null
   @column()
   declare ultimaUbicacionLat: number | null
   @column()
   declare ultimaUbicacionLng: number | null
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime | null
   @column()
   declare usuarioId: number
 }
@@ -655,7 +659,7 @@ export class UserSchema extends BaseModel {
 }
 
 export class ViajeSchema extends BaseModel {
-  static $columns = ['aceptadoAt', 'activacionAt', 'calificacionCliente', 'canceladoAt', 'carga', 'clienteId', 'completadoAt', 'conductorId', 'createdAt', 'destinoDireccion', 'destinoLat', 'destinoLng', 'enCursoAt', 'estado', 'fechaProgramada', 'finalizadoAt', 'fotoEntrega', 'horaProgramada', 'id', 'motivoCancelacion', 'origenDireccion', 'origenLat', 'origenLng', 'precioCliente', 'precioEstimado', 'precioFinal', 'recordatorioEnviado', 'tiempoEstimadoMinutos', 'tipoProgramacion'] as const
+  static $columns = ['aceptadoAt', 'activacionAt', 'calificacionCliente', 'canceladoAt', 'carga', 'clienteId', 'completadoAt', 'conductorId', 'createdAt', 'destinoDireccion', 'destinoLat', 'destinoLng', 'enCursoAt', 'estado', 'fechaProgramada', 'finalizadoAt', 'fotoEntrega', 'horaProgramada', 'id', 'moderadorNotificadoEn', 'motivoCancelacion', 'origenDireccion', 'origenLat', 'origenLng', 'pendienteConfirmacionDesde', 'precioCliente', 'precioEstimado', 'precioFinal', 'recordatorioEnviado', 'tiempoEstimadoMinutos', 'tipoProgramacion'] as const
   $columns = ViajeSchema.$columns
   @column.dateTime()
   declare aceptadoAt: DateTime | null
@@ -695,6 +699,8 @@ export class ViajeSchema extends BaseModel {
   declare horaProgramada: string | null
   @column({ isPrimary: true })
   declare id: number
+  @column.dateTime()
+  declare moderadorNotificadoEn: DateTime | null
   @column()
   declare motivoCancelacion: string | null
   @column()
@@ -703,6 +709,8 @@ export class ViajeSchema extends BaseModel {
   declare origenLat: number
   @column()
   declare origenLng: number
+  @column.dateTime()
+  declare pendienteConfirmacionDesde: DateTime | null
   @column()
   declare precioCliente: number | null
   @column()

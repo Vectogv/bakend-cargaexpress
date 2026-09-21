@@ -11,7 +11,7 @@ test.group('Race Condition: Double Trip Acceptance', (group) => {
     const clientReg = await client.post('/api/auth/register').json({
       nombre: 'Race Client', apellido: 'Test',
       email: `race-client-${Date.now()}@test.com`,
-      password: '123456', rol: 'cliente',
+      password: '123456', rol: 'cliente', edad: 30,
     })
     clientReg.assertStatus(200)
     const clientToken = clientReg.body().token
@@ -20,7 +20,7 @@ test.group('Race Condition: Double Trip Acceptance', (group) => {
     const driverAReg = await client.post('/api/auth/register').json({
       nombre: 'Driver A', apellido: 'Test',
       email: `race-driver-a-${Date.now()}@test.com`,
-      password: '123456', rol: 'conductor',
+      password: '123456', rol: 'conductor', edad: 30,
       cedula: `A-${Date.now()}`, placa: `RA-${Date.now()}`,
       tipoVehiculo: 'camioneta', capacidad: '1000 kg',
     })
@@ -32,7 +32,7 @@ test.group('Race Condition: Double Trip Acceptance', (group) => {
     const driverBReg = await client.post('/api/auth/register').json({
       nombre: 'Driver B', apellido: 'Test',
       email: `race-driver-b-${Date.now()}@test.com`,
-      password: '123456', rol: 'conductor',
+      password: '123456', rol: 'conductor', edad: 30,
       cedula: `B-${Date.now()}`, placa: `RB-${Date.now()}`,
       tipoVehiculo: 'camioneta', capacidad: '1000 kg',
     })
@@ -99,7 +99,7 @@ test.group('Race Condition: Double Trip Acceptance', (group) => {
     const clientReg = await client.post('/api/auth/register').json({
       nombre: 'Client', apellido: 'Test',
       email: `client-single-${Date.now()}@test.com`,
-      password: '123456', rol: 'cliente',
+      password: '123456', rol: 'cliente', edad: 30,
     })
     clientReg.assertStatus(200)
     const clientToken = clientReg.body().token
@@ -107,7 +107,7 @@ test.group('Race Condition: Double Trip Acceptance', (group) => {
     const driverReg = await client.post('/api/auth/register').json({
       nombre: 'Driver', apellido: 'Test',
       email: `driver-single-${Date.now()}@test.com`,
-      password: '123456', rol: 'conductor',
+      password: '123456', rol: 'conductor', edad: 30,
       cedula: `${Date.now()}`, placa: `DS-${Date.now()}`,
       tipoVehiculo: 'camioneta', capacidad: '1000 kg',
     })
@@ -119,7 +119,7 @@ test.group('Race Condition: Double Trip Acceptance', (group) => {
     const driver2Reg = await client.post('/api/auth/register').json({
       nombre: 'Driver2', apellido: 'Test',
       email: `driver2-single-${Date.now()}@test.com`,
-      password: '123456', rol: 'conductor',
+      password: '123456', rol: 'conductor', edad: 30,
       cedula: `${Date.now() + 1}`, placa: `DS2-${Date.now()}`,
       tipoVehiculo: 'camioneta', capacidad: '1000 kg',
     })

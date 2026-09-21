@@ -12,7 +12,7 @@ test.group('ID alignment with Flutter contract', (group) => {
       apellido: 'Align',
       email: `align-client-${Date.now()}@test.com`,
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
     res.assertStatus(200)
     return { token: res.body().token, id: res.body().id }
@@ -24,7 +24,7 @@ test.group('ID alignment with Flutter contract', (group) => {
       apellido: 'Align',
       email: `align-admin-${Date.now()}@test.com`,
       password: '123456',
-      rol: 'admin',
+      rol: 'admin', edad: 30,
     })
     const res = await client.post('/api/auth/login').json({
       email: admin.email,
@@ -41,7 +41,7 @@ test.group('ID alignment with Flutter contract', (group) => {
       apellido: 'Align',
       email: `align-driver-${Date.now()}@test.com`,
       password: '123456',
-      rol: 'conductor',
+      rol: 'conductor', edad: 30,
       cedula: `${ts}`,
       placa: `AL-${ts}`,
       tipoVehiculo: 'camioneta',

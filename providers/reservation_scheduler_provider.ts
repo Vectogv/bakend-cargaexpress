@@ -56,6 +56,9 @@ export default class ReservationSchedulerProvider {
       const { default: ReservationActivationService } = await import(
         '#services/reservation_activation_service'
       )
+      const { default: ConfirmacionTimeoutService } = await import(
+        '#services/confirmacion_timeout_service'
+      )
 
       const acquired = await RedisService.acquireLock('reservation:scheduler:tick', TICK_LOCK_MS)
       if (!acquired) return
@@ -67,6 +70,9 @@ export default class ReservationSchedulerProvider {
         for (const reserva of reservas) {
           await ReservationActivationService.activar(reserva.id)
         }
+
+        // H1: Notificar al moderador de zona cuando un cierre quedó sin confirmar por el cliente.
+        await ConfirmacionTimeoutService.notificarConfirmacionesVencidas()
       } finally {
         await RedisService.releaseLock('reservation:scheduler:tick')
       }

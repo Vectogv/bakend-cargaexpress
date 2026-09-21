@@ -17,7 +17,7 @@ async function registerClient(client: any) {
     apellido: 'Cliente',
     email: uniqueEmail('reserva-cliente'),
     password: '123456',
-    rol: 'cliente',
+    rol: 'cliente', edad: 30,
   })
   res.assertStatus(200)
   return { token: res.body().token as string, id: res.body().id as string }
@@ -29,7 +29,7 @@ async function registerDriver(client: any) {
     apellido: 'Conductor',
     email: uniqueEmail('reserva-driver'),
     password: '123456',
-    rol: 'conductor',
+    rol: 'conductor', edad: 30,
     cedula: `${Date.now()}${Math.floor(Math.random() * 1000)}`,
     placa: `RS-${Date.now()}${Math.floor(Math.random() * 1000)}`,
     tipoVehiculo: 'camioneta',

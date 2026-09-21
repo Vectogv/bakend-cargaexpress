@@ -259,6 +259,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['request']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
+  'trips.trip.reserve': {
+    methods: ["POST"]
+    pattern: '/api/trips/reserve'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#validators/trip').tripReserveValidator)>>
+      paramsTuple: []
+      params: {}
+      query: ExtractQuery<InferInput<(typeof import('#validators/trip').tripReserveValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['reserve']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['reserve']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
   'trips.trip.nearby': {
     methods: ["GET","HEAD"]
     pattern: '/api/trips/nearby'
@@ -281,6 +293,18 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['active']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['active']>>>
+    }
+  }
+  'trips.trip.reservations': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/trips/reservations'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['reservations']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['reservations']>>>
     }
   }
   'trips.trip.history': {
@@ -359,12 +383,24 @@ export interface Registry {
     methods: ["POST"]
     pattern: '/api/trips/:id/finalize'
     types: {
-      body: ExtractBody<InferInput<(typeof import('#validators/trip').tripCompleteValidator)>>
+      body: {}
       paramsTuple: [ParamValue]
       params: { id: ParamValue }
-      query: ExtractQuery<InferInput<(typeof import('#validators/trip').tripCompleteValidator)>>
+      query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['finalize']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['finalize']>>> | { status: 422; response: { errors: SimpleError[] } }
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['finalize']>>>
+    }
+  }
+  'trips.trip.confirm_close': {
+    methods: ["POST"]
+    pattern: '/api/trips/:id/confirm-close'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['confirmClose']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['confirmClose']>>>
     }
   }
   'trips.trip.cancel': {
@@ -571,6 +607,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/notification_controller').default['index']>>>
     }
   }
+  'notifications.notification.store': {
+    methods: ["POST"]
+    pattern: '/api/notifications'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/notification_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/notification_controller').default['store']>>>
+    }
+  }
   'notifications.notification.read': {
     methods: ["PUT"]
     pattern: '/api/notifications/:id/read'
@@ -581,6 +629,18 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/notification_controller').default['read']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/notification_controller').default['read']>>>
+    }
+  }
+  'notifications.notification.destroy': {
+    methods: ["DELETE"]
+    pattern: '/api/notifications/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/notification_controller').default['destroy']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/notification_controller').default['destroy']>>>
     }
   }
   'admin.admin.dashboard': {
@@ -883,6 +943,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['rejectDriver']>>>
     }
   }
+  'admin.admin.update_driver_city': {
+    methods: ["PUT"]
+    pattern: '/api/admin/drivers/:conductorId/city'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { conductorId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateDriverCity']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateDriverCity']>>>
+    }
+  }
   'admin.admin.pending_payments': {
     methods: ["GET","HEAD"]
     pattern: '/api/admin/payments/pending'
@@ -967,6 +1039,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['assignModerator']>>>
     }
   }
+  'admin.admin.update_user_role': {
+    methods: ["PUT"]
+    pattern: '/api/admin/users/:id/role'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateUserRole']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateUserRole']>>>
+    }
+  }
   'admin.admin.assign_leader': {
     methods: ["PUT"]
     pattern: '/api/admin/users/:id/leader'
@@ -977,6 +1061,30 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['assignLeader']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['assignLeader']>>>
+    }
+  }
+  'admin.admin.list_comunicados': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/comunicados'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['listComunicados']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['listComunicados']>>>
+    }
+  }
+  'admin.admin.list_encuestas': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/encuestas'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['listEncuestas']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['listEncuestas']>>>
     }
   }
   'admin.admin.approve_comunicado': {
@@ -1327,6 +1435,30 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['reportDriver']>>>
     }
   }
+  'moderator.moderator.approve_driver': {
+    methods: ["POST"]
+    pattern: '/api/moderator/drivers/:id/approve'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['approveDriver']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['approveDriver']>>>
+    }
+  }
+  'moderator.moderator.reject_driver': {
+    methods: ["POST"]
+    pattern: '/api/moderator/drivers/:id/reject'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['rejectDriver']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['rejectDriver']>>>
+    }
+  }
   'moderator.moderator.store_encuesta': {
     methods: ["POST"]
     pattern: '/api/moderator/encuestas'
@@ -1361,6 +1493,210 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['answerEncuesta']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['answerEncuesta']>>>
+    }
+  }
+  'moderator.moderator.my_encuestas': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/encuestas'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['myEncuestas']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['myEncuestas']>>>
+    }
+  }
+  'moderator.moderator.my_reports': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/reports'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['myReports']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['myReports']>>>
+    }
+  }
+  'moderator.moderator.dashboard': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/dashboard'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['dashboard']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['dashboard']>>>
+    }
+  }
+  'moderator.moderator.trips': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/trips'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['trips']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['trips']>>>
+    }
+  }
+  'moderator.moderator.trip_show': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/trips/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['tripShow']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['tripShow']>>>
+    }
+  }
+  'moderator.moderator.resolve_pending_close': {
+    methods: ["POST"]
+    pattern: '/api/moderator/trips/:id/resolve-close'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['resolvePendingClose']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['resolvePendingClose']>>>
+    }
+  }
+  'moderator.moderator.reservations': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/reservations'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['reservations']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['reservations']>>>
+    }
+  }
+  'moderator.moderator.emergencies': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/emergency'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['emergencies']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['emergencies']>>>
+    }
+  }
+  'moderator.moderator.emergency_count': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/emergency/count'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['emergencyCount']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['emergencyCount']>>>
+    }
+  }
+  'moderator.moderator.emergency_acknowledge': {
+    methods: ["POST"]
+    pattern: '/api/moderator/emergency/:id/acknowledge'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['emergencyAcknowledge']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['emergencyAcknowledge']>>>
+    }
+  }
+  'moderator.moderator.emergency_resolve': {
+    methods: ["POST"]
+    pattern: '/api/moderator/emergency/:id/resolve'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['emergencyResolve']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/moderator_controller').default['emergencyResolve']>>>
+    }
+  }
+  'moderator.conversacion.contactable_users': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/contactable-users'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['contactableUsers']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['contactableUsers']>>>
+    }
+  }
+  'moderator.conversacion.unread_count': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/conversations/unread-count'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['unreadCount']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['unreadCount']>>>
+    }
+  }
+  'moderator.conversacion.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/conversations'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['index']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['index']>>>
+    }
+  }
+  'moderator.conversacion.store': {
+    methods: ["POST"]
+    pattern: '/api/moderator/conversations'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['store']>>>
+    }
+  }
+  'moderator.conversacion.messages': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/moderator/conversations/:id/messages'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['messages']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['messages']>>>
+    }
+  }
+  'moderator.conversacion.store_message': {
+    methods: ["POST"]
+    pattern: '/api/moderator/conversations/:id/messages'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['storeMessage']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['storeMessage']>>>
     }
   }
   'avisos.moderator.avisos_index': {
@@ -1421,6 +1757,102 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/emergency_controller').default['trigger']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/emergency_controller').default['trigger']>>>
+    }
+  }
+  'sos.alerts': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/sos'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['sosAlerts']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['sosAlerts']>>>
+    }
+  }
+  'fraud.alerts.store': {
+    methods: ["POST"]
+    pattern: '/api/fraud/alerts'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/fraud_alert_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/fraud_alert_controller').default['store']>>>
+    }
+  }
+  'emergency.chat.emergency_chat.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/emergency/:id/messages'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/emergency_chat_controller').default['index']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/emergency_chat_controller').default['index']>>>
+    }
+  }
+  'emergency.chat.emergency_chat.store': {
+    methods: ["POST"]
+    pattern: '/api/emergency/:id/messages'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/emergency_chat_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/emergency_chat_controller').default['store']>>>
+    }
+  }
+  'conversations.conversacion.unread_count': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/conversations/unread-count'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['unreadCount']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['unreadCount']>>>
+    }
+  }
+  'conversations.conversacion.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/conversations'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['index']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['index']>>>
+    }
+  }
+  'conversations.conversacion.messages': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/conversations/:id/messages'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['messages']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['messages']>>>
+    }
+  }
+  'conversations.conversacion.store_message': {
+    methods: ["POST"]
+    pattern: '/api/conversations/:id/messages'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['storeMessage']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/conversacion_controller').default['storeMessage']>>>
     }
   }
   'leader.leader.avisos_index': {

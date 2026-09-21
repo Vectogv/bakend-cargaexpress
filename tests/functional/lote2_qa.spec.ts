@@ -33,7 +33,7 @@ async function registerDriver(client: any, ts: string) {
     apellido: 'QA',
     email: `driver-${ts}@test.com`,
     password: '123456',
-    rol: 'conductor',
+    rol: 'conductor', edad: 30,
     cedula: ts,
     placa: `ABC-${ts}`,
     tipoVehiculo: 'camioneta',
@@ -42,7 +42,14 @@ async function registerDriver(client: any, ts: string) {
   await db
     .from('conductores')
     .where('usuario_id', driver.id)
-    .update({ estado_verificacion: 'aprobado' })
+    .update({
+      estado_verificacion: 'aprobado',
+      // H2: ubicación reciente dentro del radio de oferta (origen del viaje).
+      ultima_ubicacion_lat: 3.4516,
+      ultima_ubicacion_lng: -76.532,
+      updated_at: DateTime.now().toSQL(),
+      ubicacion_actualizada_en: DateTime.now().toSQL(),
+    })
   return driver
 }
 
@@ -56,7 +63,7 @@ test.group('Lote2 - Oferta expirada (12)', (group) => {
       apellido: 'QA',
       email: `cli-${ts}@test.com`,
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
     const driver = await registerDriver(client, ts)
 
@@ -105,7 +112,7 @@ test.group('Lote2 - Transformador notificaciones (13)', (group) => {
       apellido: 'QA',
       email: `notif-${ts}@test.com`,
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     const notif = await Notificacion.create({
@@ -150,14 +157,14 @@ test.group('Lote2 - Propiedad y emergencia (15)', (group) => {
       apellido: 'QA',
       email: `owner-${ts}@test.com`,
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
     const outsider = await register(client, {
       nombre: 'Ajeno',
       apellido: 'QA',
       email: `outsider-${ts}@test.com`,
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     const notif = await Notificacion.create({
@@ -182,14 +189,14 @@ test.group('Lote2 - Propiedad y emergencia (15)', (group) => {
       apellido: 'QA',
       email: `sos-${ts}@test.com`,
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
     const intruso = await register(client, {
       nombre: 'Intruso',
       apellido: 'QA',
       email: `intruso-${ts}@test.com`,
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     const trip = await createTrip(client, cliente.token)
@@ -228,7 +235,7 @@ test.group('Lote2 - Refresh token (16)', (group) => {
       apellido: 'QA',
       email: `rotado-${ts}@test.com`,
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     const first = await client.post('/api/auth/refresh-token').json({

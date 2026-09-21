@@ -46,4 +46,12 @@ export default await Env.create(new URL('../', import.meta.url), {
   RESERVATION_ACTIVATION_BATCH_SIZE: Env.schema.number.optional(),
   RESERVATION_TIMEZONE: Env.schema.string.optional(),
   RESERVATION_SCHEDULER_ENABLED: Env.schema.boolean.optional(),
+
+  // ── Antifraude ────────────────────────────────────────────────
+  ANTIFRAUDE_RADIO_CIERRE_KM: Env.schema.number.optional(),
+  ANTIFRAUDE_RADIO_RECOGIDA_KM: Env.schema.number.optional(),
+  ANTIFRAUDE_UBICACION_MAX_SEG: Env.schema.number.optional(),
+  ANTIFRAUDE_RADIO_OFERTA_KM: Env.schema.number.optional(),
+  ANTIFRAUDE_CONFIRMACION_TIMEOUT_MIN: Env.schema.number.optional(),
+  ANTIFRAUDE_PENALIZACION_CANCELACION: Env.schema.number.optional(),
 })

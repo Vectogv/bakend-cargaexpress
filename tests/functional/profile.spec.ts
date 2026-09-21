@@ -11,6 +11,7 @@ test.group('Profile - Show', (group) => {
       email: `test-${rol}-${Date.now()}@test.com`,
       password: '123456',
       rol,
+      edad: 30,
       ...(rol === 'conductor'
         ? { cedula: '12345678', placa: `PRF-${Date.now()}`, tipoVehiculo: 'camioneta', capacidad: '1000 kg' }
         : {}),
@@ -64,7 +65,7 @@ test.group('Profile - Update', (group) => {
       apellido: 'User',
       email: `update-${Date.now()}@test.com`,
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
     return res.body().token
   }
@@ -99,7 +100,7 @@ test.group('Profile - Update', (group) => {
       apellido: 'User',
       email: 'existing@test.com',
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     const token = await registerAndGetToken(client)
@@ -145,7 +146,7 @@ test.group('Profile - FCM Token', (group) => {
       apellido: 'User',
       email: `fcm-${Date.now()}@test.com`,
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
     return res.body().token
   }

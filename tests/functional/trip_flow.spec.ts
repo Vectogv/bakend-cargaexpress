@@ -3,6 +3,15 @@ import testUtils from '@adonisjs/core/services/test_utils'
 import db from '@adonisjs/lucid/services/db'
 import { io } from 'socket.io-client'
 import { setTimeout } from 'node:timers/promises'
+import GpsRateLimitService from '#services/gps_rate_limit_service'
+
+// Resets the (in-memory / Redis) GPS rate limiter for a conductor so that a
+// fresh location PUT always succeeds even when conductor IDs are reused
+// after transaction rollbacks.
+async function resetGpsLimiter(driverUserId: number) {
+  const conductor = await db.from('conductores').where('usuario_id', driverUserId).first()
+  await GpsRateLimitService.reset(conductor.id)
+}
 
 // Helper function to simulate driver location via HTTP
 async function simulateDriverHttpMovement(
@@ -36,7 +45,7 @@ test.group('Trip Flow QA Test', (group) => {
       apellido: 'Test',
       email: 'qaclient@test.com',
       password: '123456',
-      rol: 'cliente'
+      rol: 'cliente', edad: 30
     })
     clientRegister.assertStatus(200)
     const clientToken = clientRegister.body().token
@@ -47,7 +56,7 @@ test.group('Trip Flow QA Test', (group) => {
       apellido: 'Test',
       email: `qadriver-${Date.now()}@test.com`,
       password: '123456',
-      rol: 'conductor',
+      rol: 'conductor', edad: 30,
       cedula: `${Date.now()}`,
       placa: `QA-${Date.now()}`,
       tipoVehiculo: 'camioneta',
@@ -83,7 +92,8 @@ test.group('Trip Flow QA Test', (group) => {
     const tripId = tripCreation.body().id
     
     // 4. Set driver location
-    await client.put('/api/drivers/location')
+    await resetGpsLimiter(driverUserId)
+    const locationRes = await client.put('/api/drivers/location')
       .header('Authorization', `Bearer ${driverToken}`)
       .json({ 
         lat: 3.4516, 
@@ -91,6 +101,7 @@ test.group('Trip Flow QA Test', (group) => {
         heading: 0,
         accuracy: 10
       })
+    locationRes.assertStatus(200)
     
     // Fix: Use query param for socket auth (server reads from query.token)
     const clientSocket = io('http://localhost:3333', {
@@ -150,16 +161,26 @@ test.group('Trip Flow QA Test', (group) => {
     assert.isNotNull(driverRecord.ultima_ubicacion_lat)
     assert.isNotNull(driverRecord.ultima_ubicacion_lng)
     
-    // 11. Complete trip
+    // 11. Complete trip (conductor within range -> waiting for client confirmation)
     const tripComplete = await client.post(`/api/trips/${tripId}/complete`)
       .header('Authorization', `Bearer ${driverToken}`)
       .json({ montoFinal: 50000 })
     tripComplete.assertStatus(200)
     
-    // 12. Verify trip completed in database
+    // 12. Verify trip completed in database (pending client confirmation)
     viaje = await db.from('viajes').where('id', tripId).first()
-    assert.equal(viaje.estado, 'esperando_confirmacion')
+    assert.equal(viaje.estado, 'pendiente_confirmacion')
     assert.equal(Number(viaje.precio_final), 50000)
+
+    // 13. Client confirms closure -> trip finalized
+    const confirmClose = await client.post(`/api/trips/${tripId}/confirm-close`)
+      .header('Authorization', `Bearer ${clientToken}`)
+      .json({ confirmar: true })
+    confirmClose.assertStatus(200)
+    assert.equal(confirmClose.body().estado, 'finalizado')
+
+    viaje = await db.from('viajes').where('id', tripId).first()
+    assert.equal(viaje.estado, 'finalizado')
     
     // Cleanup sockets (if connected)
     try { clientSocket.disconnect() } catch {}
@@ -171,7 +192,7 @@ test.group('Trip Flow QA Test', (group) => {
     const clientReg = await client.post('/api/auth/register').json({
       nombre: 'Fallback Client', apellido: 'Test',
       email: `fallback-client-${Date.now()}@test.com`,
-      password: '123456', rol: 'cliente'
+      password: '123456', rol: 'cliente', edad: 30
     })
     clientReg.assertStatus(200)
     const clientToken = clientReg.body().token
@@ -179,7 +200,7 @@ test.group('Trip Flow QA Test', (group) => {
     const driverReg = await client.post('/api/auth/register').json({
       nombre: 'Fallback Driver', apellido: 'Test',
       email: `fallback-driver-${Date.now()}@test.com`,
-      password: '123456', rol: 'conductor',
+      password: '123456', rol: 'conductor', edad: 30,
       cedula: `${Date.now()}`, placa: `FB-${Date.now()}`,
       tipoVehiculo: 'camioneta', capacidad: '1000 kg'
     })
@@ -204,9 +225,11 @@ test.group('Trip Flow QA Test', (group) => {
     const tripId = trip.body().id
     
     // Driver accepts via HTTP (intentionally not using socket)
-    await client.put('/api/drivers/location')
+    await resetGpsLimiter(driverUserId)
+    const locationRes = await client.put('/api/drivers/location')
       .header('Authorization', `Bearer ${driverToken}`)
       .json({ lat: 3.4516, lng: -76.5320, heading: 0, accuracy: 10 })
+    locationRes.assertStatus(200)
     
     await setTimeout(500)
     const accept = await client.post(`/api/trips/${tripId}/accept`)
@@ -229,10 +252,19 @@ test.group('Trip Flow QA Test', (group) => {
       .header('Authorization', `Bearer ${driverToken}`)
       .json({ montoFinal: 50000 })
     tripComplete.assertStatus(200)
-    
-    // Final verification via database
+
+    // Final verification via database: pending client confirmation
     const viajeDb = await db.from('viajes').where('id', tripId).first()
-    assert.equal(viajeDb.estado, 'esperando_confirmacion')
+    assert.equal(viajeDb.estado, 'pendiente_confirmacion')
     assert.equal(Number(viajeDb.precio_final), 50000)
+
+    // Client confirms closure -> finalized
+    const confirmClose = await client.post(`/api/trips/${tripId}/confirm-close`)
+      .header('Authorization', `Bearer ${clientToken}`)
+      .json({ confirmar: true })
+    confirmClose.assertStatus(200)
+    assert.equal(confirmClose.body().estado, 'finalizado')
+    const viajeFinal = await db.from('viajes').where('id', tripId).first()
+    assert.equal(viajeFinal.estado, 'finalizado')
   })
 })

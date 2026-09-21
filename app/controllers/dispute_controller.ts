@@ -50,8 +50,8 @@ export default class DisputeController {
     if (!viaje) {
       return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
-    if (!['esperando_confirmacion', 'finalizado'].includes(viaje.estado)) {
-      return response.status(422).send(serialize.withoutWrapping({ error: `Solo puedes disputar viajes en estado 'esperando_confirmacion' o 'finalizado' (actual: ${viaje.estado})` }))
+    if (!['esperando_confirmacion', 'finalizado', 'pendiente_confirmacion'].includes(viaje.estado)) {
+      return response.status(422).send(serialize.withoutWrapping({ error: `Solo puedes disputar viajes en estado 'esperando_confirmacion', 'pendiente_confirmacion' o 'finalizado' (actual: ${viaje.estado})` }))
     }
 
     const existe = await Disputa.query().where('viaje_id', viaje.id).first()
@@ -74,6 +74,7 @@ export default class DisputeController {
         conductorId: conductor.id,
         clienteId: viaje.clienteId,
         versionConductor: descripcion || '',
+        versionCliente: '',
         problema: problema || null,
         descripcion: descripcion || null,
         fotos: fotos.length > 0 ? fotos : null,
@@ -98,12 +99,11 @@ export default class DisputeController {
       emitToAdmin('admin:dispute:new', createdPayload)
       emitToClient(viaje.clienteId, 'dispute:updated', createdPayload)
 
-      return response.status(201).send(
-        serialize.withoutWrapping({
-          id: String(disputa.id),
-          numero_disputa: disputa.numero,
-        })
-      )
+      const payload = await serialize.withoutWrapping({
+        id: String(disputa.id),
+        numero_disputa: disputa.numero,
+      })
+      return response.status(201).send(payload)
     }
 
     // cliente
@@ -124,6 +124,7 @@ export default class DisputeController {
       conductorId: conductor.id,
       clienteId: viaje.clienteId,
       versionCliente: descripcion || '',
+      versionConductor: '',
       problema: problema || null,
       descripcion: descripcion || null,
       fotos: fotos.length > 0 ? fotos : null,
@@ -151,12 +152,11 @@ export default class DisputeController {
       emitToDriver(conductorUserObj.usuarioId, 'dispute:updated', createdPayloadCliente)
     }
 
-    return response.status(201).send(
-      serialize.withoutWrapping({
-        id: String(disputa.id),
-        numero_disputa: disputa.numero,
-      })
-    )
+    const payload = await serialize.withoutWrapping({
+      id: String(disputa.id),
+      numero_disputa: disputa.numero,
+    })
+    return response.status(201).send(payload)
   }
 
   private async generarNumero(): Promise<string> {
@@ -177,10 +177,10 @@ export default class DisputeController {
     if (!viaje) {
       return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
-    if (!['esperando_confirmacion', 'finalizado'].includes(viaje.estado)) {
+    if (!['esperando_confirmacion', 'finalizado', 'pendiente_confirmacion'].includes(viaje.estado)) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: `Solo puedes disputar viajes en estado 'esperando_confirmacion' o 'finalizado' (actual: ${viaje.estado})` }))
+        .send(serialize.withoutWrapping({ error: `Solo puedes disputar viajes en estado 'esperando_confirmacion', 'pendiente_confirmacion' o 'finalizado' (actual: ${viaje.estado})` }))
     }
 
     const existe = await Disputa.query().where('viaje_id', viaje.id).first()

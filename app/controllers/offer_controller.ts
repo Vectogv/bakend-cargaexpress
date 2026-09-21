@@ -9,6 +9,9 @@ import { getIO, emitToClient, emitToDriver, emitTripStatusChanged } from '#start
 import { sendToToken } from '#services/push_notification_service'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
 import TripConflictService from '#services/trip_conflict_service'
+import AntifraudeService from '#services/antifraude_service'
+import { distanciaKm } from '#services/geo_service'
+import antifraudeConfig from '#config/antifraude'
 
 export default class OfferController {
   async store({ auth, request, response, params }: HttpContext) {
@@ -46,6 +49,31 @@ export default class OfferController {
     }
     if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
       return response.status(400).send({ error: 'El viaje ya no acepta ofertas' })
+    }
+
+    // H2: El conductor solo puede ofertar si su ubicación guardada/reciente está
+    // dentro de radioOfertaKm del ORIGEN del viaje.
+    try {
+      const ubicacion = AntifraudeService.obtenerUbicacionReciente(conductor)
+      const distOfertaKm = distanciaKm(
+        ubicacion.lat,
+        ubicacion.lng,
+        Number(viaje.origenLat),
+        Number(viaje.origenLng)
+      )
+      if (distOfertaKm > antifraudeConfig.radioOfertaKm) {
+        const redondeada = Math.round(distOfertaKm * 100) / 100
+        return response.status(422).send({
+          error: `Estás a ${redondeada} km del origen del viaje. Solo puedes ofertar a ${antifraudeConfig.radioOfertaKm} km o menos.`,
+          code: 'FUERA_DE_ZONA',
+          distanciaKm: redondeada,
+        })
+      }
+    } catch (e: any) {
+      if (e.code === 'UBICACION_NO_RECIENTE') {
+        return response.status(422).send({ error: e.message, code: e.code })
+      }
+      throw e
     }
 
     const monto = Number.parseFloat(request.input('monto'))
@@ -432,6 +460,19 @@ export default class OfferController {
 
     if (viaje.estado !== 'conductor_en_camino') {
       return response.status(422).send({ error: `El viaje debe estar en 'conductor_en_camino' (actual: ${viaje.estado})` })
+    }
+
+    // R2: Validar recogida - conductor debe estar a < radioCierreKm del origen
+    try {
+      await AntifraudeService.validarRecogida(viaje, conductor)
+    } catch (e: any) {
+      if (e.code === 'FUERA_DE_RANGO_ORIGEN') {
+        return response.status(422).send({ error: e.message, code: e.code, distanciaKm: e.extra?.distanciaKm })
+      }
+      if (e.code === 'UBICACION_NO_RECIENTE') {
+        return response.status(422).send({ error: e.message, code: e.code })
+      }
+      throw e
     }
 
     viaje.estado = 'conductor_llegada'

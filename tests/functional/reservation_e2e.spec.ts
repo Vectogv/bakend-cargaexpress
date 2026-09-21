@@ -16,7 +16,7 @@ async function registerClient(client: any) {
     apellido: 'Cliente',
     email: uniqueEmail('e2e-cliente'),
     password: '123456',
-    rol: 'cliente',
+    rol: 'cliente', edad: 30,
   })
   res.assertStatus(200)
   return { token: res.body().token as string, id: res.body().id as string }
@@ -28,7 +28,7 @@ async function registerDriver(client: any) {
     apellido: 'Conductor',
     email: uniqueEmail('e2e-driver'),
     password: '123456',
-    rol: 'conductor',
+    rol: 'conductor', edad: 30,
     cedula: `${Date.now()}${Math.floor(Math.random() * 1000)}`,
     placa: `E2E-${Date.now()}${Math.floor(Math.random() * 1000)}`,
     tipoVehiculo: 'camioneta',
@@ -36,7 +36,14 @@ async function registerDriver(client: any) {
   })
   res.assertStatus(200)
   const id = res.body().id as string
-  await db.from('conductores').where('usuario_id', Number(id)).update({ estado_verificacion: 'aprobado' })
+  await db.from('conductores').where('usuario_id', Number(id)).update({
+    estado_verificacion: 'aprobado',
+    // H2: ubicación reciente dentro del radio de oferta (origen de la reserva).
+    ultima_ubicacion_lat: 2.4448,
+    ultima_ubicacion_lng: -76.6147,
+    updated_at: DateTime.now().toSQL(),
+    ubicacion_actualizada_en: DateTime.now().toSQL(),
+  })
   const conductor = await db.from('conductores').where('usuario_id', Number(id)).first()
   return { token: res.body().token as string, id, conductorId: Number(conductor.id) }
 }
@@ -132,6 +139,14 @@ test.group('Reserva E2E (flujo real conductor -> cliente)', (group) => {
       .header('Authorization', `Bearer ${driver.token}`)
     enCamino.assertStatus(200)
 
+    // Conductor llega al origen de la reserva (requerido por la regla antifraude R2)
+    await db.from('conductores').where('id', driver.conductorId).update({
+      ultima_ubicacion_lat: 2.4448,
+      ultima_ubicacion_lng: -76.6147,
+      updated_at: DateTime.now().toSQL(),
+      ubicacion_actualizada_en: DateTime.now().toSQL(),
+    })
+
     const llegada = await client
       .post(`/api/trips/${viajeId}/confirm-pickup`)
       .header('Authorization', `Bearer ${driver.token}`)
@@ -142,6 +157,14 @@ test.group('Reserva E2E (flujo real conductor -> cliente)', (group) => {
       .header('Authorization', `Bearer ${driver.token}`)
     enCurso.assertStatus(200)
 
+    // Conductor llega al destino antes de cerrar el servicio (regla antifraude R3)
+    await db.from('conductores').where('id', driver.conductorId).update({
+      ultima_ubicacion_lat: 3.4516,
+      ultima_ubicacion_lng: -76.532,
+      updated_at: DateTime.now().toSQL(),
+      ubicacion_actualizada_en: DateTime.now().toSQL(),
+    })
+
     const completo = await client
       .post(`/api/trips/${viajeId}/complete`)
       .header('Authorization', `Bearer ${driver.token}`)
@@ -149,12 +172,12 @@ test.group('Reserva E2E (flujo real conductor -> cliente)', (group) => {
     completo.assertStatus(200)
 
     let viaje = await db.from('viajes').where('id', viajeId).first()
-    assert.equal(viaje.estado, 'esperando_confirmacion')
+    assert.equal(viaje.estado, 'pendiente_confirmacion')
 
     const finalizado = await client
-      .post(`/api/trips/${viajeId}/finalize`)
+      .post(`/api/trips/${viajeId}/confirm-close`)
       .header('Authorization', `Bearer ${cliente.token}`)
-      .json({ montoFinal: 500000 })
+      .json({ confirmar: true })
     finalizado.assertStatus(200)
     assert.equal(finalizado.body().estado, 'finalizado')
 

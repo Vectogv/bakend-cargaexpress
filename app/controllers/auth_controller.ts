@@ -1,6 +1,6 @@
 import User from '#models/user'
 import Conductor from '#models/conductor'
-import { registerValidator, loginValidator, refreshTokenValidator } from '#validators/auth'
+import { registerValidator, registerValidatorMessages, loginValidator, refreshTokenValidator } from '#validators/auth'
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import hash from '@adonisjs/core/services/hash'
@@ -17,7 +17,7 @@ export default class AuthController {
   @ApiBody({ type: () => registerValidator })
   @ApiResponse({ type: 'object' })
   async register({ request, serialize, response }: HttpContext) {
-    const data = await request.validateUsing(registerValidator)
+    const data = await request.validateUsing(registerValidator, { messagesProvider: registerValidatorMessages })
 
     if (
       data.rol === 'conductor' &&

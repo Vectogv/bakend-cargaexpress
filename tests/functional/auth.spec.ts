@@ -11,7 +11,7 @@ test.group('Auth - Register', (group) => {
       apellido: 'Pérez',
       email: 'juan@test.com',
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     response.assertStatus(200)
@@ -27,7 +27,7 @@ test.group('Auth - Register', (group) => {
       apellido: 'López',
       email: `carlos${ts}@test.com`,
       password: '123456',
-      rol: 'conductor',
+      rol: 'conductor', edad: 30,
       cedula: `${ts}`,
       placa: `ABC-${ts}`,
       tipoVehiculo: 'camioneta',
@@ -46,7 +46,7 @@ test.group('Auth - Register', (group) => {
       apellido: 'García',
       email: 'ana@test.com',
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     const response = await client.post('/api/auth/register').json({
@@ -54,7 +54,7 @@ test.group('Auth - Register', (group) => {
       apellido: 'García',
       email: 'ana@test.com',
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     response.assertStatus(422)
@@ -66,7 +66,7 @@ test.group('Auth - Register', (group) => {
       apellido: 'User',
       email: 'invalid-email',
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     response.assertStatus(422)
@@ -78,7 +78,7 @@ test.group('Auth - Register', (group) => {
       apellido: 'User',
       email: 'test@test.com',
       password: '123',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     response.assertStatus(422)
@@ -90,7 +90,7 @@ test.group('Auth - Register', (group) => {
       apellido: 'Ramírez',
       email: 'pedro@test.com',
       password: '123456',
-      rol: 'conductor',
+      rol: 'conductor', edad: 30,
     })
 
     response.assertStatus(422)
@@ -105,7 +105,7 @@ test.group('Auth - Register', (group) => {
       apellido: 'User',
       email: 'invalid@test.com',
       password: '123456',
-      rol: 'superadmin',
+      rol: 'superadmin', edad: 30,
     })
 
     response.assertStatus(422)
@@ -118,7 +118,7 @@ test.group('Auth - Register', (group) => {
       apellido: 'User',
       email,
       password: '123456',
-      rol: 'admin',
+      rol: 'admin', edad: 30,
     })
 
     response.assertStatus(422)
@@ -137,7 +137,7 @@ test.group('Auth - Login', (group) => {
       apellido: 'González',
       email: 'maria@test.com',
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     const response = await client.post('/api/auth/login').json({
@@ -156,7 +156,7 @@ test.group('Auth - Login', (group) => {
       apellido: 'López',
       email: `carlos${ts}@test.com`,
       password: '123456',
-      rol: 'conductor',
+      rol: 'conductor', edad: 30,
       cedula: `${ts}`,
       placa: `ABC-${ts}`,
       tipoVehiculo: 'camioneta',
@@ -178,7 +178,7 @@ test.group('Auth - Login', (group) => {
       apellido: 'User',
       email: 'test@test.com',
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     const response = await client.post('/api/auth/login').json({
@@ -218,7 +218,7 @@ test.group('Auth - Refresh Token', (group) => {
       apellido: 'Martínez',
       email: 'lucia@test.com',
       password: '123456',
-      rol: 'cliente',
+      rol: 'cliente', edad: 30,
     })
 
     const refreshToken = registerResponse.body().refreshToken

@@ -121,6 +121,8 @@ router
       .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
     router.post(':id/finalize', [controllers.Trip, 'finalize'])
       .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
+    router.post(':id/confirm-close', [controllers.Trip, 'confirmClose'])
+      .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
     router.post(':id/cancel', [controllers.Trip, 'cancel'])
     router.post(':id/request-cancellation', [controllers.Trip, 'requestCancellation'])
     router.post(':id/rate', [controllers.Trip, 'rate'])
@@ -296,6 +298,8 @@ router
     router.get('dashboard', [controllers.Moderator, 'dashboard'])
     router.get('trips', [controllers.Moderator, 'trips'])
     router.get('trips/:id', [controllers.Moderator, 'tripShow'])
+    // H1: Moderador resuelve un cierre que el cliente no confirmó a tiempo.
+    router.post('trips/:id/resolve-close', [controllers.Moderator, 'resolvePendingClose'])
     router.get('reservations', [controllers.Moderator, 'reservations'])
     router.get('emergency', [controllers.Moderator, 'emergencies'])
     router.get('emergency/count', [controllers.Moderator, 'emergencyCount'])

@@ -12,6 +12,7 @@ async function registerUser(client: any, rol: string = 'cliente') {
     email: `p0-${rol}-${Date.now()}-${Math.random()}@test.com`,
     password: '123456',
     rol,
+    edad: 30,
     ...(rol === 'conductor' ? { cedula: `${Date.now()}`, placa: `P0-${Date.now()}`, tipoVehiculo: 'camioneta', capacidad: '1000 kg' } : {}),
   })
   return res.body().token

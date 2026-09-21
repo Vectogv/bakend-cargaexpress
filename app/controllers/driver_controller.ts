@@ -183,6 +183,7 @@ export default class DriverController {
     }
     conductor.ultimaUbicacionLat = data.lat
     conductor.ultimaUbicacionLng = data.lng
+    conductor.ubicacionActualizadaEn = DateTime.now()
     await conductor.save()
 
     // GPS fraud detection (non-blocking — logs only, no rejection)

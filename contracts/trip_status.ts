@@ -9,6 +9,7 @@ export const TRIP_STATUS = {
   EN_CURSO: 'en_curso',
   ENTREGADO: 'entregado',
   ESPERA_CONFIRMACION: 'esperando_confirmacion',
+  PENDIENTE_CONFIRMACION: 'pendiente_confirmacion',
   FINALIZADO: 'finalizado',
   CANCELADO: 'cancelado',
   RECHAZADO: 'rechazado',

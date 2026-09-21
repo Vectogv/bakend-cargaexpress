@@ -13,6 +13,7 @@ test.group('Upload Status - No File', (group) => {
       email,
       password: '123456',
       rol,
+      edad: 30,
       ...(rol === 'conductor'
         ? { cedula: '12345678', placa: `UPL-${Date.now()}`, tipoVehiculo: 'camioneta', capacidad: '1000 kg' }
         : {}),

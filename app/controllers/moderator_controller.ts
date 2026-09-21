@@ -9,14 +9,31 @@ import Viaje from '#models/viaje'
 import AlertaEmergencia from '#models/alerta_emergencia'
 import Oferta from '#models/oferta'
 import Ganancia from '#models/ganancia'
+import Disputa from '#models/disputa'
+import LogFraude from '#models/log_fraude'
+import Notificacion from '#models/notificacion'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
-import { sendToMultiple } from '#services/push_notification_service'
-import { emitToAdmin, emitToModerators, emitToDriver, getIO } from '#start/socket'
+import logger from '@adonisjs/core/services/logger'
+import { sendToMultiple, sendToToken } from '#services/push_notification_service'
+import TripFinalizationService from '#services/trip_finalization_service'
+import {
+  emitToAdmin,
+  emitToModerators,
+  emitToDriver,
+  emitToClient,
+  emitTripStatusChanged,
+  getIO,
+} from '#start/socket'
 import { ApiOperation, ApiResponse } from '@foadonis/openapi/decorators'
 import { getTripEstadoLabel } from '#services/trip_status_labels'
 import { getAlertaEstadoLabel } from '#services/emergency_status_labels'
-import { resolverZonaAlerta, calcularDistanciaKm } from '#services/moderator_trip_events'
+import {
+  resolverZonaAlerta,
+  resolverZonaViaje,
+  emitTripUpdateToModerators,
+  calcularDistanciaKm,
+} from '#services/moderator_trip_events'
 import ConfiguracionPlataforma from '#models/configuracion_plataforma'
 import { normalizarZonas } from '#services/geo_service'
 
@@ -916,6 +933,187 @@ export default class ModeratorController {
         comisionPagada: g.comisionPagada,
         comisionPagadaAt: g.comisionPagadaAt?.toISO() ?? null,
       })),
+    })
+  }
+
+  @ApiOperation({
+    summary: 'Resolver un cierre pendiente de confirmación (H1)',
+    description:
+      'Cuando el cliente no confirma el cierre dentro del tiempo límite, el moderador de la zona (o un admin) finaliza el viaje o lo deriva a disputa.',
+  })
+  @ApiResponse({ type: 'object' })
+  async resolvePendingClose({ auth, params, request, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const viaje = await Viaje.find(params.id)
+    if (!viaje) {
+      return response.status(404).json({ error: 'Viaje no encontrado' })
+    }
+
+    if (viaje.estado !== 'pendiente_confirmacion') {
+      return response
+        .status(422)
+        .json({
+          error: `El viaje no está pendiente de confirmación (estado actual: ${viaje.estado})`,
+        })
+    }
+
+    // Moderador: solo de su zona (comparación normalizada). Admin: cualquier zona.
+    if (user.rol !== 'admin') {
+      if (!user.zonaModerador) {
+        return response.status(403).json({ error: 'No tienes una zona asignada' })
+      }
+
+      const zona = await resolverZonaViaje(viaje)
+      if (!zona) {
+        return response.status(403).json({ error: 'No se pudo determinar la zona del viaje' })
+      }
+
+      if (zona.trim().toLowerCase() !== user.zonaModerador.trim().toLowerCase()) {
+        return response.status(403).json({ error: 'El viaje pertenece a otra ciudad' })
+      }
+    }
+
+    const { resolucion, nota } = request.only(['resolucion', 'nota'])
+    if (!['finalizar', 'disputa'].includes(resolucion)) {
+      return response
+        .status(422)
+        .json({ error: 'resolucion debe ser "finalizar" o "disputa"' })
+    }
+    if (!nota || String(nota).trim().length < 10) {
+      return response
+        .status(422)
+        .json({ error: 'La nota debe tener al menos 10 caracteres' })
+    }
+
+    const viajeId = Number(viaje.id)
+    const conductor = viaje.conductorId ? await Conductor.find(viaje.conductorId) : null
+    const notaResolucion = String(nota).trim()
+
+    if (resolucion === 'finalizar') {
+      const montoFinal = viaje.precioFinal ?? viaje.precioCliente ?? viaje.precioEstimado ?? 0
+      const result = await TripFinalizationService.finalize({
+        viajeId,
+        montoFinal,
+        actorUserId: user.id,
+        actorRol: 'moderador',
+      })
+
+      if (!result.ok) {
+        return response.status(result.statusCode).send({ error: result.error })
+      }
+
+      try {
+        await LogFraude.create({
+          userId: user.id,
+          conductorId: conductor?.id ?? null,
+          tipo: 'cierre_resuelto_moderador',
+          descripcion: `Moderador finalizó cierre sin confirmación del cliente. Nota: ${notaResolucion}`,
+          metadata: { viajeId, nota: notaResolucion },
+        })
+      } catch (e) {
+        logger.error({ err: e, viajeId }, 'Error auditando cierre resuelto por moderador')
+      }
+
+      const viajeFinalizado = await Viaje.find(Number(result.viaje.id))
+      if (viajeFinalizado) {
+        emitTripStatusChanged(viajeFinalizado.clienteId, conductor?.usuarioId, {
+          id: String(viajeFinalizado.id),
+          estado: 'finalizado',
+          montoFinal: result.viaje.montoFinal,
+          finalizadoAt: result.viaje.finalizadoAt,
+          notificadoPor: 'moderador',
+        })
+        emitTripUpdateToModerators(viajeFinalizado)
+      }
+
+      return serialize.withoutWrapping({
+        id: result.viaje.id,
+        estado: 'finalizado',
+        montoFinal: result.viaje.montoFinal,
+        finalizadoAt: result.viaje.finalizadoAt,
+        resueltoPor: `${user.nombre} ${user.apellido}`.trim(),
+        nota: notaResolucion,
+      })
+    }
+
+    // resolucion === 'disputa': sin conductor no se puede abrir disputa
+    if (!conductor) {
+      return response
+        .status(422)
+        .json({ error: 'El viaje no tiene conductor asignado para abrir disputa' })
+    }
+
+    const disputa = await Disputa.create({
+      viajeId: viaje.id,
+      conductorId: conductor.id,
+      clienteId: viaje.clienteId,
+      estado: 'abierta',
+      problema: 'cierre_sin_confirmar',
+      descripcion: notaResolucion,
+      versionConductor: 'Conductor solicitó cierre del servicio',
+      versionCliente: 'Cliente no confirmó el cierre dentro del tiempo límite',
+    })
+
+    viaje.estado = 'disputa'
+    await viaje.save()
+
+    try {
+      await LogFraude.create({
+        userId: user.id,
+        conductorId: conductor.id,
+        tipo: 'cierre_disputa_moderador',
+        descripcion: `Moderador derivó cierre sin confirmar a disputa. Nota: ${notaResolucion}`,
+        metadata: { viajeId, nota: notaResolucion },
+      })
+    } catch (e) {
+      logger.error({ err: e, viajeId }, 'Error auditando disputa por moderador')
+    }
+
+    await Notificacion.create({
+      usuarioId: viaje.clienteId,
+      tipo: 'disputa_cierre',
+      titulo: 'Tu cierre fue revisado',
+      mensaje: `El viaje #${viaje.id} fue abierto como disputa. Un moderador lo está revisando.`,
+      leido: false,
+    })
+
+    const clienteUsuario = await User.find(viaje.clienteId)
+    if (clienteUsuario?.fcmToken) {
+      await sendToToken(
+        clienteUsuario.fcmToken,
+        'Tu cierre fue revisado',
+        `El viaje #${viaje.id} fue abierto como disputa. Un moderador lo está revisando.`
+      )
+    }
+
+    emitTripStatusChanged(viaje.clienteId, conductor.usuarioId, {
+      id: String(viaje.id),
+      estado: 'disputa',
+      disputaId: disputa.id,
+      notificadoPor: 'moderador',
+    })
+
+    emitToClient(viaje.clienteId, 'trip:close_rejected', {
+      viajeId: String(viaje.id),
+      estado: 'disputa',
+      disputaId: disputa.id,
+    })
+
+    emitToDriver(conductor.usuarioId, 'trip:close_rejected', {
+      viajeId: String(viaje.id),
+      estado: 'disputa',
+      disputaId: disputa.id,
+      motivo: notaResolucion,
+    })
+
+    emitTripUpdateToModerators(viaje)
+
+    return serialize.withoutWrapping({
+      id: String(viaje.id),
+      estado: 'disputa',
+      disputaId: disputa.id,
+      resueltoPor: `${user.nombre} ${user.apellido}`.trim(),
+      nota: notaResolucion,
     })
   }
 

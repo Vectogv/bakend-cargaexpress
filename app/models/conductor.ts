@@ -27,6 +27,8 @@ export default class Conductor extends BaseModel {
     'fotoLicencia',
     'notaRechazo',
     'createdAt',
+    'updatedAt',
+    'ubicacionActualizadaEn',
   ] as const
   $columns = Conductor.$columns
 
@@ -113,6 +115,12 @@ export default class Conductor extends BaseModel {
   @ApiProperty()
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
+
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime
+
+  @column.dateTime()
+  declare ubicacionActualizadaEn: DateTime | null
 
   @belongsTo(() => User, { foreignKey: 'usuarioId' })
   declare usuario: BelongsTo<typeof User>

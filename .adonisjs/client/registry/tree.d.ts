@@ -37,8 +37,10 @@ export interface ApiDefinition {
   trips: {
     trip: {
       request: typeof routes['trips.trip.request']
+      reserve: typeof routes['trips.trip.reserve']
       nearby: typeof routes['trips.trip.nearby']
       active: typeof routes['trips.trip.active']
+      reservations: typeof routes['trips.trip.reservations']
       history: typeof routes['trips.trip.history']
       show: typeof routes['trips.trip.show']
       accept: typeof routes['trips.trip.accept']
@@ -46,6 +48,7 @@ export interface ApiDefinition {
       startTrip: typeof routes['trips.trip.start_trip']
       complete: typeof routes['trips.trip.complete']
       finalize: typeof routes['trips.trip.finalize']
+      confirmClose: typeof routes['trips.trip.confirm_close']
       cancel: typeof routes['trips.trip.cancel']
       requestCancellation: typeof routes['trips.trip.request_cancellation']
       rate: typeof routes['trips.trip.rate']
@@ -75,7 +78,9 @@ export interface ApiDefinition {
   notifications: {
     notification: {
       index: typeof routes['notifications.notification.index']
+      store: typeof routes['notifications.notification.store']
       read: typeof routes['notifications.notification.read']
+      destroy: typeof routes['notifications.notification.destroy']
     }
   }
   admin: {
@@ -105,6 +110,7 @@ export interface ApiDefinition {
       pendingVerifications: typeof routes['admin.admin.pending_verifications']
       approveDriver: typeof routes['admin.admin.approve_driver']
       rejectDriver: typeof routes['admin.admin.reject_driver']
+      updateDriverCity: typeof routes['admin.admin.update_driver_city']
       pendingPayments: typeof routes['admin.admin.pending_payments']
       confirmPayment: typeof routes['admin.admin.confirm_payment']
       rejectPayment: typeof routes['admin.admin.reject_payment']
@@ -112,7 +118,10 @@ export interface ApiDefinition {
       updateCoverage: typeof routes['admin.admin.update_coverage']
       updateBanner: typeof routes['admin.admin.update_banner']
       assignModerator: typeof routes['admin.admin.assign_moderator']
+      updateUserRole: typeof routes['admin.admin.update_user_role']
       assignLeader: typeof routes['admin.admin.assign_leader']
+      listComunicados: typeof routes['admin.admin.list_comunicados']
+      listEncuestas: typeof routes['admin.admin.list_encuestas']
       approveComunicado: typeof routes['admin.admin.approve_comunicado']
       rejectComunicado: typeof routes['admin.admin.reject_comunicado']
       approveEncuesta: typeof routes['admin.admin.approve_encuesta']
@@ -170,9 +179,30 @@ export interface ApiDefinition {
       inactiveDrivers: typeof routes['moderator.moderator.inactive_drivers']
       notifyDriver: typeof routes['moderator.moderator.notify_driver']
       reportDriver: typeof routes['moderator.moderator.report_driver']
+      approveDriver: typeof routes['moderator.moderator.approve_driver']
+      rejectDriver: typeof routes['moderator.moderator.reject_driver']
       storeEncuesta: typeof routes['moderator.moderator.store_encuesta']
       encuestaResults: typeof routes['moderator.moderator.encuesta_results']
       answerEncuesta: typeof routes['moderator.moderator.answer_encuesta']
+      myEncuestas: typeof routes['moderator.moderator.my_encuestas']
+      myReports: typeof routes['moderator.moderator.my_reports']
+      dashboard: typeof routes['moderator.moderator.dashboard']
+      trips: typeof routes['moderator.moderator.trips']
+      tripShow: typeof routes['moderator.moderator.trip_show']
+      resolvePendingClose: typeof routes['moderator.moderator.resolve_pending_close']
+      reservations: typeof routes['moderator.moderator.reservations']
+      emergencies: typeof routes['moderator.moderator.emergencies']
+      emergencyCount: typeof routes['moderator.moderator.emergency_count']
+      emergencyAcknowledge: typeof routes['moderator.moderator.emergency_acknowledge']
+      emergencyResolve: typeof routes['moderator.moderator.emergency_resolve']
+    }
+    conversacion: {
+      contactableUsers: typeof routes['moderator.conversacion.contactable_users']
+      unreadCount: typeof routes['moderator.conversacion.unread_count']
+      index: typeof routes['moderator.conversacion.index']
+      store: typeof routes['moderator.conversacion.store']
+      messages: typeof routes['moderator.conversacion.messages']
+      storeMessage: typeof routes['moderator.conversacion.store_message']
     }
   }
   avisos: {
@@ -185,6 +215,28 @@ export interface ApiDefinition {
   }
   emergency: {
     trigger: typeof routes['emergency.trigger']
+    chat: {
+      emergencyChat: {
+        index: typeof routes['emergency.chat.emergency_chat.index']
+        store: typeof routes['emergency.chat.emergency_chat.store']
+      }
+    }
+  }
+  sos: {
+    alerts: typeof routes['sos.alerts']
+  }
+  fraud: {
+    alerts: {
+      store: typeof routes['fraud.alerts.store']
+    }
+  }
+  conversations: {
+    conversacion: {
+      unreadCount: typeof routes['conversations.conversacion.unread_count']
+      index: typeof routes['conversations.conversacion.index']
+      messages: typeof routes['conversations.conversacion.messages']
+      storeMessage: typeof routes['conversations.conversacion.store_message']
+    }
   }
   leader: {
     leader: {

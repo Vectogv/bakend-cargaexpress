@@ -13,7 +13,7 @@ test.group('Service Failure Simulation', (group) => {
     const clientReg = await client.post('/api/auth/register').json({
       nombre: 'Fail Client', apellido: 'Test',
       email: `fail-client-${Date.now()}@test.com`,
-      password: '123456', rol: 'cliente',
+      password: '123456', rol: 'cliente', edad: 30,
     })
     clientReg.assertStatus(200)
     const clientToken = clientReg.body().token
@@ -21,7 +21,7 @@ test.group('Service Failure Simulation', (group) => {
     const driverReg = await client.post('/api/auth/register').json({
       nombre: 'Fail Driver', apellido: 'Test',
       email: `fail-driver-${Date.now()}@test.com`,
-      password: '123456', rol: 'conductor',
+      password: '123456', rol: 'conductor', edad: 30,
       cedula: `${Date.now()}`, placa: `FD-${Date.now()}`,
       tipoVehiculo: 'camioneta', capacidad: '1000 kg',
     })
@@ -41,9 +41,13 @@ test.group('Service Failure Simulation', (group) => {
     trip.assertStatus(200)
     const tripId = trip.body().id
 
-    await client.put('/api/drivers/location')
+    const conductor = await db.from('conductores').where('usuario_id', driverUserId).first()
+    const gpsRateLimitService = (await import('#services/gps_rate_limit_service')).default
+    await gpsRateLimitService.reset(conductor.id)
+    const locationRes = await client.put('/api/drivers/location')
       .header('Authorization', `Bearer ${driverToken}`)
       .json({ lat: 3.4516, lng: -76.5320, heading: 0, accuracy: 10 })
+    locationRes.assertStatus(200)
 
     const accept = await client.post(`/api/trips/${tripId}/accept`)
       .header('Authorization', `Bearer ${driverToken}`)
@@ -60,7 +64,7 @@ test.group('Service Failure Simulation', (group) => {
 
     // Verify database integrity
     const viaje = await db.from('viajes').where('id', tripId).first()
-    assert.equal(viaje.estado, 'esperando_confirmacion')
+    assert.equal(viaje.estado, 'pendiente_confirmacion')
     assert.equal(Number(viaje.precio_final), 50000)
   }).timeout(30000)
 
@@ -91,7 +95,7 @@ test.group('Service Failure Simulation', (group) => {
     const driverReg = await client.post('/api/auth/register').json({
       nombre: 'Fraud Test', apellido: 'Driver',
       email: `fraud-driver-${Date.now()}@test.com`,
-      password: '123456', rol: 'conductor',
+      password: '123456', rol: 'conductor', edad: 30,
       cedula: `${Date.now()}`, placa: `FD-${Date.now()}`,
       tipoVehiculo: 'camioneta', capacidad: '1000 kg',
     })

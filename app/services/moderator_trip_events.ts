@@ -21,7 +21,7 @@ export function calcularDistanciaKm(lat1: number, lng1: number, lat2: number, ln
 export async function resolverZonaViaje(viaje: Viaje): Promise<string | null> {
   if (viaje.conductorId) {
     const conductor = await Conductor.find(viaje.conductorId)
-    if (conductor?.ciudad) return conductor.ciudad
+    if (conductor?.ciudad) return conductor.ciudad.trim().toLowerCase()
   }
 
   if (viaje.origenLat !== null && viaje.origenLng !== null) {

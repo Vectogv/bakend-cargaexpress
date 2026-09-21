@@ -172,7 +172,7 @@ export default class TripFinalizationService {
               { statusCode: 403, message: 'Este viaje no te pertenece' }
             )
           }
-        } else if (input.actorRol !== 'admin') {
+        } else if (input.actorRol !== 'admin' && input.actorRol !== 'moderador') {
           throw Object.assign(
             new Error('SIN_PERMISO'),
             { statusCode: 403, message: 'No tienes permisos para finalizar este viaje' }

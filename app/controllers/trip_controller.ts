@@ -4,6 +4,8 @@ import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
 import Calificacion from '#models/calificacion'
 import SolicitudCancelacion from '#models/solicitud_cancelacion'
+import LogFraude from '#models/log_fraude'
+import Disputa from '#models/disputa'
 import {
   tripRequestValidator,
   tripReserveValidator,
@@ -17,7 +19,7 @@ import { randomUUID } from 'node:crypto'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import { emitToClient, emitToDriver, emitToAdmin, emitTripStatusChanged } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
-import GeoService from '#services/geo_service'
+import GeoService, { distanciaKm } from '#services/geo_service'
 import TripDispatchService from '#services/trip_dispatch_service'
 import TripConflictService from '#services/trip_conflict_service'
 import reservationConfig from '#config/reservations'
@@ -25,6 +27,9 @@ import { parseScheduledDateTime } from '#services/reservation_time'
 import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
 import TripFinalizationService from '#services/trip_finalization_service'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
+import antifraudeConfig from '#config/antifraude'
+import logger from '@adonisjs/core/services/logger'
+import AntifraudeService from '#services/antifraude_service'
 
 export default class TripController {
   @ApiOperation({ summary: 'Solicitar un viaje', description: 'Crea una nueva solicitud de viaje' })
@@ -580,6 +585,60 @@ export default class TripController {
       return response.status(422).send({ error: `El viaje debe estar en estado 'conductor_llegada' o 'aceptado' para iniciarse (estado actual: ${viaje.estado})` })
     }
 
+    // R2: Validar distancia al origen para marcar la recogida (radioRecogidaKm)
+    if (!conductor.ultimaUbicacionLat || !conductor.ultimaUbicacionLng) {
+      return response.status(422).send({
+        error: 'No tienes ubicación registrada. Actualiza tu ubicación antes de marcar la recogida.',
+        code: 'UBICACION_NO_RECIENTE',
+      })
+    }
+    if (!conductor.ubicacionActualizadaEn) {
+      return response.status(422).send({
+        error: 'Tu ubicación no es reciente. Actualízala antes de marcar la recogida.',
+        code: 'UBICACION_NO_RECIENTE',
+      })
+    }
+    const ubicacionAgeSeg = DateTime.now().diff(conductor.ubicacionActualizadaEn, 'seconds').seconds
+    if (ubicacionAgeSeg > antifraudeConfig.ubicacionMaxSeg) {
+      return response.status(422).send({
+        error: 'Tu ubicación no es reciente. Actualízala antes de marcar la recogida.',
+        code: 'UBICACION_NO_RECIENTE',
+      })
+    }
+    const distOrigenKm = distanciaKm(
+      conductor.ultimaUbicacionLat,
+      conductor.ultimaUbicacionLng,
+      viaje.origenLat,
+      viaje.origenLng
+    )
+    if (distOrigenKm >= antifraudeConfig.radioRecogidaKm) {
+      // Registrar en logs_fraude
+      try {
+        await LogFraude.create({
+          userId: user.id,
+          conductorId: conductor.id,
+          tipo: 'recogida_fuera_de_origen',
+          descripcion: `Intento de marcar recogida a ${distOrigenKm.toFixed(2)} km del origen`,
+          latitud: conductor.ultimaUbicacionLat,
+          longitud: conductor.ultimaUbicacionLng,
+          metadata: { viajeId: viaje.id, distanciaKm: distOrigenKm },
+        })
+        emitToAdmin('admin:fraud_alert', {
+          tipo: 'recogida_fuera_de_origen',
+          viajeId: viaje.id,
+          conductorId: conductor.id,
+          distanciaKm: distOrigenKm,
+        })
+      } catch (e) {
+        logger.error({ err: e }, 'Error registrando fraude en recogida')
+      }
+      return response.status(422).send({
+        error: `No puedes marcar la recogida: estás a ${distOrigenKm.toFixed(2)} km del punto de origen.`,
+        code: 'FUERA_DE_RANGO_ORIGEN',
+        distanciaKm: distOrigenKm,
+      })
+    }
+
     viaje.estado = 'en_curso'
     viaje.enCursoAt = DateTime.now()
     await viaje.save()
@@ -644,7 +703,7 @@ export default class TripController {
     return serialize.withoutWrapping({ id: String(viaje.id), estado: viaje.estado })
   }
 
-  @ApiOperation({ summary: 'Completar un viaje', description: 'Marca un viaje como completado' })
+  @ApiOperation({ summary: 'Completar un viaje', description: 'El conductor solicita cerrar el servicio (pasa a pendiente_confirmacion)' })
   @ApiBody({ type: () => tripCompleteValidator })
   @ApiResponse({ type: 'object' })
   async complete({ auth, params, request, serialize, response }: HttpContext) {
@@ -661,158 +720,283 @@ export default class TripController {
       return response.status(403).send({ error: 'No eres el conductor asignado a este viaje' })
     }
 
-    if (!TripStateMachine.validarTransicion(viaje.estado as EstadoViaje, 'entregado')) {
+    if (!TripStateMachine.validarTransicion(viaje.estado as EstadoViaje, 'pendiente_confirmacion')) {
       return response.status(422).send({ error: `El viaje debe estar 'en_curso' para completarse (estado actual: ${viaje.estado})` })
     }
 
     const data = await request.validateUsing(tripCompleteValidator)
-    viaje.estado = 'entregado'
+
+    // R3: Validar distancia al destino
+    if (!conductor.ultimaUbicacionLat || !conductor.ultimaUbicacionLng) {
+      return response.status(422).send({
+        error: 'No tienes ubicación registrada. Actualiza tu ubicación antes de cerrar el servicio.',
+        code: 'UBICACION_NO_RECIENTE',
+      })
+    }
+    if (!conductor.ubicacionActualizadaEn) {
+      return response.status(422).send({
+        error: 'Tu ubicación no es reciente. Actualízala antes de cerrar el servicio.',
+        code: 'UBICACION_NO_RECIENTE',
+      })
+    }
+    const ubicacionAgeSeg = DateTime.now().diff(conductor.ubicacionActualizadaEn, 'seconds').seconds
+    if (ubicacionAgeSeg > antifraudeConfig.ubicacionMaxSeg) {
+      return response.status(422).send({
+        error: 'Tu ubicación no es reciente. Actualízala antes de cerrar el servicio.',
+        code: 'UBICACION_NO_RECIENTE',
+      })
+    }
+    const distDestinoKm = distanciaKm(
+      conductor.ultimaUbicacionLat,
+      conductor.ultimaUbicacionLng,
+      viaje.destinoLat,
+      viaje.destinoLng
+    )
+
+    const justificacion = request.input('justificacion') as string | undefined
+    const fueraDeRango = distDestinoKm >= antifraudeConfig.radioCierreKm
+
+    if (fueraDeRango) {
+      // R3b: Fuera de rango - exige justificación
+      if (!justificacion || justificacion.trim().length < 10) {
+        return response.status(422).send({
+          error: `Estás a ${distDestinoKm.toFixed(2)} km del destino. Para cerrar el servicio debes justificar el motivo.`,
+          code: 'JUSTIFICACION_REQUERIDA',
+          distanciaKm: distDestinoKm,
+        })
+      }
+    }
+
+    // Cambiar a pendiente_confirmacion
+    viaje.estado = 'pendiente_confirmacion'
     viaje.precioFinal = data.montoFinal
     viaje.completadoAt = DateTime.now()
+    viaje.pendienteConfirmacionDesde = DateTime.now()
+    viaje.moderadorNotificadoEn = null
     await viaje.save()
 
-    emitTripStatusChanged(viaje.clienteId, conductor.usuarioId, {
-      id: String(viaje.id),
-      estado: 'entregado',
-      montoFinal: viaje.precioFinal,
-      completadoAt: viaje.completadoAt.toISO(),
-    })
+    // Registrar en logs_fraude si fuera de rango
+    if (fueraDeRango) {
+      try {
+        await LogFraude.create({
+          userId: user.id,
+          conductorId: conductor.id,
+          tipo: 'cierre_fuera_de_destino',
+          descripcion: `Cierre fuera de rango (${distDestinoKm.toFixed(2)} km). Justificación: ${justificacion}`,
+          latitud: conductor.ultimaUbicacionLat,
+          longitud: conductor.ultimaUbicacionLng,
+          metadata: { viajeId: viaje.id, distanciaKm: distDestinoKm, justificacion },
+        })
+        emitToAdmin('admin:fraud_alert', {
+          tipo: 'cierre_fuera_de_destino',
+          viajeId: viaje.id,
+          conductorId: conductor.id,
+          distanciaKm: distDestinoKm,
+          justificacion,
+        })
+      } catch (e) {
+        logger.error({ err: e }, 'Error registrando fraude en cierre')
+      }
+    }
 
-    emitToClient(viaje.clienteId, 'trip:delivered', {
-      id: String(viaje.id),
-      estado: viaje.estado,
-      montoFinal: viaje.precioFinal,
-      completadoAt: viaje.completadoAt.toISO(),
-    })
-
-    emitToDriver(conductor.usuarioId, 'driver:stop_gps', {
+    // Emitir trip:finalize_request al cliente
+    emitToClient(viaje.clienteId, 'trip:finalize_request', {
       viajeId: String(viaje.id),
+      estado: 'pendiente_confirmacion',
+      fueraDeRango,
+      distanciaKm: distDestinoKm,
+      justificacion: fueraDeRango ? justificacion : undefined,
+      montoFinal: data.montoFinal,
     })
-
-    // Automaticamente pasar a esperando_confirmacion
-    viaje.estado = 'esperando_confirmacion'
-    await viaje.save()
 
     emitTripStatusChanged(viaje.clienteId, conductor.usuarioId, {
       id: String(viaje.id),
-      estado: 'esperando_confirmacion',
+      estado: 'pendiente_confirmacion',
+      montoFinal: viaje.precioFinal,
+      completadoAt: viaje.completadoAt.toISO(),
     })
 
     emitTripUpdateToModerators(viaje)
 
     return serialize.withoutWrapping({
       id: String(viaje.id),
-      estado: viaje.estado,
+      estado: 'pendiente_confirmacion',
+      mensaje: 'Está en proceso de cerrar el servicio, a la espera de la confirmación del servicio por parte del cliente.',
       montoFinal: viaje.precioFinal,
       completadoAt: viaje.completadoAt.toISO(),
     })
   }
 
   @ApiOperation({
-    summary: 'Finalizar entrega',
-    description: 'Confirma la entrega, pone al conductor en línea y registra el pago. Idempotente: seguro de reintentar.',
+    summary: 'Finalizar un viaje (alias de complete)',
+    description: 'El conductor solicita cerrar el servicio (pasa a pendiente_confirmacion). Misma regla antifraude que complete.',
   })
   @ApiBody({ type: () => tripCompleteValidator })
   @ApiResponse({ type: 'object' })
-  async finalize({ auth, params, request, serialize, response }: HttpContext) {
+  async finalize(ctx: HttpContext) {
+    return this.complete(ctx)
+  }
+
+  @ApiOperation({
+    summary: 'Finalizar entrega (cliente confirma cierre)',
+    description: 'El cliente confirma o rechaza el cierre del servicio solicitado por el conductor',
+  })
+  @ApiResponse({ type: 'object' })
+  async confirmClose({ auth, params, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    const data = await request.validateUsing(tripCompleteValidator)
 
-    // ── Delegar toda la lógica financiera al servicio centralizado ────────
-    // TripFinalizationService garantiza:
-    //   • Atomicidad (transacción única)
-    //   • Bloqueo pesimista (SELECT FOR UPDATE)
-    //   • Idempotencia (re-read after lock)
-    //   • Protección contra disputa activa
-    //   • Validación de estado y permisos
-    const result = await TripFinalizationService.finalize({
-      viajeId: params.id,
-      montoFinal: data.montoFinal,
-      actorUserId: user.id,
-      actorRol: user.rol ?? 'cliente',
-    })
-
-    if (!result.ok) {
-      return response.status(result.statusCode).send({ error: result.error })
+    if (user.rol !== 'cliente') {
+      return response.status(403).send({ error: 'Solo el cliente puede confirmar el cierre del servicio' })
     }
 
-    // ── Notificaciones y sockets (fuera de la transacción) ────────────────
-    // Si la operación fue idempotente (el viaje ya estaba finalizado) no
-    // volvemos a emitir eventos para no spam al frontend con duplicados.
-    if (!result.idempotent) {
-      const viaje = await Viaje.find(Number(result.viaje.id))
+    const { confirmar, motivo } = request.only(['confirmar', 'motivo'])
 
-      if (viaje) {
-        const conductorStatusChanged = viaje.conductorId
-          ? await Conductor.find(viaje.conductorId)
-          : null
-        emitTripStatusChanged(
-          viaje.clienteId,
-          conductorStatusChanged?.usuarioId,
-          {
-            id: String(viaje.id),
-            estado: 'finalizado',
+    if (typeof confirmar !== 'boolean') {
+      return response.status(422).send({ error: 'El campo confirmar (true/false) es obligatorio' })
+    }
+
+    const viaje = await Viaje.findOrFail(params.id)
+
+    if (viaje.clienteId !== user.id) {
+      return response.status(403).send({ error: 'Este viaje no te pertenece' })
+    }
+
+    // Solo se puede confirmar desde pendiente_confirmacion
+    if (viaje.estado !== 'pendiente_confirmacion') {
+      return response.status(422).send({ error: `El viaje no está pendiente de confirmación (estado actual: ${viaje.estado})` })
+    }
+
+    if (confirmar) {
+      // Cliente confirma → finalizar viaje de verdad
+      // Usar TripFinalizationService para la lógica financiera
+      const conductor = await Conductor.findByOrFail('id', viaje.conductorId!)
+      const result = await TripFinalizationService.finalize({
+        viajeId: viaje.id,
+        montoFinal: viaje.precioFinal!,
+        actorUserId: user.id,
+        actorRol: 'cliente',
+      })
+
+      if (!result.ok) {
+        return response.status(result.statusCode).send({ error: result.error })
+      }
+
+      if (!result.idempotent) {
+        const viajeFinalizado = await Viaje.find(Number(result.viaje.id))
+        if (viajeFinalizado) {
+          const conductorStatusChanged = viajeFinalizado.conductorId
+            ? await Conductor.find(viajeFinalizado.conductorId)
+            : null
+          emitTripStatusChanged(
+            viajeFinalizado.clienteId,
+            conductorStatusChanged?.usuarioId,
+            {
+              id: String(viajeFinalizado.id),
+              estado: 'finalizado',
+              montoFinal: result.viaje.montoFinal,
+              finalizadoAt: result.viaje.finalizadoAt,
+            }
+          )
+
+          emitToClient(viajeFinalizado.clienteId, 'trip:finalized', {
+            id: result.viaje.id,
+            estado: result.viaje.estado,
             montoFinal: result.viaje.montoFinal,
             finalizadoAt: result.viaje.finalizadoAt,
+          })
+
+          emitToAdmin('admin:trip_completed', {
+            viajeId: result.viaje.id,
+            estado: result.viaje.estado,
+            montoFinal: result.viaje.montoFinal,
+          })
+
+          emitTripUpdateToModerators(viajeFinalizado)
+
+          const cliente = await User.find(viajeFinalizado.clienteId)
+          if (cliente?.fcmToken) {
+            await sendToToken(
+              cliente.fcmToken,
+              'Envío entregado',
+              'Tu envío ha sido entregado exitosamente'
+            )
           }
-        )
 
-        emitToClient(viaje.clienteId, 'trip:finalized', {
-          id: result.viaje.id,
-          estado: result.viaje.estado,
-          montoFinal: result.viaje.montoFinal,
-          finalizadoAt: result.viaje.finalizadoAt,
-        })
+          if (viajeFinalizado.conductorId) {
+            const conductor = await Conductor.find(viajeFinalizado.conductorId)
+            if (conductor) {
+              emitToDriver(conductor.usuarioId, 'driver:stop_gps', {
+                viajeId: String(viajeFinalizado.id),
+              })
 
-        emitToAdmin('admin:trip_completed', {
-          viajeId: result.viaje.id,
-          estado: result.viaje.estado,
-          montoFinal: result.viaje.montoFinal,
-        })
-
-        emitTripUpdateToModerators(viaje)
-
-        // Push notification al cliente
-        const cliente = await User.find(viaje.clienteId)
-        if (cliente?.fcmToken) {
-          await sendToToken(
-            cliente.fcmToken,
-            'Envío entregado',
-            'Tu envío ha sido entregado exitosamente'
-          )
-        }
-
-        // Push notification al conductor (comisión acumulada)
-        if (viaje.conductorId) {
-          const conductor = await Conductor.find(viaje.conductorId)
-          if (conductor) {
-            emitToDriver(conductor.usuarioId, 'driver:stop_gps', {
-              viajeId: String(viaje.id),
-            })
-
-            const conductorUser = await User.find(conductor.usuarioId)
-            if (conductorUser?.fcmToken && conductorUser.montoDeuda && conductorUser.deudaFechaLimite) {
-              const diasRestantes = Math.ceil(
-                conductorUser.deudaFechaLimite.diff(DateTime.now(), 'days').days
-              )
-              const comision = Math.round(data.montoFinal * 0.1 * 100) / 100
-              await sendToToken(
-                conductorUser.fcmToken,
-                'Nueva comisión registrada',
-                `Se registró una comisión de $${comision.toLocaleString('es-CO')} por este viaje. Tu deuda total es $${conductorUser.montoDeuda.toLocaleString('es-CO')}. Tienes ${diasRestantes} días para pagar.`
-              )
+              const conductorUser = await User.find(conductor.usuarioId)
+              if (conductorUser?.fcmToken && conductorUser.montoDeuda && conductorUser.deudaFechaLimite) {
+                const diasRestantes = Math.ceil(
+                  conductorUser.deudaFechaLimite.diff(DateTime.now(), 'days').days
+                )
+                const comision = Math.round(viajeFinalizado.precioFinal! * 0.1 * 100) / 100
+                await sendToToken(
+                  conductorUser.fcmToken,
+                  'Nueva comisión registrada',
+                  `Se registró una comisión de $${comision.toLocaleString('es-CO')} por este viaje. Tu deuda total es $${conductorUser.montoDeuda.toLocaleString('es-CO')}. Tienes ${diasRestantes} días para pagar.`
+                )
+              }
             }
           }
         }
       }
-    }
 
-    return serialize.withoutWrapping({
-      id: result.viaje.id,
-      estado: result.viaje.estado,
-      montoFinal: result.viaje.montoFinal,
-      finalizadoAt: result.viaje.finalizadoAt,
-    })
+      return serialize.withoutWrapping({
+        id: result.viaje.id,
+        estado: 'finalizado',
+        montoFinal: result.viaje.montoFinal,
+        finalizadoAt: result.viaje.finalizadoAt,
+      })
+    } else {
+      // Cliente rechaza → crear disputa y volver a en_curso
+      const conductor = await Conductor.findByOrFail('id', viaje.conductorId!)
+      
+      const disputa = await Disputa.create({
+        viajeId: viaje.id,
+        conductorId: conductor.id,
+        clienteId: viaje.clienteId,
+        estado: 'abierta',
+        problema: 'cliente_rechaza_cierre',
+        descripcion: motivo || 'El cliente rechazó el cierre del servicio solicitado por el conductor',
+        versionConductor: 'Conductor solicitó cierre del servicio',
+        versionCliente: motivo || 'Cliente rechazó el cierre',
+      })
+
+      viaje.estado = 'disputa'
+      await viaje.save()
+
+      emitTripStatusChanged(viaje.clienteId, conductor.usuarioId, {
+        id: String(viaje.id),
+        estado: 'disputa',
+        disputaId: disputa.id,
+      })
+
+      emitToClient(viaje.clienteId, 'trip:close_rejected', {
+        viajeId: String(viaje.id),
+        estado: 'disputa',
+        disputaId: disputa.id,
+      })
+
+      emitToDriver(conductor.usuarioId, 'trip:close_rejected', {
+        viajeId: String(viaje.id),
+        estado: 'disputa',
+        disputaId: disputa.id,
+        motivo: motivo || 'El cliente rechazó el cierre del servicio',
+      })
+
+      emitTripUpdateToModerators(viaje)
+
+      return serialize.withoutWrapping({
+        id: String(viaje.id),
+        estado: 'disputa',
+        disputaId: disputa.id,
+      })
+    }
   }
 
   @ApiOperation({ summary: 'Cancelar un viaje', description: 'Cancela un viaje con un motivo opcional' })
@@ -852,18 +1036,42 @@ export default class TripController {
         .send({ error: `El viaje no puede cancelarse en su estado actual (${viaje.estado})` })
     }
 
-    // Validar distancia si cliente cancela con conductor en camino
-    if (user.rol === 'cliente' && viaje.conductorId && viaje.estado === 'conductor_en_camino') {
+    // R1: Cancelación - Cliente no puede cancelar si conductor está a < radioCierreKm del origen
+    // R1: Conductor SÍ puede cancelar pero exige justificación (mín 10 chars) y registra en logs_fraude
+    if (user.rol === 'cliente' && viaje.conductorId) {
       const conductor = await Conductor.find(viaje.conductorId)
-      if (conductor?.ultimaUbicacionLat && conductor?.ultimaUbicacionLng) {
-        const distKm = haversineDist(
-          viaje.origenLat, viaje.origenLng,
-          conductor.ultimaUbicacionLat, conductor.ultimaUbicacionLng
-        )
-        if (distKm < 1) {
-          return response.status(422).send({ error: `No puedes cancelar: el conductor está a ${distKm.toFixed(2)} km del origen (mín. 1 km)` })
+      if (conductor) {
+        try {
+          await AntifraudeService.validarCancelacionClienteCercaOrigen(viaje, conductor)
+        } catch (e: any) {
+          if (e.code === 'CONDUCTOR_CERCA') {
+            return response.status(422).send({ error: e.message, code: e.code, distanciaKm: e.extra?.distanciaKm })
+          }
+          throw e
         }
       }
+    } else if (user.rol === 'conductor') {
+      const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+      // Validar justificación obligatoria
+      const justificacion = request.input('justificacion') as string | undefined
+      try {
+        await AntifraudeService.validarCancelacionConductor(justificacion)
+      } catch (e: any) {
+        if (e.code === 'JUSTIFICACION_REQUERIDA') {
+          return response.status(422).send({ error: e.message, code: e.code })
+        }
+        throw e
+      }
+      // Registrar en logs_fraude
+      await AntifraudeService.registrarFraude('cancelacion_conductor', {
+        userId: user.id,
+        conductorId: conductor.id,
+        viajeId: viaje.id,
+        justificacion,
+        descripcion: `Conductor canceló el viaje. Justificación: ${justificacion}`,
+      })
+      // Usar la justificación como motivo
+      data.motivo = justificacion
     }
 
     const estadoAnterior = viaje.estado
@@ -878,6 +1086,21 @@ export default class TripController {
       if (cliente) {
         cliente.reputacion = Math.max(1.0, cliente.reputacion - 0.5)
         await cliente.save()
+      }
+    }
+
+    // H4: Penalizar reputacion del conductor si el cancela un viaje ya asignado
+    if (user.rol === 'conductor' && viaje.conductorId && ['aceptado', 'conductor_en_camino'].includes(estadoAnterior)) {
+      const conductorPenalizado = await Conductor.find(viaje.conductorId)
+      if (conductorPenalizado) {
+        const conductorUser = await User.find(conductorPenalizado.usuarioId)
+        if (conductorUser) {
+          conductorUser.reputacion = Math.max(
+            1.0,
+            Number(conductorUser.reputacion || 5.0) - antifraudeConfig.penalizacionCancelacion
+          )
+          await conductorUser.save()
+        }
       }
     }
 

@@ -1,4 +1,4 @@
-import vine from '@vinejs/vine'
+import vine, { SimpleMessagesProvider } from '@vinejs/vine'
 
 const email = () => vine.string().email().maxLength(254)
 const password = () => vine.string().minLength(6).maxLength(32)
@@ -10,18 +10,18 @@ export const registerValidator = vine.create({
   password: password(),
   telefono: vine.string().maxLength(20).nullable().optional(),
   rol: vine.enum(['conductor', 'cliente']),
-  // F envía 0 cuando la edad no es numérica; los mensajes en español evitan el 422 confuso.
-  edad: vine
-    .number()
-    .min(18, 'Debes ser mayor de 18 años')
-    .max(120, 'Edad inválida')
-    .nullable()
-    .optional(),
+  // H3: La edad es obligatoria y debe ser mayor de 18 años.
+  edad: vine.number().min(18).max(120),
   cedula: vine.string().maxLength(20).nullable().optional(),
   placa: vine.string().maxLength(20).nullable().optional(),
   tipoVehiculo: vine.string().maxLength(50).nullable().optional(),
   capacidad: vine.string().maxLength(50).nullable().optional(),
   ciudad: vine.string().maxLength(100).nullable().optional(),
+})
+
+// Mensajes en español para la regla requerida de la edad (H3).
+export const registerValidatorMessages = new SimpleMessagesProvider({
+  'edad.required': 'La edad es obligatoria',
 })
 
 export const loginValidator = vine.create({
