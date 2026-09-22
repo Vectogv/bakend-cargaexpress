@@ -1171,6 +1171,46 @@ export default class AdminController {
     })
   }
 
+  async resetPassword({ params, request, response, serialize }: HttpContext) {
+    const user = await User.find(params.id)
+    if (!user) {
+      return response
+        .status(404)
+        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+    }
+
+    if (user.rol === 'admin') {
+      return response
+        .status(403)
+        .send(
+          serialize.withoutWrapping({
+            error: 'No puedes cambiar la contraseña de otro administrador',
+          })
+        )
+    }
+
+    const { password } = request.only(['password'])
+    if (!password || typeof password !== 'string' || password.length < 6 || password.length > 32) {
+      return response
+        .status(422)
+        .send(
+          serialize.withoutWrapping({
+            error: 'La contraseña debe tener entre 6 y 32 caracteres',
+          })
+        )
+    }
+
+    user.password = password
+    await user.save()
+
+    RedisService.cacheDel('admin:dashboard')
+
+    return serialize.withoutWrapping({
+      id: user.id,
+      passwordActualizado: true,
+    })
+  }
+
   async approveComunicado({ params, response, serialize }: HttpContext) {
     const comunicado = await Comunicado.find(params.id)
     if (!comunicado) {
