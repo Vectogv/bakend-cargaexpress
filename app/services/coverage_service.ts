@@ -79,11 +79,11 @@ export function contiene(zona: Zona, lat: number, lng: number): boolean {
  * Valida y normaliza lo que envía el admin. Devuelve las zonas listas para
  * guardar o un mensaje de error.
  */
-export function validarZonasEntrada(entrada: unknown): { zonas: ZonaRect[] } | { error: string } {
+export function validarZonasEntrada(entrada: unknown): { zonas: Zona[] } | { error: string } {
   if (!Array.isArray(entrada)) return { error: 'zonasCobertura debe ser una lista' }
   if (entrada.length > 50) return { error: 'Máximo 50 zonas' }
 
-  const zonas: ZonaRect[] = []
+  const zonas: Zona[] = []
   const claves = new Set<string>()
   for (const [i, z] of entrada.entries()) {
     const etiqueta = `Zona ${i + 1}`
@@ -93,10 +93,28 @@ export function validarZonasEntrada(entrada: unknown): { zonas: ZonaRect[] } | {
     if (!clave) return { error: `${etiqueta}: nombre inválido` }
     if (claves.has(clave)) return { error: `La zona "${nombre}" está repetida` }
     claves.add(clave)
+    const activa = z?.activa !== false
+
+    // Zona circular: centro + radio (el mapa de operaciones dibuja el radio).
+    const lat = num(z?.lat ?? z?.centro?.lat)
+    const lng = num(z?.lng ?? z?.centro?.lng)
+    const radio = num(z?.radio ?? z?.radioKm)
+    const pideCirculo = z?.tipo === 'circulo' || [lat, lng, radio].every(Number.isFinite)
+    if (pideCirculo) {
+      if (![lat, lng, radio].every(Number.isFinite)) {
+        return { error: `${nombre}: una zona circular necesita centro (lat, lng) y radio` }
+      }
+      if (Math.abs(lat) > 90) return { error: `${nombre}: latitud fuera de rango (-90 a 90)` }
+      if (Math.abs(lng) > 180) return { error: `${nombre}: longitud fuera de rango (-180 a 180)` }
+      if (radio <= 0) return { error: `${nombre}: el radio debe ser mayor que cero` }
+      if (radio > 300) return { error: `${nombre}: el radio máximo es 300 km` }
+      zonas.push({ tipo: 'circulo', clave, nombre, activa, lat, lng, radio })
+      continue
+    }
 
     const [norte, sur, este, oeste] = [num(z?.norte), num(z?.sur), num(z?.este), num(z?.oeste)]
     if (![norte, sur, este, oeste].every(Number.isFinite)) {
-      return { error: `${nombre}: las cuatro coordenadas deben ser números` }
+      return { error: `${nombre}: define un rectángulo (norte, sur, este, oeste) o un círculo (lat, lng, radio)` }
     }
     if (Math.abs(norte) > 90 || Math.abs(sur) > 90) return { error: `${nombre}: latitud fuera de rango (-90 a 90)` }
     if (Math.abs(este) > 180 || Math.abs(oeste) > 180) return { error: `${nombre}: longitud fuera de rango (-180 a 180)` }
@@ -104,7 +122,7 @@ export function validarZonasEntrada(entrada: unknown): { zonas: ZonaRect[] } | {
     if (este <= oeste) return { error: `${nombre}: el límite este debe ser mayor que el oeste` }
     if (norte - sur > 5 || este - oeste > 5) return { error: `${nombre}: la zona es demasiado grande (máx. ~5° por lado)` }
 
-    zonas.push({ tipo: 'rect', clave, nombre, activa: z?.activa !== false, norte, sur, este, oeste })
+    zonas.push({ tipo: 'rect', clave, nombre, activa, norte, sur, este, oeste })
   }
   return { zonas }
 }

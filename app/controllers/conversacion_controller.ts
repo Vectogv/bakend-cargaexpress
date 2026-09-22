@@ -3,7 +3,7 @@ import MensajeConversacion from '#models/mensaje_conversacion'
 import User from '#models/user'
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
-import { emitToModerators, getIO } from '#start/socket'
+import { getIO } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 
 export default class ConversacionController {
@@ -286,23 +286,28 @@ export default class ConversacionController {
       otros.push(...participantes)
     }
 
-    if (conversacion.ciudad) {
-      emitToModerators(conversacion.ciudad, 'conversation:message', payload)
-    } else {
-      try { getIO().to('admin').emit('conversation:message', payload) } catch { /* socket no disponible */ }
-    }
+    // Salas destino, sin repetir: el panel de admin escucha siempre (antes, con
+    // ciudad definida solo se avisaba a los moderadores de esa ciudad y el admin
+    // no recibía nada en tiempo real), más la ciudad de la conversación y cada
+    // participante en su propia sala.
+    const salas = new Set<string>(['admin'])
+    if (conversacion.ciudad) salas.add(`moderator:${conversacion.ciudad.trim().toLowerCase()}`)
 
     for (const o of otros) {
       const esAdminDest = o.rol === 'admin'
       const esModDest = o.esModerador || o.rol === 'moderador'
       const esConductorDest = o.rol === 'conductor'
-      let room: string
-      if (esAdminDest) room = 'admin'
-      else if (esModDest) room = `moderator:${o.zonaModerador || conversacion.ciudad || ''}`
-      else if (esConductorDest) room = `driver:${o.id}`
-      else room = `client:${o.id}`
-      try { getIO().to(room).emit('conversation:message', payload) } catch { /* socket no disponible */ }
+      if (esAdminDest) salas.add('admin')
+      else if (esModDest) salas.add(`moderator:${(o.zonaModerador || conversacion.ciudad || '').trim().toLowerCase()}`)
+      else if (esConductorDest) salas.add(`driver:${o.id}`)
+      else salas.add(`client:${o.id}`)
+    }
 
+    for (const sala of salas) {
+      try { getIO().to(sala).emit('conversation:message', payload) } catch { /* socket no disponible */ }
+    }
+
+    for (const o of otros) {
       if (o.fcmToken) {
         try {
           await sendToToken(o.fcmToken, `Soporte · ${payload.remitente.nombre}`, payload.mensaje)

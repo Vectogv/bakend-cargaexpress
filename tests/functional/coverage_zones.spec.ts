@@ -81,6 +81,27 @@ test.group('Cobertura por zonas', (group) => {
     res.assertStatus(200)
   })
 
+  test('acepta zonas circulares y valida los viajes con el radio', async ({ client, assert }) => {
+    const admin = await tokenDe(client, 'admin')
+    // Círculo de 10 km alrededor del parque central de Popayán.
+    const guardar = await client
+      .put('/api/admin/config/coverage')
+      .bearerToken(admin)
+      .json({ zonasCobertura: [{ nombre: 'Popayán', tipo: 'circulo', lat: 2.4419, lng: -76.6063, radio: 10 }] })
+    guardar.assertStatus(200)
+
+    const zonas = await CoverageService.zonas()
+    assert.equal(zonas[0].tipo, 'circulo')
+
+    // Dentro del radio (centro de la ciudad).
+    const dentro = await client.post('/api/trips/request').bearerToken(await tokenDe(client, 'cliente')).json(viaje(2.4460, -76.6000))
+    dentro.assertStatus(200)
+
+    // Fuera del radio (a más de 10 km).
+    const fuera = await client.post('/api/trips/request').bearerToken(await tokenDe(client, 'cliente')).json(viaje(2.6000, -76.6000))
+    fuera.assertStatus(422)
+  })
+
   test('rechaza zonas con coordenadas inválidas', async ({ client }) => {
     const admin = await tokenDe(client, 'admin')
     const res = await client
