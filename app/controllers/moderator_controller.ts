@@ -29,6 +29,11 @@ import { ApiOperation, ApiResponse } from '@foadonis/openapi/decorators'
 import { getTripEstadoLabel } from '#services/trip_status_labels'
 import { getAlertaEstadoLabel } from '#services/emergency_status_labels'
 import {
+  COLUMNAS_CONDUCTOR_MAPA_SOS,
+  COLUMNAS_VIAJE_MAPA_SOS,
+  datosMapaSos,
+} from '#services/emergency_payload'
+import {
   resolverZonaAlerta,
   resolverZonaViaje,
   emitTripUpdateToModerators,
@@ -1321,8 +1326,16 @@ export default class ModeratorController {
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
       .preload('viaje', (vq) =>
         vq
-          .select('id', 'estado', 'origen_direccion', 'destino_direccion', 'cliente_id', 'conductor_id')
+          .select(
+            'id',
+            'estado',
+            'origen_direccion',
+            'destino_direccion',
+            'cliente_id',
+            ...COLUMNAS_VIAJE_MAPA_SOS
+          )
           .preload('cliente', (cq) => cq.select('id', 'nombre', 'apellido', 'telefono'))
+          .preload('conductor', (cq) => cq.select(...COLUMNAS_CONDUCTOR_MAPA_SOS))
       )
       .preload('moderadorAtendio', (q) => q.select('id', 'nombre', 'apellido'))
       .preload('moderadorResolvio', (q) => q.select('id', 'nombre', 'apellido'))
@@ -1330,46 +1343,55 @@ export default class ModeratorController {
       .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      alertas.all().map((a) => ({
-        id: a.id,
-        estado: a.estado,
-        estadoLabel: getAlertaEstadoLabel(a.estado),
-        viajeId: a.viajeId,
-        lat: a.lat !== null ? Number(a.lat) : null,
-        lng: a.lng !== null ? Number(a.lng) : null,
-        motivo: a.motivo,
-        usuario: a.usuario
-          ? {
-              nombre: `${a.usuario.nombre || ''} ${a.usuario.apellido || ''}`.trim(),
-              telefono: a.usuario.telefono,
-            }
-          : null,
-        viaje: a.viaje
-          ? {
-              id: a.viaje.id,
-              estado: a.viaje.estado,
-              estadoLabel: getTripEstadoLabel(a.viaje.estado),
-              origenDireccion: a.viaje.origenDireccion,
-              destinoDireccion: a.viaje.destinoDireccion,
-              cliente: a.viaje.cliente
-                ? {
-                    nombre: `${a.viaje.cliente.nombre || ''} ${a.viaje.cliente.apellido || ''}`.trim(),
-                    telefono: a.viaje.cliente.telefono,
-                  }
-                : null,
-            }
-          : null,
-        observacion: a.observacion,
-        administrador: a.moderadorAtendio
-          ? `${a.moderadorAtendio.nombre || ''} ${a.moderadorAtendio.apellido || ''}`.trim()
-          : null,
-        atendidaAt: a.atendidaAt?.toISO() ?? null,
-        resueltaAt: a.resueltaAt?.toISO() ?? null,
-        resueltoPor: a.moderadorResolvio
-          ? `${a.moderadorResolvio.nombre || ''} ${a.moderadorResolvio.apellido || ''}`.trim()
-          : null,
-        createdAt: a.createdAt.toISO(),
-      }))
+      alertas.all().map((a) => {
+        const mapa = datosMapaSos(a)
+        return {
+          id: a.id,
+          estado: a.estado,
+          estadoLabel: getAlertaEstadoLabel(a.estado),
+          viajeId: a.viajeId,
+          lat: a.lat !== null ? Number(a.lat) : null,
+          lng: a.lng !== null ? Number(a.lng) : null,
+          motivo: a.motivo,
+          usuario: a.usuario
+            ? {
+                nombre: `${a.usuario.nombre || ''} ${a.usuario.apellido || ''}`.trim(),
+                telefono: a.usuario.telefono,
+              }
+            : null,
+          viaje: a.viaje
+            ? {
+                id: a.viaje.id,
+                estado: a.viaje.estado,
+                estadoLabel: getTripEstadoLabel(a.viaje.estado),
+                origenDireccion: a.viaje.origenDireccion,
+                destinoDireccion: a.viaje.destinoDireccion,
+                origen: a.viaje.origenDireccion,
+                destino: a.viaje.destinoDireccion,
+                origenCoords: mapa.origenCoords,
+                destinoCoords: mapa.destinoCoords,
+                cliente: a.viaje.cliente
+                  ? {
+                      nombre: `${a.viaje.cliente.nombre || ''} ${a.viaje.cliente.apellido || ''}`.trim(),
+                      telefono: a.viaje.cliente.telefono,
+                    }
+                  : null,
+              }
+            : null,
+          conductorUbicacion: mapa.conductorUbicacion,
+          sos: mapa.sos,
+          observacion: a.observacion,
+          administrador: a.moderadorAtendio
+            ? `${a.moderadorAtendio.nombre || ''} ${a.moderadorAtendio.apellido || ''}`.trim()
+            : null,
+          atendidaAt: a.atendidaAt?.toISO() ?? null,
+          resueltaAt: a.resueltaAt?.toISO() ?? null,
+          resueltoPor: a.moderadorResolvio
+            ? `${a.moderadorResolvio.nombre || ''} ${a.moderadorResolvio.apellido || ''}`.trim()
+            : null,
+          createdAt: a.createdAt.toISO(),
+        }
+      })
     )
   }
 
@@ -1459,15 +1481,16 @@ export default class ModeratorController {
     await alerta.load('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email'))
     await alerta.load('viaje', (vq) =>
       vq
-        .select('id', 'estado', 'origen_direccion', 'destino_direccion', 'cliente_id', 'conductor_id', 'precio_final', 'carga')
+        .select('id', 'estado', 'origen_direccion', 'destino_direccion', 'cliente_id', 'precio_final', 'carga', ...COLUMNAS_VIAJE_MAPA_SOS)
         .preload('cliente', (cq) => cq.select('id', 'nombre', 'apellido', 'telefono', 'email'))
         .preload('conductor', (cq2) =>
-          cq2.select('id', 'usuario_id', 'placa', 'tipo_vehiculo', 'ciudad').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono'))
+          cq2.select('placa', 'tipo_vehiculo', 'ciudad', ...COLUMNAS_CONDUCTOR_MAPA_SOS).preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono'))
         )
     )
     await alerta.load('moderadorAtendio', (q) => q.select('id', 'nombre', 'apellido', 'email'))
     await alerta.load('moderadorResolvio', (q) => q.select('id', 'nombre', 'apellido', 'email'))
 
+    const mapa = datosMapaSos(alerta)
     const caso = {
       id: alerta.id,
       estado: alerta.estado,
@@ -1491,6 +1514,10 @@ export default class ModeratorController {
             estadoLabel: getTripEstadoLabel(alerta.viaje.estado),
             origenDireccion: alerta.viaje.origenDireccion,
             destinoDireccion: alerta.viaje.destinoDireccion,
+            origen: alerta.viaje.origenDireccion,
+            destino: alerta.viaje.destinoDireccion,
+            origenCoords: mapa.origenCoords,
+            destinoCoords: mapa.destinoCoords,
             carga: alerta.viaje.carga,
             precioFinal: alerta.viaje.precioFinal !== null ? Number(alerta.viaje.precioFinal) : null,
             cliente: alerta.viaje.cliente
@@ -1511,6 +1538,8 @@ export default class ModeratorController {
               : null,
           }
         : null,
+      conductorUbicacion: mapa.conductorUbicacion,
+      sos: mapa.sos,
       atendidoPor: alerta.moderadorAtendio
         ? `${alerta.moderadorAtendio.nombre || ''} ${alerta.moderadorAtendio.apellido || ''}`.trim()
         : null,

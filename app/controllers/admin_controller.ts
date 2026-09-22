@@ -23,6 +23,11 @@ import { randomUUID } from 'node:crypto'
 import { emitToDriver, emitToClient, emitToAdmin } from '#start/socket'
 import { sendToMultiple } from '#services/push_notification_service'
 import SignedUploadService from '#services/signed_upload_service'
+import {
+  COLUMNAS_CONDUCTOR_MAPA_SOS,
+  COLUMNAS_VIAJE_MAPA_SOS,
+  datosMapaSos,
+} from '#services/emergency_payload'
 
 export default class AdminController {
   async dashboard({ serialize }: HttpContext) {
@@ -741,30 +746,42 @@ export default class AdminController {
     const alertas = await AlertaEmergencia.query()
       .where('atendida', false)
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
-      .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion', 'estado'))
+      .preload('viaje', (q) =>
+        q
+          .select('id', 'origen_direccion', 'destino_direccion', 'estado', ...COLUMNAS_VIAJE_MAPA_SOS)
+          .preload('conductor', (cq) => cq.select(...COLUMNAS_CONDUCTOR_MAPA_SOS))
+      )
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      alertas.all().map((a) => ({
-        id: a.id,
-        userId: a.userId,
-        viajeId: a.viajeId,
-        lat: a.lat,
-        lng: a.lng,
-        atendida: a.atendida,
-        usuario: a.usuario
-          ? { nombre: a.usuario.nombre, apellido: a.usuario.apellido, telefono: a.usuario.telefono }
-          : null,
-        viaje: a.viaje
-          ? {
-              origen: a.viaje.origenDireccion,
-              destino: a.viaje.destinoDireccion,
-              estado: a.viaje.estado,
-            }
-          : null,
-        createdAt: a.createdAt.toISO(),
-      }))
+      alertas.all().map((a) => {
+        const mapa = datosMapaSos(a)
+        return {
+          id: a.id,
+          userId: a.userId,
+          viajeId: a.viajeId,
+          lat: a.lat,
+          lng: a.lng,
+          atendida: a.atendida,
+          usuario: a.usuario
+            ? { nombre: a.usuario.nombre, apellido: a.usuario.apellido, telefono: a.usuario.telefono }
+            : null,
+          viaje: a.viaje
+            ? {
+                id: a.viaje.id,
+                origen: a.viaje.origenDireccion,
+                destino: a.viaje.destinoDireccion,
+                estado: a.viaje.estado,
+                origenCoords: mapa.origenCoords,
+                destinoCoords: mapa.destinoCoords,
+              }
+            : null,
+          conductorUbicacion: mapa.conductorUbicacion,
+          sos: mapa.sos,
+          createdAt: a.createdAt.toISO(),
+        }
+      })
     )
   }
 
@@ -773,20 +790,40 @@ export default class AdminController {
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '50')) || 50))
     const alertas = await AlertaEmergencia.query()
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido'))
+      .preload('viaje', (q) =>
+        q
+          .select('id', 'origen_direccion', 'destino_direccion', 'estado', ...COLUMNAS_VIAJE_MAPA_SOS)
+          .preload('conductor', (cq) => cq.select(...COLUMNAS_CONDUCTOR_MAPA_SOS))
+      )
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
 
     return serialize.withoutWrapping(
-      alertas.all().map((a) => ({
-        id: a.id,
-        driverId: a.userId ? String(a.userId) : null,
-        tripId: a.viajeId ? String(a.viajeId) : null,
-        latitude: a.lat !== null ? Number(a.lat) : null,
-        longitude: a.lng !== null ? Number(a.lng) : null,
-        speed: null,
-        timestamp: a.createdAt.toISO(),
-        status: a.estado === 'atendida' ? 'atendiendo' : a.estado === 'resuelta' ? 'resuelto' : 'pendiente',
-      }))
+      alertas.all().map((a) => {
+        const mapa = datosMapaSos(a)
+        return {
+          id: a.id,
+          driverId: a.userId ? String(a.userId) : null,
+          tripId: a.viajeId ? String(a.viajeId) : null,
+          latitude: a.lat !== null ? Number(a.lat) : null,
+          longitude: a.lng !== null ? Number(a.lng) : null,
+          speed: null,
+          timestamp: a.createdAt.toISO(),
+          status: a.estado === 'atendida' ? 'atendiendo' : a.estado === 'resuelta' ? 'resuelto' : 'pendiente',
+          viaje: a.viaje
+            ? {
+                id: a.viaje.id,
+                estado: a.viaje.estado,
+                origen: a.viaje.origenDireccion,
+                destino: a.viaje.destinoDireccion,
+                origenCoords: mapa.origenCoords,
+                destinoCoords: mapa.destinoCoords,
+              }
+            : null,
+          conductorUbicacion: mapa.conductorUbicacion,
+          sos: mapa.sos,
+        }
+      })
     )
   }
 

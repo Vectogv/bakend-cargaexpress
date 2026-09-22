@@ -35,6 +35,36 @@ test.group('Unit - CoverageService', () => {
     assert.property(validarZonasEntrada('no-es-lista'), 'error')
   })
 
+  test('valida zonas circulares (centro y radio en km)', ({ assert }) => {
+    const r = validarZonasEntrada([{ nombre: 'Pasto', tipo: 'circulo', lat: 1.2136, lng: -77.2811, radio: 15 }])
+    assert.notProperty(r, 'error')
+    if ('zonas' in r) {
+      const zona = r.zonas[0]
+      assert.equal(zona.tipo, 'circulo')
+      assert.equal(zona.clave, 'pasto')
+      if (zona.tipo === 'circulo') assert.equal(zona.radio, 15)
+    }
+    // También se acepta sin `tipo`, deduciendo por centro + radio.
+    assert.notProperty(validarZonasEntrada([{ nombre: 'Cali centro', lat: 3.45, lng: -76.53, radio: 8 }]), 'error')
+  })
+
+  test('rechaza círculos inválidos', ({ assert }) => {
+    const base = { nombre: 'Pasto', tipo: 'circulo', lat: 1.21, lng: -77.28 }
+    assert.property(validarZonasEntrada([{ ...base, radio: 0 }]), 'error')
+    assert.property(validarZonasEntrada([{ ...base, radio: 500 }]), 'error')
+    assert.property(validarZonasEntrada([{ ...base, radio: 10, lat: 95 }]), 'error')
+    assert.property(validarZonasEntrada([{ nombre: 'Sin radio', tipo: 'circulo', lat: 1.21, lng: -77.28 }]), 'error')
+  })
+
+  test('mezcla rectángulos y círculos en la misma configuración', ({ assert }) => {
+    const r = validarZonasEntrada([CALI, { nombre: 'Pasto', tipo: 'circulo', lat: 1.2136, lng: -77.2811, radio: 12, activa: false }])
+    assert.notProperty(r, 'error')
+    if ('zonas' in r) {
+      assert.deepEqual(r.zonas.map((z) => z.tipo), ['rect', 'circulo'])
+      assert.isFalse(r.zonas[1].activa)
+    }
+  })
+
   test('contiene() para rectángulos y círculos antiguos', ({ assert }) => {
     const cali = normalizarZona(CALI)!
     assert.isTrue(contiene(cali, 3.45, -76.53))
