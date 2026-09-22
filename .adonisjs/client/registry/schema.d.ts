@@ -719,12 +719,12 @@ export interface Registry {
     methods: ["PUT"]
     pattern: '/api/admin/users/:id'
     types: {
-      body: {}
+      body: ExtractBody<InferInput<(typeof import('#validators/user').adminUpdateUserValidator)>>
       paramsTuple: [ParamValue]
       params: { id: ParamValue }
-      query: {}
+      query: ExtractQuery<InferInput<(typeof import('#validators/user').adminUpdateUserValidator)>>
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateUser']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateUser']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateUser']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
   'admin.admin.toggle_suspend_user': {
