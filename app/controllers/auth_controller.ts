@@ -4,10 +4,34 @@ import { registerValidator, registerValidatorMessages, loginValidator, refreshTo
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import hash from '@adonisjs/core/services/hash'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { DateTime } from 'luxon'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import { emitToAdmin } from '#start/socket'
+
+// Los refresh tokens se guardan hasheados (SHA-256): una fuga de la base de datos
+// no permite suplantar sesiones.
+const hashRefreshToken = (value: string) => createHash('sha256').update(value).digest('hex')
+
+// Transición: los tokens emitidos antes de este cambio siguen guardados en claro.
+const refreshTokenCandidates = (value: string) => [hashRefreshToken(value), value]
+
+async function issueRefreshToken(userId: number): Promise<string> {
+  const value = randomUUID()
+  await db.table('refresh_tokens').insert({
+    user_id: userId,
+    token: hashRefreshToken(value),
+    expires_at: DateTime.now().plus({ days: 30 }).toFormat('yyyy-MM-dd HH:mm:ss'),
+    created_at: DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss'),
+  })
+  return value
+}
+
+let dummyHash: string | null = null
+async function getDummyHash() {
+  dummyHash = dummyHash || (await hash.make(randomUUID()))
+  return dummyHash
+}
 
 export default class AuthController {
   @ApiOperation({
@@ -51,13 +75,7 @@ export default class AuthController {
     }
 
     const token = await User.accessTokens.create(user, [], { expiresIn: '7 days' })
-    const refreshTokenValue = randomUUID()
-    await db.table('refresh_tokens').insert({
-      user_id: user.id,
-      token: refreshTokenValue,
-      expires_at: DateTime.now().plus({ days: 30 }).toFormat('yyyy-MM-dd HH:mm:ss'),
-      created_at: DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss'),
-    })
+    const refreshTokenValue = await issueRefreshToken(user.id)
 
     try {
       if (user.rol === 'conductor') {
@@ -101,23 +119,22 @@ export default class AuthController {
   async login({ request, serialize, response }: HttpContext) {
     const { email, password } = await request.validateUsing(loginValidator)
     const user = await User.findBy('email', email)
-    if (!user || !(await hash.verify(user.password, password))) {
+    // Se verifica un hash también cuando el email no existe, para que el tiempo de
+    // respuesta no revele qué correos están registrados.
+    const passwordOk = await hash.verify(user?.password || (await getDummyHash()), password)
+    if (!user || !passwordOk) {
       return response.status(400).send({ errors: [{ message: 'Invalid user credentials' }] })
     }
     if (user.suspendido) {
       return response
         .status(403)
-        .send({ errors: [{ message: 'Tu cuenta ha sido suspendida. Contacta al administrador.' }] })
+        .send({
+          code: 'CUENTA_SUSPENDIDA',
+          errors: [{ message: 'Tu cuenta ha sido suspendida. Contacta al administrador.' }],
+        })
     }
     const token = await User.accessTokens.create(user, [], { expiresIn: '7 days' })
-
-    const refreshTokenValue = randomUUID()
-    await db.table('refresh_tokens').insert({
-      user_id: user.id,
-      token: refreshTokenValue,
-      expires_at: DateTime.now().plus({ days: 30 }).toFormat('yyyy-MM-dd HH:mm:ss'),
-      created_at: DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss'),
-    })
+    const refreshTokenValue = await issueRefreshToken(user.id)
 
     return serialize.withoutWrapping({
       id: String(user.id),
@@ -132,14 +149,20 @@ export default class AuthController {
     })
   }
 
-  async logout({ auth, response }: HttpContext) {
+  async logout({ auth, request, response }: HttpContext) {
+    // El refresh token se revoca aunque el access token ya haya expirado: de lo
+    // contrario seguiría sirviendo para obtener sesiones nuevas durante 30 días.
+    const refreshToken = request.input('refreshToken')
+    if (typeof refreshToken === 'string' && refreshToken) {
+      await db.from('refresh_tokens').whereIn('token', refreshTokenCandidates(refreshToken)).delete()
+    }
     try {
-      const user = auth.getUserOrFail()
+      const user = await auth.authenticate()
       if (user.currentAccessToken) {
         await User.accessTokens.delete(user, user.currentAccessToken.identifier)
       }
     } catch {
-      // El token puede ya estar expirado o inválido
+      // El access token puede estar expirado o no enviarse.
     }
     return response.json({ message: 'Sesión cerrada' })
   }
@@ -153,30 +176,27 @@ export default class AuthController {
   async refreshToken({ request, serialize, response }: HttpContext) {
     const { refreshToken } = await request.validateUsing(refreshTokenValidator)
 
+    const invalid = () => response.status(401).json({ error: 'Invalid or expired refresh token' })
+
     const row = await db
       .from('refresh_tokens')
-      .where('token', refreshToken)
+      .whereIn('token', refreshTokenCandidates(refreshToken))
       .where('expires_at', '>', DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss'))
       .first()
 
-    if (!row) {
-      return response
-        .status(401)
-        .json({ error: 'Invalid or expired refresh token' })
-    }
+    if (!row) return invalid()
 
-    await db.from('refresh_tokens').where('id', row.id).delete()
+    // Borrado atómico: si dos peticiones usan el mismo refresh token a la vez,
+    // solo la que logra borrarlo obtiene una sesión nueva.
+    const deleted = await db.from('refresh_tokens').where('id', row.id).delete()
+    const deletedCount = Array.isArray(deleted) ? Number(deleted[0]) : Number(deleted)
+    if (!deletedCount) return invalid()
 
-    const user = await User.findOrFail(row.user_id)
+    const user = await User.find(row.user_id)
+    if (!user || user.suspendido) return invalid()
+
     const token = await User.accessTokens.create(user, [], { expiresIn: '7 days' })
-
-    const newRefreshTokenValue = randomUUID()
-    await db.table('refresh_tokens').insert({
-      user_id: user.id,
-      token: newRefreshTokenValue,
-      expires_at: DateTime.now().plus({ days: 30 }).toFormat('yyyy-MM-dd HH:mm:ss'),
-      created_at: DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss'),
-    })
+    const newRefreshTokenValue = await issueRefreshToken(user.id)
 
     return serialize.withoutWrapping({
       token: token.value!.release(),

@@ -511,6 +511,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/dispute_controller').default['uploadSupport']>>>
     }
   }
+  'trips.trip.nearby_drivers': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/trips/:id/nearby-drivers'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['nearbyDrivers']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/trip_controller').default['nearbyDrivers']>>>
+    }
+  }
   'trips.offer.index': {
     methods: ["GET","HEAD"]
     pattern: '/api/trips/:id/offers'
@@ -1003,6 +1015,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['updateConfig']>>>
     }
   }
+  'admin.admin.coverage': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/admin/config/coverage'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['coverage']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['coverage']>>>
+    }
+  }
   'admin.admin.update_coverage': {
     methods: ["PUT"]
     pattern: '/api/admin/config/coverage'
@@ -1061,6 +1085,18 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['assignLeader']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['assignLeader']>>>
+    }
+  }
+  'admin.admin.reset_password': {
+    methods: ["PUT"]
+    pattern: '/api/admin/users/:id/password'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['resetPassword']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/admin_controller').default['resetPassword']>>>
     }
   }
   'admin.admin.list_comunicados': {

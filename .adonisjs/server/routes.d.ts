@@ -46,6 +46,7 @@ export type ScannedRoutes = {
     'trips.dispute.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.dispute.appeal': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.dispute.upload_support': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'trips.trip.nearby_drivers': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.accept': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'offerId': ParamValue} }
@@ -87,11 +88,13 @@ export type ScannedRoutes = {
     'admin.admin.confirm_payment': { paramsTuple: [ParamValue]; params: {'userId': ParamValue} }
     'admin.admin.reject_payment': { paramsTuple: [ParamValue]; params: {'userId': ParamValue} }
     'admin.admin.update_config': { paramsTuple?: []; params?: {} }
+    'admin.admin.coverage': { paramsTuple?: []; params?: {} }
     'admin.admin.update_coverage': { paramsTuple?: []; params?: {} }
     'admin.admin.update_banner': { paramsTuple?: []; params?: {} }
     'admin.admin.assign_moderator': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.update_user_role': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.assign_leader': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'admin.admin.reset_password': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.list_comunicados': { paramsTuple?: []; params?: {} }
     'admin.admin.list_encuestas': { paramsTuple?: []; params?: {} }
     'admin.admin.approve_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -180,6 +183,7 @@ export type ScannedRoutes = {
     'trips.trip.history': { paramsTuple?: []; params?: {} }
     'trips.trip.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.chat.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'trips.trip.nearby_drivers': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'notifications.notification.index': { paramsTuple?: []; params?: {} }
     'admin.admin.dashboard': { paramsTuple?: []; params?: {} }
@@ -195,6 +199,7 @@ export type ScannedRoutes = {
     'admin.admin.disputes': { paramsTuple?: []; params?: {} }
     'admin.admin.pending_verifications': { paramsTuple?: []; params?: {} }
     'admin.admin.pending_payments': { paramsTuple?: []; params?: {} }
+    'admin.admin.coverage': { paramsTuple?: []; params?: {} }
     'admin.admin.list_comunicados': { paramsTuple?: []; params?: {} }
     'admin.admin.list_encuestas': { paramsTuple?: []; params?: {} }
     'admin.admin.moderator_reports': { paramsTuple?: []; params?: {} }
@@ -248,6 +253,7 @@ export type ScannedRoutes = {
     'trips.trip.history': { paramsTuple?: []; params?: {} }
     'trips.trip.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.chat.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'trips.trip.nearby_drivers': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'trips.offer.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'notifications.notification.index': { paramsTuple?: []; params?: {} }
     'admin.admin.dashboard': { paramsTuple?: []; params?: {} }
@@ -263,6 +269,7 @@ export type ScannedRoutes = {
     'admin.admin.disputes': { paramsTuple?: []; params?: {} }
     'admin.admin.pending_verifications': { paramsTuple?: []; params?: {} }
     'admin.admin.pending_payments': { paramsTuple?: []; params?: {} }
+    'admin.admin.coverage': { paramsTuple?: []; params?: {} }
     'admin.admin.list_comunicados': { paramsTuple?: []; params?: {} }
     'admin.admin.list_encuestas': { paramsTuple?: []; params?: {} }
     'admin.admin.moderator_reports': { paramsTuple?: []; params?: {} }
@@ -391,6 +398,7 @@ export type ScannedRoutes = {
     'admin.admin.assign_moderator': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.update_user_role': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.assign_leader': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'admin.admin.reset_password': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.reject_comunicado': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'admin.admin.approve_encuesta': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

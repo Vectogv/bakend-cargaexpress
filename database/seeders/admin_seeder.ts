@@ -3,6 +3,9 @@ import db from '@adonisjs/lucid/services/db'
 import hash from '@adonisjs/core/services/hash'
 
 export default class extends BaseSeeder {
+  // Crea cuentas con contraseñas triviales: nunca debe ejecutarse en producción.
+  static environment = ['development', 'testing']
+
   async run() {
     const adminExists = await db.from('users').where('email', 'admin@gmail.com').first()
     if (!adminExists) {

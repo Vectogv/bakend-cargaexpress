@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
+import { jsonColumn } from './json_column.js'
 
 export default class LogFraude extends BaseModel {
   static table = 'logs_fraude'
@@ -28,7 +29,7 @@ export default class LogFraude extends BaseModel {
   @column()
   declare velocidad: number | null
 
-  @column()
+  @column(jsonColumn)
   declare metadata: Record<string, any> | null
 
   @column.dateTime({ autoCreate: true })

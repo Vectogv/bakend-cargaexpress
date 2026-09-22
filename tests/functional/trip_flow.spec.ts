@@ -17,7 +17,7 @@ async function resetGpsLimiter(driverUserId: number) {
 async function simulateDriverHttpMovement(
   client: any,
   driverToken: string,
-  tripId: number,
+  _tripId: number,
   start: { lat: number; lng: number },
   end: { lat: number; lng: number },
   steps = 5
@@ -113,7 +113,7 @@ test.group('Trip Flow QA Test', (group) => {
     })
     
     // Track events with event name + payload
-    const clientEvents: Array<{event: string, id: string, estado: string}> = []
+    const clientEvents: Array<{ event: string; id?: string; estado?: string; lat?: number; lng?: number }> = []
     
     clientSocket.on('trip:accepted', (data: any) => clientEvents.push({ event: 'trip:accepted', id: data.id, estado: data.estado }))
     clientSocket.on('trip:started', (data: any) => clientEvents.push({ event: 'trip:started', id: data.id, estado: data.estado }))

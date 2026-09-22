@@ -240,7 +240,7 @@ test.group('Antifraude cierre de servicio', (group) => {
     assert.isNotNull(disputa)
   })
 
-  test('confirm-close de otro cliente → 403', async ({ client, assert }) => {
+  test('confirm-close de otro cliente → 403', async ({ client }) => {
     const cliente = await registrarCliente(client)
     const otro = await registrarCliente(client)
     const conductor = await registrarConductor(client)

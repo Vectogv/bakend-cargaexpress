@@ -258,6 +258,12 @@ const routes = {
     tokens: [{"old":"/api/trips/:id/dispute/support","type":0,"val":"api","end":""},{"old":"/api/trips/:id/dispute/support","type":0,"val":"trips","end":""},{"old":"/api/trips/:id/dispute/support","type":1,"val":"id","end":""},{"old":"/api/trips/:id/dispute/support","type":0,"val":"dispute","end":""},{"old":"/api/trips/:id/dispute/support","type":0,"val":"support","end":""}],
     types: placeholder as Registry['trips.dispute.upload_support']['types'],
   },
+  'trips.trip.nearby_drivers': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/trips/:id/nearby-drivers',
+    tokens: [{"old":"/api/trips/:id/nearby-drivers","type":0,"val":"api","end":""},{"old":"/api/trips/:id/nearby-drivers","type":0,"val":"trips","end":""},{"old":"/api/trips/:id/nearby-drivers","type":1,"val":"id","end":""},{"old":"/api/trips/:id/nearby-drivers","type":0,"val":"nearby-drivers","end":""}],
+    types: placeholder as Registry['trips.trip.nearby_drivers']['types'],
+  },
   'trips.offer.index': {
     methods: ["GET","HEAD"],
     pattern: '/api/trips/:id/offers',
@@ -504,6 +510,12 @@ const routes = {
     tokens: [{"old":"/api/admin/config","type":0,"val":"api","end":""},{"old":"/api/admin/config","type":0,"val":"admin","end":""},{"old":"/api/admin/config","type":0,"val":"config","end":""}],
     types: placeholder as Registry['admin.admin.update_config']['types'],
   },
+  'admin.admin.coverage': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/admin/config/coverage',
+    tokens: [{"old":"/api/admin/config/coverage","type":0,"val":"api","end":""},{"old":"/api/admin/config/coverage","type":0,"val":"admin","end":""},{"old":"/api/admin/config/coverage","type":0,"val":"config","end":""},{"old":"/api/admin/config/coverage","type":0,"val":"coverage","end":""}],
+    types: placeholder as Registry['admin.admin.coverage']['types'],
+  },
   'admin.admin.update_coverage': {
     methods: ["PUT"],
     pattern: '/api/admin/config/coverage',
@@ -533,6 +545,12 @@ const routes = {
     pattern: '/api/admin/users/:id/leader',
     tokens: [{"old":"/api/admin/users/:id/leader","type":0,"val":"api","end":""},{"old":"/api/admin/users/:id/leader","type":0,"val":"admin","end":""},{"old":"/api/admin/users/:id/leader","type":0,"val":"users","end":""},{"old":"/api/admin/users/:id/leader","type":1,"val":"id","end":""},{"old":"/api/admin/users/:id/leader","type":0,"val":"leader","end":""}],
     types: placeholder as Registry['admin.admin.assign_leader']['types'],
+  },
+  'admin.admin.reset_password': {
+    methods: ["PUT"],
+    pattern: '/api/admin/users/:id/password',
+    tokens: [{"old":"/api/admin/users/:id/password","type":0,"val":"api","end":""},{"old":"/api/admin/users/:id/password","type":0,"val":"admin","end":""},{"old":"/api/admin/users/:id/password","type":0,"val":"users","end":""},{"old":"/api/admin/users/:id/password","type":1,"val":"id","end":""},{"old":"/api/admin/users/:id/password","type":0,"val":"password","end":""}],
+    types: placeholder as Registry['admin.admin.reset_password']['types'],
   },
   'admin.admin.list_comunicados': {
     methods: ["GET","HEAD"],

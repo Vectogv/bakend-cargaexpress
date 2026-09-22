@@ -11,8 +11,8 @@ export default class NotificationController {
   @ApiResponse({ type: 'array' })
   async index({ auth, request }: HttpContext) {
     const user = auth.getUserOrFail()
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const notificaciones = await Notificacion.query()
       .where('usuario_id', user.id)
       .orderBy('createdAt', 'desc')

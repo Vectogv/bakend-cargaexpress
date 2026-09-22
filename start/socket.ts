@@ -144,7 +144,8 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
   }
 
   io.use(async (socket, next) => {
-    const tokenRaw = socket.handshake.query.token as string | undefined
+    // Preferir handshake.auth (no queda en logs de proxies); query se mantiene por compatibilidad con la app móvil.
+    const tokenRaw = (socket.handshake.auth?.token || socket.handshake.query.token) as string | undefined
     if (!tokenRaw) {
       return next(new Error('Token de autenticación requerido'))
     }
@@ -163,6 +164,10 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
       if (!user) {
         return next(new Error('Usuario no encontrado'))
       }
+      if (user.suspendido) {
+        // `data.code` llega al cliente en connect_error para que deje de reconectar.
+        return next(Object.assign(new Error('Cuenta suspendida'), { data: { code: 'CUENTA_SUSPENDIDA' } }))
+      }
       ;(socket as any).user = user
       next()
     } catch (err) {
@@ -177,6 +182,9 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
 
     // Track en Redis para estado distribuido
     RedisService.setSocketConnection(user.id, socket.id)
+
+    // Room personal: permite cerrar todas las conexiones del usuario (ver SessionService)
+    socket.join(`user:${user.id}`)
 
     // Unirse a rooms según rol
     if (user.esModerador && user.zonaModerador) {

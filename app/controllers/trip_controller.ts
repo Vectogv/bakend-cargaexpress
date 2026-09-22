@@ -14,12 +14,13 @@ import {
 } from '#validators/trip'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
-import app from '@adonisjs/core/services/app'
+import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import { emitToClient, emitToDriver, emitToAdmin, emitTripStatusChanged } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 import GeoService, { distanciaKm } from '#services/geo_service'
+import CoverageService from '#services/coverage_service'
 import TripDispatchService from '#services/trip_dispatch_service'
 import TripConflictService from '#services/trip_conflict_service'
 import reservationConfig from '#config/reservations'
@@ -67,7 +68,7 @@ export default class TripController {
     if (!dentroCobertura) {
       return response
         .status(422)
-        .send({ error: 'Lo sentimos, por el momento solo operamos en Cali, Popayán y Pasto.' })
+        .send({ error: await CoverageService.mensajeFueraDeCobertura() })
     }
 
     const viaje = await Viaje.create({
@@ -184,7 +185,7 @@ export default class TripController {
     if (!dentroCobertura) {
       return response
         .status(422)
-        .send({ error: 'Lo sentimos, por el momento solo operamos en Cali, Popayán y Pasto.' })
+        .send({ error: await CoverageService.mensajeFueraDeCobertura() })
     }
 
     // Evitar dos reservas activas del mismo cliente para el mismo horario.
@@ -284,7 +285,7 @@ export default class TripController {
   @ApiResponse({ type: 'array' })
   async reservations({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const page = Number.parseInt(request.input('page', '1'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limitRaw = Number.parseInt(request.input('limit', '20'))
     const limit = Math.min(100, Math.max(1, Number.isNaN(limitRaw) ? 20 : limitRaw))
     const estadoFilter = request.input('estado') as string | undefined
@@ -917,7 +918,7 @@ export default class TripController {
     if (confirmar) {
       // Cliente confirma → finalizar viaje de verdad
       // Usar TripFinalizationService para la lógica financiera
-      const conductor = await Conductor.findByOrFail('id', viaje.conductorId!)
+      await Conductor.findByOrFail('id', viaje.conductorId!)
       const result = await TripFinalizationService.finalize({
         viajeId: viaje.id,
         montoFinal: viaje.precioFinal!,
@@ -1273,7 +1274,7 @@ export default class TripController {
   @ApiResponse({ type: 'array' })
   async history({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const page = Number.parseInt(request.input('page', '1'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limitRaw = Number.parseInt(request.input('limit', '20'))
     const limit = Math.min(100, Math.max(1, Number.isNaN(limitRaw) ? 20 : limitRaw))
     const estadoFilter = request.input('estado') as string | undefined
@@ -1323,7 +1324,9 @@ export default class TripController {
 
     // Solo el cliente, el conductor asignado o un admin pueden ver los detalles del viaje.
     // Excepción: un conductor puede previsualizar un viaje que aún busca conductor
-    // (buscando_conductor/pendiente) para decidir si hace una oferta.
+    // (buscando_conductor/pendiente) para decidir si hace una oferta, pero sin los
+    // datos de contacto del cliente (se revelan solo al conductor asignado).
+    let soloVistaPrevia = false
     if (user.rol !== 'admin') {
       const esCliente = viaje.clienteId === user.id
       let esConductor = false
@@ -1337,9 +1340,12 @@ export default class TripController {
       if (!esCliente && !esConductor && !disponibleSinAsignar) {
         return response.status(403).send({ error: 'No tienes permisos para ver este viaje' })
       }
+      soloVistaPrevia = !esCliente && !esConductor
     }
 
-    return serialize.withoutWrapping(this.formatViajeResponse(viaje))
+    const data = this.formatViajeResponse(viaje)
+    if (soloVistaPrevia) data.cliente.telefono = null
+    return serialize.withoutWrapping(data)
   }
 
   private formatViajeResponse(viaje: Viaje) {
@@ -1403,12 +1409,12 @@ export default class TripController {
     const user = auth.getUserOrFail()
     const viaje = await Viaje.find(params.id)
     if (!viaje) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
     if (viaje.estado !== 'finalizado') {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'Solo puedes calificar viajes finalizados' }))
+        .send(await serialize.withoutWrapping({ error: 'Solo puedes calificar viajes finalizados' }))
     }
 
     const { puntaje, comentario } = request.only(['puntaje', 'comentario'])
@@ -1417,7 +1423,7 @@ export default class TripController {
     if (puntajeFinal === null || puntajeFinal === undefined || puntajeFinal < 1 || puntajeFinal > 5) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El puntaje debe ser entre 1 y 5' }))
+        .send(await serialize.withoutWrapping({ error: 'El puntaje debe ser entre 1 y 5' }))
     }
 
     const existe = await Calificacion.query()
@@ -1427,7 +1433,7 @@ export default class TripController {
     if (existe) {
       return response
         .status(400)
-        .send(serialize.withoutWrapping({ error: 'Ya calificaste este viaje' }))
+        .send(await serialize.withoutWrapping({ error: 'Ya calificaste este viaje' }))
     }
 
     let calificadoId: number
@@ -1438,12 +1444,12 @@ export default class TripController {
       if (viaje.clienteId !== user.id) {
         return response
           .status(403)
-          .send(serialize.withoutWrapping({ error: 'No eres el cliente de este viaje' }))
+          .send(await serialize.withoutWrapping({ error: 'No eres el cliente de este viaje' }))
       }
       if (!viaje.conductorId) {
         return response
           .status(422)
-          .send(serialize.withoutWrapping({ error: 'El viaje no tiene conductor asignado' }))
+          .send(await serialize.withoutWrapping({ error: 'El viaje no tiene conductor asignado' }))
       }
       const conductor = await Conductor.findOrFail(viaje.conductorId)
       calificadoId = conductor.usuarioId
@@ -1454,14 +1460,14 @@ export default class TripController {
       if (viaje.conductorId !== conductor.id) {
         return response
           .status(403)
-          .send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
+          .send(await serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
       }
       calificadoId = viaje.clienteId
       tipo = 'conductor_a_cliente'
     } else {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No tienes permisos para calificar' }))
+        .send(await serialize.withoutWrapping({ error: 'No tienes permisos para calificar' }))
     }
 
     await Calificacion.create({
@@ -1501,20 +1507,20 @@ export default class TripController {
     const user = auth.getUserOrFail()
     const viaje = await Viaje.find(params.id)
     if (!viaje) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
 
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
     if (viaje.conductorId !== conductor.id) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
+        .send(await serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
     }
 
     if (!['en_curso', 'entregado'].includes(viaje.estado)) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'Solo puedes subir foto de entrega cuando el viaje está en curso o entregado' }))
+        .send(await serialize.withoutWrapping({ error: 'Solo puedes subir foto de entrega cuando el viaje está en curso o entregado' }))
     }
 
     const file = request.file('file', {
@@ -1524,26 +1530,16 @@ export default class TripController {
     if (!file) {
       return response.status(400).send({ error: 'No file uploaded' })
     }
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
 
     const fileName = `delivery-${viaje.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
 
     viaje.fotoEntrega = `/storage/uploads/${fileName}`
     await viaje.save()
 
     return serialize.withoutWrapping({ fotoEntrega: viaje.fotoEntrega })
   }
-}
-
-function haversineDist(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-function toRad(deg: number): number {
-  return (deg * Math.PI) / 180
 }

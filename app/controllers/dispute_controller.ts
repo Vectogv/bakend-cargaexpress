@@ -2,9 +2,10 @@ import Disputa from '#models/disputa'
 import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
 import type { HttpContext } from '@adonisjs/core/http'
-import app from '@adonisjs/core/services/app'
+import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
 import { emitToAdmin, emitToClient, emitToDriver } from '#start/socket'
+import SignedUploadService from '#services/signed_upload_service'
 
 
 export default class DisputeController {
@@ -12,12 +13,12 @@ export default class DisputeController {
     const user = auth.getUserOrFail()
     const disputa = await Disputa.find(params.id)
     if (!disputa) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
     }
     if (disputa.clienteId !== user.id && disputa.conductorId !== user.id) {
       const conductor = await Conductor.findBy('usuario_id', user.id)
       if (!conductor || disputa.conductorId !== conductor.id) {
-        return response.status(403).send(serialize.withoutWrapping({ error: 'No tienes acceso a esta disputa' }))
+        return response.status(403).send(await serialize.withoutWrapping({ error: 'No tienes acceso a esta disputa' }))
       }
     }
 
@@ -36,37 +37,33 @@ export default class DisputeController {
   async storeRoot({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     if (user.rol !== 'conductor' && user.rol !== 'cliente') {
-      return response.status(403).send(serialize.withoutWrapping({ error: 'Solo conductores o clientes pueden abrir disputas' }))
+      return response.status(403).send(await serialize.withoutWrapping({ error: 'Solo conductores o clientes pueden abrir disputas' }))
     }
 
     const { tripId, problema, descripcion } = request.only(['tripId', 'problema', 'descripcion'])
-    let fotos = request.input('fotos', [])
+    const fotos = SignedUploadService.clean(request.input('fotos', []))
 
     if (!tripId) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'tripId es requerido' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'tripId es requerido' }))
     }
 
     const viaje = await Viaje.find(tripId)
     if (!viaje) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
     if (!['esperando_confirmacion', 'finalizado', 'pendiente_confirmacion'].includes(viaje.estado)) {
-      return response.status(422).send(serialize.withoutWrapping({ error: `Solo puedes disputar viajes en estado 'esperando_confirmacion', 'pendiente_confirmacion' o 'finalizado' (actual: ${viaje.estado})` }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: `Solo puedes disputar viajes en estado 'esperando_confirmacion', 'pendiente_confirmacion' o 'finalizado' (actual: ${viaje.estado})` }))
     }
 
     const existe = await Disputa.query().where('viaje_id', viaje.id).first()
     if (existe) {
-      return response.status(400).send(serialize.withoutWrapping({ error: 'Ya existe una disputa para este viaje' }))
-    }
-
-    if (!Array.isArray(fotos)) {
-      fotos = []
+      return response.status(400).send(await serialize.withoutWrapping({ error: 'Ya existe una disputa para este viaje' }))
     }
 
     if (user.rol === 'conductor') {
       const conductor = await Conductor.findByOrFail('usuario_id', user.id)
       if (viaje.conductorId !== conductor.id) {
-        return response.status(403).send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
+        return response.status(403).send(await serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
       }
 
       const disputa = await Disputa.create({
@@ -108,15 +105,15 @@ export default class DisputeController {
 
     // cliente
     if (viaje.clienteId !== user.id) {
-      return response.status(403).send(serialize.withoutWrapping({ error: 'Este viaje no te pertenece' }))
+      return response.status(403).send(await serialize.withoutWrapping({ error: 'Este viaje no te pertenece' }))
     }
     if (!viaje.conductorId) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'El viaje no tiene conductor asignado' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'El viaje no tiene conductor asignado' }))
     }
 
     const conductor = await Conductor.find(viaje.conductorId)
     if (!conductor) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
     const disputa = await Disputa.create({
@@ -170,24 +167,24 @@ export default class DisputeController {
     if (user.rol !== 'conductor' && user.rol !== 'cliente') {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Solo conductores o clientes pueden abrir disputas' }))
+        .send(await serialize.withoutWrapping({ error: 'Solo conductores o clientes pueden abrir disputas' }))
     }
 
     const viaje = await Viaje.find(params.id)
     if (!viaje) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
     if (!['esperando_confirmacion', 'finalizado', 'pendiente_confirmacion'].includes(viaje.estado)) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: `Solo puedes disputar viajes en estado 'esperando_confirmacion', 'pendiente_confirmacion' o 'finalizado' (actual: ${viaje.estado})` }))
+        .send(await serialize.withoutWrapping({ error: `Solo puedes disputar viajes en estado 'esperando_confirmacion', 'pendiente_confirmacion' o 'finalizado' (actual: ${viaje.estado})` }))
     }
 
     const existe = await Disputa.query().where('viaje_id', viaje.id).first()
     if (existe) {
       return response
         .status(400)
-        .send(serialize.withoutWrapping({ error: 'Ya existe una disputa para este viaje' }))
+        .send(await serialize.withoutWrapping({ error: 'Ya existe una disputa para este viaje' }))
     }
 
     const { version, motivo, descripcion } = request.only(['version', 'motivo', 'descripcion'])
@@ -195,17 +192,23 @@ export default class DisputeController {
     if (!description) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'Debes describir tu versión de los hechos' }))
+        .send(await serialize.withoutWrapping({ error: 'Debes describir tu versión de los hechos' }))
     }
 
-    const fotos = (descripcion || '').match(/https?:\/\/\S+/g) || []
+    // Evidencias: array `fotos` (rutas devueltas por /dispute/support) y, por
+    // compatibilidad, URLs pegadas en la descripción.
+    const fotosBody = request.input('fotos')
+    const fotos = SignedUploadService.clean([
+      ...(Array.isArray(fotosBody) ? fotosBody : []),
+      ...((descripcion || '').match(/https?:\/\/\S+/g) || []),
+    ])
 
     if (user.rol === 'conductor') {
       const conductor = await Conductor.findByOrFail('usuario_id', user.id)
       if (viaje.conductorId !== conductor.id) {
         return response
           .status(403)
-          .send(serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
+          .send(await serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
       }
 
       const disputa = await Disputa.create({
@@ -237,7 +240,7 @@ export default class DisputeController {
       })
 
       return response.status(201).send(
-        serialize.withoutWrapping({
+        await serialize.withoutWrapping({
           id: String(disputa.id),
           estado: disputa.estado,
           message: 'Disputa creada. El administrador revisará el caso.',
@@ -249,20 +252,20 @@ export default class DisputeController {
     if (viaje.clienteId !== user.id) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Este viaje no te pertenece' }))
+        .send(await serialize.withoutWrapping({ error: 'Este viaje no te pertenece' }))
     }
 
     if (!viaje.conductorId) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El viaje no tiene conductor asignado' }))
+        .send(await serialize.withoutWrapping({ error: 'El viaje no tiene conductor asignado' }))
     }
 
     const conductor = await Conductor.find(viaje.conductorId)
     if (!conductor) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
     const disputa = await Disputa.create({
@@ -294,7 +297,7 @@ export default class DisputeController {
     })
 
     return response.status(201).send(
-      serialize.withoutWrapping({
+      await serialize.withoutWrapping({
         id: String(disputa.id),
         estado: disputa.estado,
         message: 'Disputa creada. El administrador revisará el caso.',
@@ -308,17 +311,17 @@ export default class DisputeController {
     if (!disputa) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
+        .send(await serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
     }
     if (disputa.clienteId !== user.id) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No eres el cliente de esta disputa' }))
+        .send(await serialize.withoutWrapping({ error: 'No eres el cliente de esta disputa' }))
     }
     if (disputa.estado !== 'abierta') {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'La disputa no está en estado abierta' }))
+        .send(await serialize.withoutWrapping({ error: 'La disputa no está en estado abierta' }))
     }
 
     const { version, motivo, descripcion } = request.only(['version', 'motivo', 'descripcion'])
@@ -326,7 +329,7 @@ export default class DisputeController {
     if (!description) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'Debes describir tu versión' }))
+        .send(await serialize.withoutWrapping({ error: 'Debes describir tu versión' }))
     }
 
     disputa.versionCliente = description
@@ -357,12 +360,12 @@ export default class DisputeController {
     const user = auth.getUserOrFail()
     const disputa = await Disputa.find(params.id)
     if (!disputa) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
     }
 
     const { version } = request.only(['version'])
     if (!version || !version.trim()) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'Debes escribir tu versión' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'Debes escribir tu versión' }))
     }
 
     const conductor = await Conductor.findBy('usuario_id', user.id)
@@ -370,11 +373,11 @@ export default class DisputeController {
     const esCliente = disputa.clienteId === user.id
 
     if (!esConductor && !esCliente) {
-      return response.status(403).send(serialize.withoutWrapping({ error: 'No tienes acceso a esta disputa' }))
+      return response.status(403).send(await serialize.withoutWrapping({ error: 'No tienes acceso a esta disputa' }))
     }
 
     if (disputa.estado === 'resuelta') {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'La disputa ya fue resuelta' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'La disputa ya fue resuelta' }))
     }
 
     if (esConductor) {
@@ -414,7 +417,7 @@ export default class DisputeController {
     if (!viaje) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
 
     let esParticipante = viaje.clienteId === user.id
@@ -425,7 +428,7 @@ export default class DisputeController {
     if (!esParticipante) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No participas en este viaje' }))
+        .send(await serialize.withoutWrapping({ error: 'No participas en este viaje' }))
     }
 
     const file = request.file('file', {
@@ -444,7 +447,7 @@ export default class DisputeController {
     }
 
     const fileName = `dispute-${viaje.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
 
     const soporteUrl = `/storage/uploads/${fileName}`
     const disputa = await Disputa.query().where('viaje_id', viaje.id).first()
@@ -457,6 +460,6 @@ export default class DisputeController {
       }
     }
 
-    return serialize.withoutWrapping({ soporte: soporteUrl })
+    return serialize.withoutWrapping({ soporte: SignedUploadService.sign(soporteUrl) })
   }
 }

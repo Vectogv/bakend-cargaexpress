@@ -53,6 +53,7 @@ export interface ApiDefinition {
       requestCancellation: typeof routes['trips.trip.request_cancellation']
       rate: typeof routes['trips.trip.rate']
       deliveryPhoto: typeof routes['trips.trip.delivery_photo']
+      nearbyDrivers: typeof routes['trips.trip.nearby_drivers']
     }
     chat: {
       index: typeof routes['trips.chat.index']
@@ -115,11 +116,13 @@ export interface ApiDefinition {
       confirmPayment: typeof routes['admin.admin.confirm_payment']
       rejectPayment: typeof routes['admin.admin.reject_payment']
       updateConfig: typeof routes['admin.admin.update_config']
+      coverage: typeof routes['admin.admin.coverage']
       updateCoverage: typeof routes['admin.admin.update_coverage']
       updateBanner: typeof routes['admin.admin.update_banner']
       assignModerator: typeof routes['admin.admin.assign_moderator']
       updateUserRole: typeof routes['admin.admin.update_user_role']
       assignLeader: typeof routes['admin.admin.assign_leader']
+      resetPassword: typeof routes['admin.admin.reset_password']
       listComunicados: typeof routes['admin.admin.list_comunicados']
       listEncuestas: typeof routes['admin.admin.list_encuestas']
       approveComunicado: typeof routes['admin.admin.approve_comunicado']

@@ -3,6 +3,7 @@ import { BaseModel, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
 import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 import RespuestaEncuesta from './respuesta_encuesta.js'
+import { jsonColumn } from './json_column.js'
 
 export default class Encuesta extends BaseModel {
   static table = 'encuestas'
@@ -19,7 +20,7 @@ export default class Encuesta extends BaseModel {
   @column()
   declare pregunta: string
 
-  @column()
+  @column(jsonColumn)
   declare opciones: any
 
   @column()

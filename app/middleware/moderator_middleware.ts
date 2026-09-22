@@ -9,6 +9,11 @@ export default class ModeratorMiddleware {
       return ctx.response.status(403).send({ error: 'Acceso denegado' })
     }
 
+    // Un moderador sin ciudad asignada vería datos de todas las ciudades: se bloquea.
+    if (user.rol !== 'admin' && !user.zonaModerador?.trim()) {
+      return ctx.response.status(403).send({ error: 'No tienes ciudad asignada. Contacta al administrador.' })
+    }
+
     return next()
   }
 }

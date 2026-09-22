@@ -1,9 +1,10 @@
 import { updateProfileValidator } from '#validators/profile'
 import type { HttpContext } from '@adonisjs/core/http'
-import app from '@adonisjs/core/services/app'
+import StorageService from '#services/storage_service'
 import db from '@adonisjs/lucid/services/db'
 import { randomUUID } from 'node:crypto'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
+import SignedUploadService from '#services/signed_upload_service'
 
 export default class ProfileController {
   @ApiOperation({
@@ -48,8 +49,8 @@ export default class ProfileController {
             ultimaUbicacionLat: user.conductor.ultimaUbicacionLat,
             ultimaUbicacionLng: user.conductor.ultimaUbicacionLng,
             estadoVerificacion: user.conductor.estadoVerificacion,
-            fotoCedula: user.conductor.fotoCedula,
-            fotoLicencia: user.conductor.fotoLicencia,
+            fotoCedula: SignedUploadService.sign(user.conductor.fotoCedula),
+            fotoLicencia: SignedUploadService.sign(user.conductor.fotoLicencia),
             notaRechazo: user.conductor.notaRechazo,
           }
         : undefined,
@@ -120,8 +121,11 @@ export default class ProfileController {
       return response.status(400).send({ error: 'No file uploaded' })
     }
 
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
     const fileName = `avatar-${user.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
 
     user.avatar = `/storage/uploads/${fileName}`
     await user.save()

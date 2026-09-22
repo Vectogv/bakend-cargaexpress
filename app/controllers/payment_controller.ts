@@ -1,10 +1,11 @@
 import ConfiguracionPlataforma from '#models/configuracion_plataforma'
 import type { HttpContext } from '@adonisjs/core/http'
 import RedisService from '#services/redis_service'
-import app from '@adonisjs/core/services/app'
+import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
 import { DateTime } from 'luxon'
 import { emitToAdmin } from '#start/socket'
+import SignedUploadService from '#services/signed_upload_service'
 
 export default class PaymentController {
   async info({ auth, serialize }: HttpContext) {
@@ -35,7 +36,7 @@ export default class PaymentController {
     if (user.estadoCuenta !== 'suspension_por_pago') {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'No tienes una suspensión por pago activa' }))
+        .send(await serialize.withoutWrapping({ error: 'No tienes una suspensión por pago activa' }))
     }
 
     const file = request.file('file', {
@@ -46,8 +47,11 @@ export default class PaymentController {
       return response.status(400).send({ error: 'No file uploaded' })
     }
 
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
     const fileName = `comprobante-${user.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
 
     user.comprobantePago = `/storage/uploads/${fileName}`
     user.estadoCuenta = 'esperando_confirmacion'
@@ -60,12 +64,12 @@ export default class PaymentController {
       userId: user.id,
       nombre: `${user.nombre} ${user.apellido}`,
       montoDeuda: user.montoDeuda,
-      comprobante: user.comprobantePago,
+      comprobante: SignedUploadService.sign(user.comprobantePago),
       nequi: nequiInfo,
     })
 
     return serialize.withoutWrapping({
-      comprobante: user.comprobantePago,
+      comprobante: SignedUploadService.sign(user.comprobantePago),
       estadoCuenta: user.estadoCuenta,
       message: 'Comprobante recibido. El administrador lo verificará en breve.',
     })

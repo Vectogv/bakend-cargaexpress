@@ -15,11 +15,14 @@ import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import RedisService from '#services/redis_service'
+import SessionService from '#services/session_service'
+import CoverageService, { validarZonasEntrada } from '#services/coverage_service'
 import { DateTime } from 'luxon'
-import app from '@adonisjs/core/services/app'
+import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
 import { emitToDriver, emitToClient, emitToAdmin } from '#start/socket'
 import { sendToMultiple } from '#services/push_notification_service'
+import SignedUploadService from '#services/signed_upload_service'
 
 export default class AdminController {
   async dashboard({ serialize }: HttpContext) {
@@ -66,10 +69,11 @@ export default class AdminController {
     return serialize.withoutWrapping(data)
   }
 
-  async users({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+  async users({ request, response, serialize }: HttpContext) {
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const search = String(request.input('search') || '').trim()
+    const rol = String(request.input('rol') || '').trim()
 
     let query = User.query()
       .select(
@@ -95,10 +99,21 @@ export default class AdminController {
           .whereILike('nombre', `%${search}%`)
           .orWhereILike('apellido', `%${search}%`)
           .orWhereILike('email', `%${search}%`)
+          .orWhereILike('telefono', `%${search}%`)
       )
     }
 
+    // Filtro por rol del panel: admin | cliente | conductor | moderador | lider
+    if (rol === 'moderador') query = query.where('es_moderador', true)
+    else if (rol === 'lider') query = query.where('es_lider', true)
+    else if (rol === 'cliente') query = query.where('rol', 'cliente').where('es_moderador', false)
+    else if (['admin', 'conductor'].includes(rol)) query = query.where('rol', rol)
+
     const result = await query.paginate(page, limit)
+
+    // La respuesta sigue siendo un array (compatibilidad); la paginación va en cabeceras.
+    response.header('X-Total-Count', String(result.total))
+    response.header('X-Last-Page', String(result.lastPage))
 
     return serialize.withoutWrapping(
       result.all().map((u) => ({
@@ -120,8 +135,8 @@ export default class AdminController {
   }
 
   async drivers({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const result = await Conductor.query()
       .preload('usuario', (q) =>
         q.select('id', 'nombre', 'apellido', 'email', 'telefono', 'suspendido')
@@ -146,8 +161,8 @@ export default class AdminController {
           ? { lat: d.ultimaUbicacionLat, lng: d.ultimaUbicacionLng }
           : null,
         estadoVerificacion: d.estadoVerificacion,
-        fotoCedula: d.fotoCedula,
-        fotoLicencia: d.fotoLicencia,
+        fotoCedula: SignedUploadService.sign(d.fotoCedula),
+        fotoLicencia: SignedUploadService.sign(d.fotoLicencia),
         notaRechazo: d.notaRechazo,
         fotoConductor: d.fotoConductor,
         fotoVehiculo: d.fotoVehiculo,
@@ -166,8 +181,8 @@ export default class AdminController {
   }
 
   async trips({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const result = await Viaje.query()
       .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'email'))
       .preload('conductor', (q) =>
@@ -217,8 +232,8 @@ export default class AdminController {
   }
 
   async earnings({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const result = await Ganancia.query()
       .preload('conductor', (q) =>
         q
@@ -260,7 +275,7 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
     const data = request.only(['nombre', 'apellido', 'email', 'telefono', 'edad'])
     if (data.email && data.email !== user.email) {
@@ -268,7 +283,7 @@ export default class AdminController {
       if (exists) {
         return response
           .status(422)
-          .send(serialize.withoutWrapping({ error: 'El email ya está en uso' }))
+          .send(await serialize.withoutWrapping({ error: 'El email ya está en uso' }))
       }
     }
     user.merge(data)
@@ -288,18 +303,18 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
     const { rol } = request.only(['rol'])
     if (!rol || !['conductor', 'cliente', 'admin'].includes(rol)) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'rol inválido (conductor, cliente, admin)' }))
+        .send(await serialize.withoutWrapping({ error: 'rol inválido (conductor, cliente, admin)' }))
     }
     if (rol !== 'admin' && user.rol === 'admin' && user.esModerador && !user.zonaModerador) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'Asigna zonaModerador antes de quitar el rol admin' }))
+        .send(await serialize.withoutWrapping({ error: 'Asigna zonaModerador antes de quitar el rol admin' }))
     }
     user.rol = rol
     await user.save()
@@ -317,15 +332,16 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
     if (user.rol === 'admin') {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No puedes suspender a otro admin' }))
+        .send(await serialize.withoutWrapping({ error: 'No puedes suspender a otro admin' }))
     }
     user.suspendido = !user.suspendido
     await user.save()
+    if (user.suspendido) await SessionService.revokeAll(user)
     RedisService.cacheDel('admin:dashboard')
     return serialize.withoutWrapping({
       id: user.id,
@@ -338,7 +354,7 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
     const file = request.file('file', {
       size: '5mb',
@@ -347,8 +363,11 @@ export default class AdminController {
     if (!file) {
       return serialize.withoutWrapping({ error: 'No file uploaded' })
     }
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
     const fileName = `avatar-${user.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
     user.avatar = `/storage/uploads/${fileName}`
     await user.save()
     return serialize.withoutWrapping({ avatar: user.avatar })
@@ -359,22 +378,36 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
     if (user.rol === 'admin') {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No puedes eliminar a otro admin' }))
+        .send(await serialize.withoutWrapping({ error: 'No puedes eliminar a otro admin' }))
     }
-    if (user.rol === 'conductor') {
-      const conductor = await Conductor.findBy('usuario_id', user.id)
-      if (conductor) {
-        await Ganancia.query().where('conductor_id', conductor.id).delete()
-        await conductor.delete()
-      }
+    // Todo o nada: si algún registro relacionado impide el borrado (FK), no se
+    // deja la cuenta a medio eliminar.
+    try {
+      await db.transaction(async (trx) => {
+        if (user.rol === 'conductor') {
+          const conductor = await Conductor.query({ client: trx }).where('usuario_id', user.id).first()
+          if (conductor) {
+            await Ganancia.query({ client: trx }).where('conductor_id', conductor.id).delete()
+            await conductor.useTransaction(trx).delete()
+          }
+        }
+        await Viaje.query({ client: trx }).where('cliente_id', user.id).delete()
+        await user.useTransaction(trx).delete()
+      })
+    } catch (err) {
+      return response.status(409).send(
+        await serialize.withoutWrapping({
+          error: 'No se puede eliminar: el usuario tiene registros asociados (viajes, disputas o pagos). Suspéndelo en su lugar.',
+        })
+      )
     }
-    await Viaje.query().where('cliente_id', user.id).delete()
-    await user.delete()
+    await SessionService.revokeAll(user)
+    RedisService.cacheDel('admin:dashboard')
     return serialize.withoutWrapping({ success: true })
   }
 
@@ -391,13 +424,13 @@ export default class AdminController {
     })
   }
 
-  async updateProfile({ auth, request, serialize }: HttpContext) {
+  async updateProfile({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     const data = request.only(['nombre', 'apellido', 'email', 'telefono'])
     if (data.email && data.email !== user.email) {
       const exists = await User.findBy('email', data.email)
       if (exists) {
-        return serialize.withoutWrapping({ error: 'El email ya está en uso' })
+        return response.status(422).send(await serialize.withoutWrapping({ error: 'El email ya está en uso' }))
       }
     }
     user.merge(data)
@@ -412,7 +445,7 @@ export default class AdminController {
     })
   }
 
-  async uploadProfileAvatar({ auth, request, serialize }: HttpContext) {
+  async uploadProfileAvatar({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     const file = request.file('file', {
       size: '5mb',
@@ -421,8 +454,11 @@ export default class AdminController {
     if (!file) {
       return serialize.withoutWrapping({ error: 'No file uploaded' })
     }
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
     const fileName = `avatar-${user.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
     user.avatar = `/storage/uploads/${fileName}`
     await user.save()
     return serialize.withoutWrapping({ avatar: user.avatar })
@@ -469,7 +505,7 @@ export default class AdminController {
     if (!conductor) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
     const now = DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss')
@@ -490,11 +526,11 @@ export default class AdminController {
     if (!conductor) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const comisiones = await Ganancia.query()
       .where('conductor_id', conductor.id)
       .whereNotNull('comision')
@@ -520,8 +556,8 @@ export default class AdminController {
   }
 
   async reports({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const reportes = await Reporte.query()
       .preload('cliente', (q) =>
         q.select('id', 'nombre', 'apellido', 'email', 'reputacion', 'visibilidad')
@@ -574,7 +610,7 @@ export default class AdminController {
     if (!reporte) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Reporte no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Reporte no encontrado' }))
     }
 
     reporte.estado = 'resuelto'
@@ -587,8 +623,8 @@ export default class AdminController {
   }
 
   async pendingVerifications({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const conductores = await Conductor.query()
       .where('estado_verificacion', 'pendiente')
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'email', 'telefono'))
@@ -603,8 +639,8 @@ export default class AdminController {
         placa: c.placa,
         tipoVehiculo: c.tipoVehiculo,
         capacidad: c.capacidad,
-        fotoCedula: c.fotoCedula,
-        fotoLicencia: c.fotoLicencia,
+        fotoCedula: SignedUploadService.sign(c.fotoCedula),
+        fotoLicencia: SignedUploadService.sign(c.fotoLicencia),
         fotoVehiculo: c.fotoVehiculo,
         usuario: c.usuario
           ? {
@@ -624,7 +660,7 @@ export default class AdminController {
     if (!conductor) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
     conductor.estadoVerificacion = 'aprobado'
@@ -647,7 +683,7 @@ export default class AdminController {
     if (!conductor) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
     const { nota } = request.only(['nota'])
@@ -673,21 +709,21 @@ export default class AdminController {
     if (!conductor) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
     const { ciudad } = request.only(['ciudad'])
     if (!ciudad || typeof ciudad !== 'string') {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'ciudad es requerida' }))
+        .send(await serialize.withoutWrapping({ error: 'ciudad es requerida' }))
     }
     const ciudadNormalizada = ciudad.trim().toLowerCase()
     const validas = ['cali', 'popayan', 'pasto', 'medellin', 'bogota', 'cartagena']
     if (!validas.includes(ciudadNormalizada)) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: `Ciudad inválida (${validas.join(', ')})` }))
+        .send(await serialize.withoutWrapping({ error: `Ciudad inválida (${validas.join(', ')})` }))
     }
 
     conductor.ciudad = ciudadNormalizada
@@ -700,8 +736,8 @@ export default class AdminController {
   }
 
   async emergencies({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const alertas = await AlertaEmergencia.query()
       .where('atendida', false)
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
@@ -733,8 +769,8 @@ export default class AdminController {
   }
 
   async sosAlerts({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '50'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '50')) || 50))
     const alertas = await AlertaEmergencia.query()
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('created_at', 'desc')
@@ -757,7 +793,7 @@ export default class AdminController {
   async resolveEmergency({ params, response, serialize }: HttpContext) {
     const alerta = await AlertaEmergencia.find(params.id)
     if (!alerta) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Alerta no encontrada' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Alerta no encontrada' }))
     }
 
     alerta.atendida = true
@@ -770,8 +806,8 @@ export default class AdminController {
   }
 
   async disputes({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const disputas = await Disputa.query()
       .whereIn('estado', ['abierta', 'en_revision'])
       .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion', 'precio_final'))
@@ -788,7 +824,8 @@ export default class AdminController {
         clienteId: d.clienteId,
         versionConductor: d.versionConductor,
         versionCliente: d.versionCliente,
-        soporteCliente: d.soporteCliente,
+        soporteCliente: SignedUploadService.sign(d.soporteCliente),
+        fotos: SignedUploadService.sign(Array.isArray(d.fotos) ? d.fotos : []),
         estado: d.estado,
         resultado: d.resultado,
         viaje: d.viaje
@@ -823,12 +860,12 @@ export default class AdminController {
     if (!disputa) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
+        .send(await serialize.withoutWrapping({ error: 'Disputa no encontrada' }))
     }
     if (disputa.estado === 'resuelta') {
       return response
         .status(400)
-        .send(serialize.withoutWrapping({ error: 'La disputa ya fue resuelta' }))
+        .send(await serialize.withoutWrapping({ error: 'La disputa ya fue resuelta' }))
     }
 
     const { resultado, acuerdoDePago, montoDeuda } = request.only([
@@ -838,7 +875,7 @@ export default class AdminController {
     ])
     if (!['favor_conductor', 'favor_cliente'].includes(resultado)) {
       return response.status(422).send(
-        serialize.withoutWrapping({
+        await serialize.withoutWrapping({
           error: 'Resultado inválido (favor_conductor, favor_cliente)',
         })
       )
@@ -929,7 +966,7 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
     user.tieneDeudaActiva = false
     user.estadoCuenta = 'activa'
@@ -969,7 +1006,7 @@ export default class AdminController {
         monto: Number(u.montoDeuda ?? 0),
         concepto: 'Deuda activa',
         deudaFechaLimite: u.deudaFechaLimite?.toISO() || null,
-        comprobante: u.comprobantePago,
+        comprobante: SignedUploadService.sign(u.comprobantePago),
         createdAt: u.createdAt.toISO(),
       }))
     )
@@ -980,12 +1017,12 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
     if (user.estadoCuenta !== 'esperando_confirmacion') {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El usuario no tiene un comprobante pendiente' }))
+        .send(await serialize.withoutWrapping({ error: 'El usuario no tiene un comprobante pendiente' }))
     }
 
     user.tieneDeudaActiva = false
@@ -1011,12 +1048,12 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
     if (user.estadoCuenta !== 'esperando_confirmacion') {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El usuario no tiene un comprobante pendiente' }))
+        .send(await serialize.withoutWrapping({ error: 'El usuario no tiene un comprobante pendiente' }))
     }
 
     user.estadoCuenta = 'suspension_por_pago'
@@ -1057,22 +1094,29 @@ export default class AdminController {
     })
   }
 
+  /** Zonas de operación tal como las edita el admin (incluye las inactivas). */
+  async coverage({ serialize }: HttpContext) {
+    return serialize.withoutWrapping({ zonasCobertura: await CoverageService.zonas() })
+  }
+
+  /**
+   * Reemplaza las zonas de operación. Cada zona es un rectángulo:
+   * { nombre, activa, norte, sur, este, oeste } (latitudes norte/sur, longitudes este/oeste).
+   */
   async updateCoverage({ request, response, serialize }: HttpContext) {
+    const resultado = validarZonasEntrada(request.input('zonasCobertura'))
+    if ('error' in resultado) {
+      return response.status(422).send(await serialize.withoutWrapping({ error: resultado.error }))
+    }
+
     let config = await ConfiguracionPlataforma.first()
     if (!config) {
       config = await ConfiguracionPlataforma.create({})
     }
-
-    const { zonasCobertura } = request.only(['zonasCobertura'])
-    if (!zonasCobertura || !Array.isArray(zonasCobertura)) {
-      return response
-        .status(422)
-        .send(serialize.withoutWrapping({ error: 'zonasCobertura debe ser un array' }))
-    }
-    config.zonasCobertura = zonasCobertura
+    config.zonasCobertura = resultado.zonas
     await config.save()
 
-    return serialize.withoutWrapping({ zonasCobertura: config.zonasCobertura })
+    return serialize.withoutWrapping({ zonasCobertura: await CoverageService.zonas() })
   }
 
   async backupLogs({ serialize }: HttpContext) {
@@ -1097,7 +1141,7 @@ export default class AdminController {
     return serialize.withoutWrapping({ success: true, message: 'Respaldo manual completado' })
   }
 
-  async updateBanner({ request, serialize }: HttpContext) {
+  async updateBanner({ request, response, serialize }: HttpContext) {
     let config = await ConfiguracionPlataforma.first()
     if (!config) {
       config = await ConfiguracionPlataforma.create({})
@@ -1109,8 +1153,11 @@ export default class AdminController {
     })
 
     if (file) {
+      if (!file.isValid) {
+        return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+      }
       const fileName = `banner-${randomUUID()}.${file.extname}`
-      await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+      await file.move(StorageService.uploadsDir(), { name: fileName })
       config.bannerImagenUrl = `/storage/uploads/${fileName}`
     }
 
@@ -1138,7 +1185,7 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
 
     const { esModerador, zonaModerador } = request.only(['esModerador', 'zonaModerador'])
@@ -1149,7 +1196,7 @@ export default class AdminController {
       if (zonaModerador && !['cali', 'popayan', 'pasto'].includes(zonaModerador)) {
         return response
           .status(422)
-          .send(serialize.withoutWrapping({ error: 'Zona inválida (cali, popayan, pasto)' }))
+          .send(await serialize.withoutWrapping({ error: 'Zona inválida (cali, popayan, pasto)' }))
       }
       user.zonaModerador = zonaModerador || null
     }
@@ -1167,7 +1214,7 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
 
     // Asignar/quitar rol de líder de conductores
@@ -1188,14 +1235,14 @@ export default class AdminController {
     if (!user) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
 
     if (user.rol === 'admin') {
       return response
         .status(403)
         .send(
-          serialize.withoutWrapping({
+          await serialize.withoutWrapping({
             error: 'No puedes cambiar la contraseña de otro administrador',
           })
         )
@@ -1206,7 +1253,7 @@ export default class AdminController {
       return response
         .status(422)
         .send(
-          serialize.withoutWrapping({
+          await serialize.withoutWrapping({
             error: 'La contraseña debe tener entre 6 y 32 caracteres',
           })
         )
@@ -1214,6 +1261,7 @@ export default class AdminController {
 
     user.password = password
     await user.save()
+    await SessionService.revokeAll(user)
 
     RedisService.cacheDel('admin:dashboard')
 
@@ -1228,12 +1276,12 @@ export default class AdminController {
     if (!comunicado) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Comunicado no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Comunicado no encontrado' }))
     }
     if (comunicado.estado !== 'pendiente') {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El comunicado ya fue procesado' }))
+        .send(await serialize.withoutWrapping({ error: 'El comunicado ya fue procesado' }))
     }
 
     comunicado.estado = 'aprobado'
@@ -1259,12 +1307,12 @@ export default class AdminController {
     if (!comunicado) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Comunicado no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Comunicado no encontrado' }))
     }
     if (comunicado.estado !== 'pendiente') {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El comunicado ya fue procesado' }))
+        .send(await serialize.withoutWrapping({ error: 'El comunicado ya fue procesado' }))
     }
 
     const { notaRechazo } = request.only(['notaRechazo'])
@@ -1284,12 +1332,12 @@ export default class AdminController {
     if (!encuesta) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Encuesta no encontrada' }))
+        .send(await serialize.withoutWrapping({ error: 'Encuesta no encontrada' }))
     }
     if (encuesta.estado !== 'pendiente') {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'La encuesta ya fue procesada' }))
+        .send(await serialize.withoutWrapping({ error: 'La encuesta ya fue procesada' }))
     }
 
     encuesta.estado = 'activa'
@@ -1309,8 +1357,8 @@ export default class AdminController {
   }
 
   async listComunicados({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const comunicados = await Comunicado.query()
       .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('created_at', 'desc')
@@ -1336,8 +1384,8 @@ export default class AdminController {
   }
 
   async listEncuestas({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const encuestas = await Encuesta.query()
       .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('created_at', 'desc')
@@ -1357,8 +1405,8 @@ export default class AdminController {
   }
 
   async moderatorReports({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const reportes = await ReporteModerador.query()
       .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
       .preload('conductor', (q) =>
@@ -1390,8 +1438,8 @@ export default class AdminController {
   }
 
   async cancellationRequests({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const solicitudes = await SolicitudCancelacion.query()
       .where('estado', 'pendiente')
       .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion'))

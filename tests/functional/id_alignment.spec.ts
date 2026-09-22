@@ -89,7 +89,7 @@ test.group('ID alignment with Flutter contract', (group) => {
   })
 
   test('chat allowed in conductor_en_camino and aliases present', async ({ client, assert }) => {
-    const { token: clientToken, id: clientId } = await registerClient(client)
+    const { token: clientToken } = await registerClient(client)
     const { token, id: driverUserId, conductorId } = await registerDriver(client)
     const tripId = await createTrip(client, clientToken)
 
@@ -117,7 +117,7 @@ test.group('ID alignment with Flutter contract', (group) => {
   })
 
   test('admin approves cancellation by tripId', async ({ client, assert }) => {
-    const { token: clientToken, id: clientId } = await registerClient(client)
+    const { token: clientToken } = await registerClient(client)
     const { token: driverToken, conductorId } = await registerDriver(client)
     const { token: adminToken } = await registerAdmin(client)
     const tripId = await createTrip(client, clientToken)

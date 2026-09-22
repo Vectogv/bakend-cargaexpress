@@ -1,5 +1,7 @@
 [phases.setup]
 nixPkgs = ["nodejs", "nodePackages.pnpm"]
+# Cliente MySQL (mysqldump) para app/services/backup_service.ts
+aptPkgs = ["default-mysql-client"]
 
 [phases.install]
 cmds = ["npm install --include=dev"]

@@ -34,10 +34,10 @@ export default class EmergencyChatController {
     const user = auth.getUserOrFail()
     const ctx = await this.tomarContexto(params.id)
     if (!ctx) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Alerta de emergencia no encontrada' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Alerta de emergencia no encontrada' }))
     }
     if (!(await this.esParticipante(ctx.alerta, ctx.viaje, user, ctx.zona))) {
-      return response.status(403).send(serialize.withoutWrapping({ error: 'No participas en este caso' }))
+      return response.status(403).send(await serialize.withoutWrapping({ error: 'No participas en este caso' }))
     }
 
     const mensajes = await MensajeEmergencia.query()
@@ -67,15 +67,15 @@ export default class EmergencyChatController {
     const user = auth.getUserOrFail()
     const ctx = await this.tomarContexto(params.id)
     if (!ctx) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Alerta de emergencia no encontrada' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Alerta de emergencia no encontrada' }))
     }
     if (!(await this.esParticipante(ctx.alerta, ctx.viaje, user, ctx.zona))) {
-      return response.status(403).send(serialize.withoutWrapping({ error: 'No participas en este caso' }))
+      return response.status(403).send(await serialize.withoutWrapping({ error: 'No participas en este caso' }))
     }
 
     const texto = request.input('mensaje')
     if (!texto || typeof texto !== 'string' || texto.trim().length === 0) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'El mensaje no puede estar vacío' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'El mensaje no puede estar vacío' }))
     }
 
     const msg = await MensajeEmergencia.create({

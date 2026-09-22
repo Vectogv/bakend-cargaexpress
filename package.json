@@ -10,7 +10,7 @@
   },
   "scripts": {
     "start": "bash start.sh",
-    "build": "npx tsx bin/console.ts build --ignore-ts-errors",
+    "build": "npx tsx bin/console.ts build",
     "dev": "node ace serve --hmr",
     "test": "node ace test",
     "lint": "eslint .",
@@ -74,7 +74,6 @@
     "@types/pdfkit": "^0.17.6",
     "@vinejs/vine": "^4.3.1",
     "adonis-autoswagger": "^3.73.0",
-    "archiver": "^8.0.0",
     "better-sqlite3": "^12.9.0",
     "firebase-admin": "^13.10.0",
     "googleapis": "^173.0.0",
@@ -94,5 +93,8 @@
       "./app/middleware/*.ts"
     ]
   },
-  "prettier": "@adonisjs/prettier-config"
+  "prettier": "@adonisjs/prettier-config",
+  "overrides": {
+    "jsonschema": "1.4.1"
+  }
 }

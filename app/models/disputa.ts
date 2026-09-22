@@ -4,6 +4,7 @@ import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import Viaje from './viaje.js'
 import Conductor from './conductor.js'
 import User from './user.js'
+import { jsonColumn } from './json_column.js'
 
 export default class Disputa extends BaseModel {
   static table = 'disputas'
@@ -38,7 +39,7 @@ export default class Disputa extends BaseModel {
   @column()
   declare soporteCliente: string | null
 
-  @column()
+  @column(jsonColumn)
   declare fotos: string[] | null
 
   @column()

@@ -83,8 +83,8 @@ test.group('Drivers - Status', (group) => {
       .bearerToken(token)
       .json({ online: false })
 
-    response.assertStatus(200)
-    response.assertBodyContains({ error: 'Conductor profile not found' })
+    response.assertStatus(404)
+    response.assertBodyContains({ error: 'Perfil de conductor no encontrado' })
   })
 
   test('fail with invalid status value', async ({ client }) => {

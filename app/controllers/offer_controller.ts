@@ -42,6 +42,15 @@ export default class OfferController {
       })
     }
 
+    // Mismo control que el flujo antiguo de aceptación directa: solo conductores
+    // activos y verificados pueden ofertar.
+    if (user.suspendido) {
+      return response.status(403).send({ error: 'Tu cuenta está suspendida. Contacta al administrador.' })
+    }
+    if (conductor.estadoVerificacion !== 'aprobado') {
+      return response.status(403).send({ error: 'Tu cuenta de conductor no está verificada.' })
+    }
+
     const viaje = await Viaje.find(params.id)
 
     if (!viaje) {
@@ -265,6 +274,22 @@ export default class OfferController {
           })
         }
 
+        // El conductor pudo ser suspendido o desverificado después de ofertar.
+        const conductorOferta = await Conductor.query({ client: trx })
+          .where('id', oferta.conductorId)
+          .preload('usuario', (q) => q.select('id', 'suspendido'))
+          .first()
+        if (
+          !conductorOferta ||
+          conductorOferta.estadoVerificacion !== 'aprobado' ||
+          conductorOferta.usuario?.suspendido
+        ) {
+          throw Object.assign(new Error('CONDUCTOR_NO_HABILITADO'), {
+            statusCode: 409,
+            message: 'El conductor de esta oferta ya no está habilitado. Elige otra oferta.',
+          })
+        }
+
         // Reservas programadas: evitar asignar un conductor con conflicto de horario.
         const conflicto = await TripConflictService.conductorTieneConflicto(
           oferta.conductorId,
@@ -357,7 +382,7 @@ export default class OfferController {
     const otrasOfertas = await Oferta.query()
       .where('viaje_id', viaje.id)
       .where('estado', 'rechazada')
-      .preload('conductor')
+      .preload('conductor', (q) => q.preload('usuario'))
 
     for (const otra of otrasOfertas) {
       emitToDriver(otra.conductor.usuarioId, 'offer:rejected', {
@@ -516,7 +541,7 @@ export default class OfferController {
       .where('id', params.offerId)
       .where('viaje_id', viaje.id)
       .where('estado', 'pendiente')
-      .preload('conductor')
+      .preload('conductor', (q) => q.preload('usuario'))
       .first()
 
     if (!oferta) {

@@ -29,6 +29,15 @@ export const http = defineConfig({
   generateRequestId: true,
 
   /**
+   * Railway (y Vercel para el panel) ponen proxies delante de la app. Sin esto,
+   * request.ip() sería la IP del proxy y el rate limit trataría a todos los
+   * usuarios como uno solo. Solo se confía en los N saltos más cercanos para que
+   * un cliente no pueda falsificar su IP con X-Forwarded-For.
+   */
+  trustProxy: (_address: string, distance: number) =>
+    distance < env.get('TRUST_PROXY_HOPS', app.inProduction ? 1 : 0),
+
+  /**
    * Allow HTTP method spoofing via the "_method" form/query parameter.
    * This lets HTML forms target PUT/PATCH/DELETE routes while still
    * submitting with POST.
