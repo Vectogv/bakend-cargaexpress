@@ -26,6 +26,8 @@ export default await Env.create(new URL('../', import.meta.url), {
   CORS_ORIGIN: Env.schema.string.optional(),
 
   FIREBASE_CREDENTIALS_PATH: Env.schema.string.optional(),
+  // JSON de la cuenta de servicio (texto o base64): en Railway no hay donde dejar un archivo.
+  FIREBASE_CREDENTIALS_JSON: Env.schema.string.optional(),
 
   GOOGLE_DRIVE_FOLDER_ID: Env.schema.string.optional(),
   GOOGLE_SERVICE_ACCOUNT_KEY: Env.schema.string.optional(),
