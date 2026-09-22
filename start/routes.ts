@@ -3,6 +3,7 @@ import router from '@adonisjs/core/services/router'
 import { controllers } from '#generated/controllers'
 import app from '@adonisjs/core/services/app'
 import fs from 'node:fs'
+import nodePath from 'node:path'
 
 router.get('/', () => {
   return { hello: 'world' }
@@ -49,7 +50,7 @@ router.get('/health', async ({ response }) => {
 router.get('/storage/uploads/:fileName', async ({ params, response }) => {
   // Sanitize fileName to prevent path traversal attacks
   const rawName = params.fileName as string
-  const safeName = require('node:path').basename(rawName)
+  const safeName = nodePath.basename(rawName)
   // Reject if the sanitized name differs (contained path separators or ..)
   if (!safeName || safeName !== rawName || safeName.startsWith('.')) {
     return response.status(400).send({ error: 'Invalid file name' })
