@@ -69,7 +69,9 @@ export default class AdminController {
   async users({ request, serialize }: HttpContext) {
     const page = Number.parseInt(request.input('page', '1'))
     const limit = Number.parseInt(request.input('limit', '20'))
-    const result = await User.query()
+    const search = String(request.input('search') || '').trim()
+
+    let query = User.query()
       .select(
         'id',
         'nombre',
@@ -86,7 +88,17 @@ export default class AdminController {
         'created_at'
       )
       .orderBy('created_at', 'desc')
-      .paginate(page, limit)
+
+    if (search) {
+      query = query.where((sub) =>
+        sub
+          .whereILike('nombre', `%${search}%`)
+          .orWhereILike('apellido', `%${search}%`)
+          .orWhereILike('email', `%${search}%`)
+      )
+    }
+
+    const result = await query.paginate(page, limit)
 
     return serialize.withoutWrapping(
       result.all().map((u) => ({
