@@ -65,6 +65,21 @@ const RedisService = {
     return client?.status === 'ready'
   },
 
+  /**
+   * Estado real para /health: 'conectado' si Redis responde al PING, 'memoria'
+   * si se está usando el fallback en memoria (en ese modo el rate limit, los
+   * locks y la caché no se comparten entre instancias).
+   */
+  async estado(): Promise<'conectado' | 'memoria'> {
+    const c = getClient()
+    if (!c) return 'memoria'
+    try {
+      return (await c.ping()) === 'PONG' ? 'conectado' : 'memoria'
+    } catch {
+      return 'memoria'
+    }
+  },
+
   // ── Generic get/set with TTL ────────────────────────────────────
   async get(key: string): Promise<string | null> {
     const c = getClient()

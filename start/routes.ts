@@ -39,18 +39,18 @@ router.get('/health', async ({ response }) => {
     checks.database = 'error'
   }
 
-  // Redis check
+  // Redis: 'memoria' significa que se está usando el fallback en memoria. No
+  // tumba el healthcheck (la app funciona), pero debe ser visible.
   try {
-    const redisOk = await RedisService.get('health:ping')
-    checks.redis = redisOk !== null || redisOk === null ? 'ok' : 'error'
+    checks.redis = await RedisService.estado()
   } catch {
-    checks.redis = 'error'
+    checks.redis = 'memoria'
   }
 
-  const allOk = Object.values(checks).every((v) => v === 'ok')
+  const dbOk = checks.database === 'ok'
 
-  return response.status(allOk ? 200 : 503).send({
-    status: allOk ? 'ok' : 'degraded',
+  return response.status(dbOk ? 200 : 503).send({
+    status: dbOk ? (checks.redis === 'conectado' ? 'ok' : 'degradado') : 'error',
     timestamp: new Date().toISOString(),
     checks,
   })
