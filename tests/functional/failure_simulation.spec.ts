@@ -1,7 +1,6 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import db from '@adonisjs/lucid/services/db'
-import { setTimeout } from 'node:timers/promises'
 
 test.group('Service Failure Simulation', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())

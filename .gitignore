@@ -48,3 +48,7 @@ server_out.log
 .env.production
 .env.prod*
 .env.*.tmp
+
+# Archivos subidos por usuarios (datos personales): nunca al repo
+storage/uploads/*
+!storage/uploads/.gitkeep

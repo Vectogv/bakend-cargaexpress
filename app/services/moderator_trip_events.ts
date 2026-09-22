@@ -1,6 +1,6 @@
 import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
-import ConfiguracionPlataforma from '#models/configuracion_plataforma'
+import CoverageService from '#services/coverage_service'
 import { emitToModerators } from '#start/socket'
 import { getTripEstadoLabel } from './trip_status_labels.js'
 
@@ -25,23 +25,8 @@ export async function resolverZonaViaje(viaje: Viaje): Promise<string | null> {
   }
 
   if (viaje.origenLat !== null && viaje.origenLng !== null) {
-    const config = await ConfiguracionPlataforma.first()
-    const zonas = config?.zonasCobertura
-    if (zonas && Array.isArray(zonas) && zonas.length > 0) {
-      let mejor: { zona: string; dist: number } | null = null
-      for (const z of zonas) {
-        const dist = calcularDistanciaKm(
-          Number(viaje.origenLat),
-          Number(viaje.origenLng),
-          Number(z.lat),
-          Number(z.lng)
-        )
-        if ((!mejor || dist < mejor.dist) && dist <= Number(z.radio ?? 30)) {
-          mejor = { zona: z.nombre || z.zona || '', dist }
-        }
-      }
-      if (mejor?.zona) return mejor.zona.toLowerCase()
-    }
+    const zona = await CoverageService.zonaDe(Number(viaje.origenLat), Number(viaje.origenLng))
+    if (zona) return zona.clave
   }
 
   return null
@@ -58,23 +43,8 @@ export async function resolverZonaAlerta(
   }
 
   if (lat !== null && lng !== null) {
-    const config = await ConfiguracionPlataforma.first()
-    const zonas = config?.zonasCobertura
-    if (zonas && Array.isArray(zonas) && zonas.length > 0) {
-      let mejor: { zona: string; dist: number } | null = null
-      for (const z of zonas) {
-        const dist = calcularDistanciaKm(
-          Number(lat),
-          Number(lng),
-          Number(z.lat),
-          Number(z.lng)
-        )
-        if ((!mejor || dist < mejor.dist) && dist <= Number(z.radio ?? 30)) {
-          mejor = { zona: z.nombre || z.zona || '', dist }
-        }
-      }
-      if (mejor?.zona) return mejor.zona.toLowerCase()
-    }
+    const zona = await CoverageService.zonaDe(Number(lat), Number(lng))
+    if (zona) return zona.clave
   }
 
   return null

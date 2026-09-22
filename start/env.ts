@@ -29,7 +29,13 @@ export default await Env.create(new URL('../', import.meta.url), {
 
   GOOGLE_DRIVE_FOLDER_ID: Env.schema.string.optional(),
   GOOGLE_SERVICE_ACCOUNT_KEY: Env.schema.string.optional(),
+  // Alias aceptado para la ruta de la clave de servicio (así está nombrada en Railway).
+  GOOGLE_SERVICE_ACCOUNT_PATH: Env.schema.string.optional(),
   BACKUP_EMAIL: Env.schema.string.optional(),
+
+  // Directorio absoluto para archivos subidos (p. ej. mount path de un Volume de Railway).
+  // Si no se define, se usa storage/uploads dentro de la app (efímero en Railway).
+  UPLOADS_DIR: Env.schema.string.optional(),
   MAPBOX_ACCESS_TOKEN: Env.schema.string.optional(),
 
   REDIS_HOST: Env.schema.string.optional(),
@@ -56,4 +62,11 @@ export default await Env.create(new URL('../', import.meta.url), {
   CORS_ALLOW_LOCALHOST: Env.schema.boolean.optional(),
   ANTIFRAUDE_CONFIRMACION_TIMEOUT_MIN: Env.schema.number.optional(),
   ANTIFRAUDE_PENALIZACION_CANCELACION: Env.schema.number.optional(),
+
+  // ── Observabilidad ────────────────────────────────────────────
+  // Token Bearer para /metrics. Sin él, /metrics solo responde en desarrollo.
+  METRICS_TOKEN: Env.schema.string.optional(),
+
+  // Número de proxies de confianza delante de la app (Railway = 1).
+  TRUST_PROXY_HOPS: Env.schema.number.optional(),
 })

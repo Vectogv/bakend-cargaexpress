@@ -5,7 +5,7 @@ import Viaje from '#models/viaje'
 import PDFDocument from 'pdfkit'
 import { driverStatusValidator, driverLocationValidator } from '#validators/driver'
 import type { HttpContext } from '@adonisjs/core/http'
-import app from '@adonisjs/core/services/app'
+import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
 import { DateTime } from 'luxon'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
@@ -15,6 +15,7 @@ import FraudDetectionService from '#services/fraud_detection_service'
 import RedisService from '#services/redis_service'
 import db from '@adonisjs/lucid/services/db'
 import reservationConfig from '#config/reservations'
+import SignedUploadService from '#services/signed_upload_service'
 
 /**
  * Totales de ganancias de UN conductor (opcionalmente desde una fecha). Las subconsultas
@@ -54,7 +55,7 @@ export default class DriverController {
 
     const conductor = await Conductor.findBy('usuario_id', user.id)
     if (!conductor) {
-      return serialize.withoutWrapping({ error: 'Conductor profile not found' })
+      return response.status(404).send({ error: 'Perfil de conductor no encontrado' })
     }
 
     if (data.online && conductor.estadoVerificacion !== 'aprobado') {
@@ -149,8 +150,11 @@ export default class DriverController {
       return response.status(400).send({ error: 'No file uploaded' })
     }
 
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
     const fileName = `vehicle-${user.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
 
     conductor.fotoVehiculo = `/storage/uploads/${fileName}`
     await conductor.save()
@@ -311,8 +315,11 @@ export default class DriverController {
       return response.status(400).send({ error: 'No file uploaded' })
     }
 
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
     const fileName = `driver-${user.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
 
     conductor.fotoConductor = `/storage/uploads/${fileName}`
     await conductor.save()
@@ -330,13 +337,16 @@ export default class DriverController {
     })
     if (!file) return response.status(400).send({ error: 'No file uploaded' })
 
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
     const fileName = `cedula-${user.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
 
     conductor.fotoCedula = `/storage/uploads/${fileName}`
     await conductor.save()
 
-    return serialize.withoutWrapping({ fotoCedula: conductor.fotoCedula })
+    return serialize.withoutWrapping({ fotoCedula: SignedUploadService.sign(conductor.fotoCedula) })
   }
 
   async uploadLicencia({ auth, request, serialize, response }: HttpContext) {
@@ -349,13 +359,16 @@ export default class DriverController {
     })
     if (!file) return response.status(400).send({ error: 'No file uploaded' })
 
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
     const fileName = `licencia-${user.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
 
     conductor.fotoLicencia = `/storage/uploads/${fileName}`
     await conductor.save()
 
-    return serialize.withoutWrapping({ fotoLicencia: conductor.fotoLicencia })
+    return serialize.withoutWrapping({ fotoLicencia: SignedUploadService.sign(conductor.fotoLicencia) })
   }
 
   async uploadVehiculo({ auth, request, serialize, response }: HttpContext) {
@@ -368,8 +381,11 @@ export default class DriverController {
     })
     if (!file) return response.status(400).send({ error: 'No file uploaded' })
 
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
     const fileName = `verif-vehiculo-${user.id}-${randomUUID()}.${file.extname}`
-    await file.move(app.makePath('storage', 'uploads'), { name: fileName })
+    await file.move(StorageService.uploadsDir(), { name: fileName })
 
     conductor.fotoVehiculo = `/storage/uploads/${fileName}`
     await conductor.save()
@@ -382,8 +398,8 @@ export default class DriverController {
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
 
     const periodo = request.input('periodo', 'todo')
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
 
     let query = Ganancia.query().where('conductor_id', conductor.id)
 

@@ -355,7 +355,9 @@ test.group('H1 - Cierre sin confirmar notifica y se resuelve', (group) => {
       .header('Authorization', `Bearer ${moderador.token}`)
       .json({ resolucion: 'finalizar', nota: 'El cliente no respondió el cierre indicado.' })
     rechazado.assertStatus(403)
-    rechazado.assertBodyContains({ error: 'No tienes una zona asignada' })
+    // El moderator_middleware bloquea antes de llegar al controlador a los
+    // moderadores sin zonaModerador (cambio intencional).
+    rechazado.assertBodyContains({ error: 'No tienes ciudad asignada. Contacta al administrador.' })
   })
 
   test('zona del moderador con distinto case coincide con la del viaje (200)', async ({ client }) => {

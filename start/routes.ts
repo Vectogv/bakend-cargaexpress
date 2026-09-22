@@ -4,6 +4,8 @@ import { controllers } from '#generated/controllers'
 import app from '@adonisjs/core/services/app'
 import fs from 'node:fs'
 import nodePath from 'node:path'
+import StorageService from '#services/storage_service'
+import SignedUploadService from '#services/signed_upload_service'
 
 router.get('/', () => {
   return { hello: 'world' }
@@ -13,8 +15,15 @@ router.get('/', () => {
 import MetricsService from '#services/metrics_service'
 import db from '@adonisjs/lucid/services/db'
 import RedisService from '#services/redis_service'
+import env from '#start/env'
 
-router.get('/metrics', async ({ response }) => {
+router.get('/metrics', async ({ request, response }) => {
+  // Las métricas exponen rutas y volumen de uso: requieren METRICS_TOKEN fuera de desarrollo.
+  const metricsToken = env.get('METRICS_TOKEN')
+  const provided = (request.header('authorization') || '').replace(/^Bearer\s+/i, '')
+  if (metricsToken ? provided !== metricsToken : !app.inDev) {
+    return response.status(404).send({ error: 'Not found' })
+  }
   response.header('Content-Type', MetricsService.getContentType())
   return response.send(await MetricsService.getMetrics())
 })
@@ -47,7 +56,7 @@ router.get('/health', async ({ response }) => {
   })
 })
 
-router.get('/storage/uploads/:fileName', async ({ params, response }) => {
+router.get('/storage/uploads/:fileName', async ({ params, request, response }) => {
   // Sanitize fileName to prevent path traversal attacks
   const rawName = params.fileName as string
   const safeName = nodePath.basename(rawName)
@@ -55,10 +64,21 @@ router.get('/storage/uploads/:fileName', async ({ params, response }) => {
   if (!safeName || safeName !== rawName || safeName.startsWith('.')) {
     return response.status(400).send({ error: 'Invalid file name' })
   }
-  const filePath = app.makePath('storage', 'uploads', safeName)
+  // Documentos personales (cédula, licencia, comprobantes…): solo con URL firmada
+  // emitida por la API a quien tiene permiso de verlos.
+  if (
+    SignedUploadService.isPrivate(safeName) &&
+    !SignedUploadService.verify(safeName, request.input('exp'), request.input('sig'))
+  ) {
+    return response.status(403).send({ error: 'Enlace inválido o expirado' })
+  }
+  const filePath = nodePath.join(StorageService.uploadsDir(), safeName)
   if (!fs.existsSync(filePath)) {
     return response.status(404).send({ error: 'File not found' })
   }
+  // Evita que el navegador interprete un archivo subido como HTML/script.
+  response.header('X-Content-Type-Options', 'nosniff')
+  response.header('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'")
   return response.download(filePath)
 })
 
@@ -190,6 +210,7 @@ router
     router.put('payments/:userId/confirm', [controllers.Admin, 'confirmPayment'])
     router.put('payments/:userId/reject', [controllers.Admin, 'rejectPayment'])
     router.put('config', [controllers.Admin, 'updateConfig'])
+    router.get('config/coverage', [controllers.Admin, 'coverage'])
     router.put('config/coverage', [controllers.Admin, 'updateCoverage'])
     router.put('config/banner', [controllers.Admin, 'updateBanner'])
     router.put('users/:id/moderator', [controllers.Admin, 'assignModerator'])
@@ -281,6 +302,19 @@ router.get('/api/config/banner', async ({ serialize }) => {
   })
 })
 
+// Ciudades donde opera la plataforma (la app puede validar antes de pedir un viaje).
+router.get('/api/config/coverage', async ({ serialize }) => {
+  const { default: CoverageService } = await import('#services/coverage_service')
+  const zonas = await CoverageService.zonasActivas()
+  return serialize.withoutWrapping({
+    zonas: zonas.map((z) =>
+      z.tipo === 'rect'
+        ? { clave: z.clave, nombre: z.nombre, norte: z.norte, sur: z.sur, este: z.este, oeste: z.oeste }
+        : { clave: z.clave, nombre: z.nombre, lat: z.lat, lng: z.lng, radio: z.radio }
+    ),
+  })
+})
+
 router.get('/api/config/mapbox', [controllers.Mapbox, 'token']).use(middleware.auth())
 
 router
@@ -343,7 +377,7 @@ router
 router
   .post('/api/fraud/alerts', [controllers.FraudAlert, 'store'])
   .as('fraud.alerts.store')
-  .use(middleware.auth())
+  .use([middleware.auth(), middleware.rateLimit({ max: 30, windowMs: 60_000 })])
 
 router
   .group(() => {

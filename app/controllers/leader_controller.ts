@@ -8,8 +8,8 @@ import { emitToAdmin } from '#start/socket'
 export default class LeaderController {
   // ──────────────────────── AVISOS ────────────────────────
   async avisosIndex({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const posts = await Aviso.query()
       .preload('autor', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('fijado', 'desc')
@@ -32,7 +32,7 @@ export default class LeaderController {
     const { contenido } = request.only(['contenido'])
 
     if (!contenido) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'contenido es requerido' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'contenido es requerido' }))
     }
 
     const post = await Aviso.create({
@@ -53,7 +53,7 @@ export default class LeaderController {
     const post = await Aviso.find(params.id)
 
     if (!post) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Post no encontrado' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Post no encontrado' }))
     }
 
     post.fijado = !post.fijado
@@ -67,11 +67,11 @@ export default class LeaderController {
     const post = await Aviso.find(params.id)
 
     if (!post) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Post no encontrado' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Post no encontrado' }))
     }
 
     if (post.autorId !== user.id) {
-      return response.status(403).send(serialize.withoutWrapping({ error: 'No puedes eliminar este post' }))
+      return response.status(403).send(await serialize.withoutWrapping({ error: 'No puedes eliminar este post' }))
     }
 
     await post.delete()
@@ -85,7 +85,7 @@ export default class LeaderController {
     const { titulo, contenido } = request.only(['titulo', 'contenido'])
 
     if (!titulo || !contenido) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'titulo y contenido son requeridos' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'titulo y contenido son requeridos' }))
     }
 
     const comunicado = await Comunicado.create({
@@ -132,7 +132,7 @@ export default class LeaderController {
   // ──────────────────────── CONDUCTORES (lista básica) ────────────────────────
   async driversList({ request, serialize }: HttpContext) {
     const page = request.input('page', 1)
-    const limit = request.input('limit', 20)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(String(request.input('limit', 20))) || 20))
 
     const conductores = await Conductor.query()
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'email', 'telefono'))

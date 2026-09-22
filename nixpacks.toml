@@ -1,5 +1,8 @@
 [phases.setup]
 nixPkgs = ["nodejs", "nodePackages.pnpm"]
+# Clientes de base de datos para los respaldos (app/services/backup_service.ts).
+# Producción usa PostgreSQL (pg_dump); se deja el de MySQL por compatibilidad.
+aptPkgs = ["postgresql-client", "default-mysql-client"]
 
 [phases.install]
 cmds = ["npm install --include=dev"]

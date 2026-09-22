@@ -32,10 +32,9 @@ import {
   resolverZonaAlerta,
   resolverZonaViaje,
   emitTripUpdateToModerators,
-  calcularDistanciaKm,
 } from '#services/moderator_trip_events'
-import ConfiguracionPlataforma from '#models/configuracion_plataforma'
-import { normalizarZonas } from '#services/geo_service'
+import SignedUploadService from '#services/signed_upload_service'
+import CoverageService, { type Zona } from '#services/coverage_service'
 
 export default class ModeratorController {
   async storeComunicado({ auth, request, response, serialize }: HttpContext) {
@@ -44,7 +43,7 @@ export default class ModeratorController {
     if (!titulo || !contenido) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'titulo y contenido son requeridos' }))
+        .send(await serialize.withoutWrapping({ error: 'titulo y contenido son requeridos' }))
     }
 
     const comunicado = await Comunicado.create({
@@ -72,8 +71,8 @@ export default class ModeratorController {
 
   async myComunicados({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const comunicados = await Comunicado.query()
       .where('moderador_id', user.id)
       .select('id', 'zona', 'titulo', 'contenido', 'estado', 'nota_rechazo', 'publicado_at', 'created_at')
@@ -96,8 +95,8 @@ export default class ModeratorController {
 
   async driversList({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const estado = request.input('estado') || null
     const ciudad = user.esModerador
       ? user.zonaModerador
@@ -131,8 +130,8 @@ export default class ModeratorController {
           ? { lat: c.ultimaUbicacionLat, lng: c.ultimaUbicacionLng }
           : null,
         estadoVerificacion: c.estadoVerificacion,
-        fotoCedula: c.fotoCedula,
-        fotoLicencia: c.fotoLicencia,
+        fotoCedula: SignedUploadService.sign(c.fotoCedula),
+        fotoLicencia: SignedUploadService.sign(c.fotoLicencia),
         notaRechazo: c.notaRechazo,
         usuario: c.usuario
           ? {
@@ -154,8 +153,8 @@ export default class ModeratorController {
         ? request.input('ciudad') || null
         : null
     const fechaLimite = DateTime.now().minus({ days: 7 }).toSQL()
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
 
     const conductores = await Conductor.query()
       .if(ciudad, (q) => q.where('ciudad', ciudad!))
@@ -188,8 +187,8 @@ export default class ModeratorController {
           ? { lat: c.ultimaUbicacionLat, lng: c.ultimaUbicacionLng }
           : null,
         estadoVerificacion: c.estadoVerificacion,
-        fotoCedula: c.fotoCedula,
-        fotoLicencia: c.fotoLicencia,
+        fotoCedula: SignedUploadService.sign(c.fotoCedula),
+        fotoLicencia: SignedUploadService.sign(c.fotoLicencia),
         notaRechazo: c.notaRechazo,
         usuario: c.usuario
           ? {
@@ -209,20 +208,20 @@ export default class ModeratorController {
     if (!conductor) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
     if (user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
+        .send(await serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
     }
 
     const usuario = await User.find(conductor.usuarioId)
     if (!usuario?.fcmToken) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El conductor no tiene token FCM' }))
+        .send(await serialize.withoutWrapping({ error: 'El conductor no tiene token FCM' }))
     }
 
     await sendToMultiple(
@@ -240,20 +239,20 @@ export default class ModeratorController {
     if (!conductor) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
     if (user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
+        .send(await serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
     }
 
     const { descripcion } = request.only(['descripcion'])
     if (!descripcion) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'descripcion es requerida' }))
+        .send(await serialize.withoutWrapping({ error: 'descripcion es requerida' }))
     }
 
     const reporte = await ReporteModerador.create({
@@ -283,14 +282,14 @@ export default class ModeratorController {
     if (!conductor) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
     const esAdmin = user.rol === 'admin'
     if (!esAdmin && user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
+        .send(await serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
     }
 
     conductor.estadoVerificacion = 'aprobado'
@@ -325,14 +324,14 @@ export default class ModeratorController {
     if (!conductor) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
     const esAdmin = user.rol === 'admin'
     if (!esAdmin && user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
+        .send(await serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
     }
 
     const { nota } = request.only(['nota'])
@@ -376,7 +375,7 @@ export default class ModeratorController {
       return response
         .status(422)
         .send(
-          serialize.withoutWrapping({ error: 'pregunta y opciones (array, min 2) son requeridos' })
+          await serialize.withoutWrapping({ error: 'pregunta y opciones (array, min 2) son requeridos' })
         )
     }
 
@@ -406,12 +405,21 @@ export default class ModeratorController {
     })
   }
 
-  async encuestaResults({ params, response, serialize }: HttpContext) {
+  async encuestaResults({ auth, params, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
     const encuesta = await Encuesta.find(params.id)
     if (!encuesta) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Encuesta no encontrada' }))
+        .send(await serialize.withoutWrapping({ error: 'Encuesta no encontrada' }))
+    }
+    // Un moderador solo ve resultados de encuestas de su zona (o las generales).
+    const zonaEncuesta = String(encuesta.zona || '').trim().toLowerCase()
+    const zonaUsuario = String(user.zonaModerador || '').trim().toLowerCase()
+    if (user.rol !== 'admin' && zonaEncuesta && zonaEncuesta !== 'general' && zonaEncuesta !== zonaUsuario) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ error: 'La encuesta pertenece a otra ciudad' }))
     }
 
     const respuestas = await RespuestaEncuesta.query()
@@ -448,12 +456,12 @@ export default class ModeratorController {
     if (!encuesta) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Encuesta no encontrada' }))
+        .send(await serialize.withoutWrapping({ error: 'Encuesta no encontrada' }))
     }
     if (encuesta.estado !== 'activa') {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'La encuesta no está activa' }))
+        .send(await serialize.withoutWrapping({ error: 'La encuesta no está activa' }))
     }
 
     const existe = await RespuestaEncuesta.query()
@@ -463,7 +471,7 @@ export default class ModeratorController {
     if (existe) {
       return response
         .status(400)
-        .send(serialize.withoutWrapping({ error: 'Ya respondiste esta encuesta' }))
+        .send(await serialize.withoutWrapping({ error: 'Ya respondiste esta encuesta' }))
     }
 
     const { opcionElegida } = request.only(['opcionElegida'])
@@ -471,7 +479,7 @@ export default class ModeratorController {
       ? encuesta.opciones
       : JSON.parse(encuesta.opciones || '[]')
     if (!opcionElegida || !opciones.includes(opcionElegida)) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'Opción inválida' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'Opción inválida' }))
     }
 
     const respuesta = await RespuestaEncuesta.create({
@@ -489,8 +497,8 @@ export default class ModeratorController {
   }
 
   async avisosIndex({ request, serialize }: HttpContext) {
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const mensajes = await Aviso.query()
       .where('eliminado', false)
       .preload('autor', (q) => q.select('id', 'nombre', 'apellido'))
@@ -518,14 +526,14 @@ export default class ModeratorController {
     if (user.rol !== 'conductor' && !user.esModerador && user.rol !== 'admin') {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Solo conductores pueden publicar avisos' }))
+        .send(await serialize.withoutWrapping({ error: 'Solo conductores pueden publicar avisos' }))
     }
 
     const { contenido } = request.only(['contenido'])
     if (!contenido || typeof contenido !== 'string' || contenido.trim().length === 0) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El contenido no puede estar vacío' }))
+        .send(await serialize.withoutWrapping({ error: 'El contenido no puede estar vacío' }))
     }
 
     const msg = await Aviso.create({
@@ -571,14 +579,14 @@ export default class ModeratorController {
     if (!user.esModerador && user.rol !== 'admin') {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Solo moderadores pueden fijar avisos' }))
+        .send(await serialize.withoutWrapping({ error: 'Solo moderadores pueden fijar avisos' }))
     }
 
     const msg = await Aviso.find(params.id)
     if (!msg) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Mensaje no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Mensaje no encontrado' }))
     }
 
     msg.fijado = !msg.fijado
@@ -595,14 +603,14 @@ export default class ModeratorController {
     if (!user.esModerador && user.rol !== 'admin') {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'Solo moderadores pueden eliminar avisos' }))
+        .send(await serialize.withoutWrapping({ error: 'Solo moderadores pueden eliminar avisos' }))
     }
 
     const msg = await Aviso.find(params.id)
     if (!msg) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Mensaje no encontrado' }))
+        .send(await serialize.withoutWrapping({ error: 'Mensaje no encontrado' }))
     }
 
     msg.eliminado = true
@@ -622,8 +630,8 @@ export default class ModeratorController {
 
   async myEncuestas({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const encuestas = await Encuesta.query()
       .where('moderador_id', user.id)
       .orderBy('created_at', 'desc')
@@ -644,8 +652,8 @@ export default class ModeratorController {
 
   async myReports({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const reportes = await ReporteModerador.query()
       .where('moderador_id', user.id)
       .orderBy('created_at', 'desc')
@@ -711,11 +719,11 @@ export default class ModeratorController {
     if (!ciudad) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
+        .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
     }
 
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const estado = request.input('estado', '')
     const tipoProgramacion = request.input('tipoProgramacion', '')
 
@@ -791,7 +799,7 @@ export default class ModeratorController {
     if (!ciudad) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
+        .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
     }
 
     const viaje = await Viaje.query()
@@ -812,7 +820,7 @@ export default class ModeratorController {
     if (!viaje) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Viaje no encontrado en tu ciudad' }))
+        .send(await serialize.withoutWrapping({ error: 'Viaje no encontrado en tu ciudad' }))
     }
 
     const [ofertas, alertas, ganancias] = await Promise.all([
@@ -1129,11 +1137,11 @@ export default class ModeratorController {
     if (!ciudad) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
+        .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
     }
 
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const estado = request.input('estado', '')
     const fecha = request.input('fecha')
     const origen = request.input('origen')
@@ -1175,8 +1183,7 @@ export default class ModeratorController {
       .orderBy('hora_programada', 'asc')
       .limit(200)
 
-    const config = await ConfiguracionPlataforma.first()
-    const zonas = normalizarZonas(config?.zonasCobertura)
+    const zonas = await CoverageService.zonas()
     const ciudadLower = String(ciudad).toLowerCase()
 
     const enCiudad = candidatas.filter((v) => {
@@ -1240,23 +1247,10 @@ export default class ModeratorController {
    * Resuelve la ciudad/zona de una reserva: la del conductor asignado o, si
    * aún no tiene, la zona de cobertura más cercana a su origen.
    */
-  private zonaDeReserva(viaje: Viaje, zonas: any[]): string | null {
+  private zonaDeReserva(viaje: Viaje, zonas: Zona[]): string | null {
     if (viaje.conductor?.ciudad) return String(viaje.conductor.ciudad).toLowerCase()
     if (viaje.origenLat === null || viaje.origenLng === null) return null
-
-    let mejor: { zona: string; dist: number } | null = null
-    for (const z of zonas) {
-      const dist = calcularDistanciaKm(
-        Number(viaje.origenLat),
-        Number(viaje.origenLng),
-        Number(z?.lat),
-        Number(z?.lng)
-      )
-      if ((!mejor || dist < mejor.dist) && dist <= Number(z?.radio ?? 30)) {
-        mejor = { zona: String(z?.nombre || z?.zona || '').toLowerCase(), dist }
-      }
-    }
-    return mejor?.zona || null
+    return CoverageService.zonaDeEn(zonas, Number(viaje.origenLat), Number(viaje.origenLng))?.clave ?? null
   }
 
   private ciudadDeEmergencia(ciudad: string) {
@@ -1286,7 +1280,7 @@ export default class ModeratorController {
     if (!ciudad) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
+        .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
     }
 
     const filas = await AlertaEmergencia.query()
@@ -1314,11 +1308,11 @@ export default class ModeratorController {
     if (!ciudad) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
+        .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
     }
 
-    const page = Number.parseInt(request.input('page', '1'))
-    const limit = Number.parseInt(request.input('limit', '20'))
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const estado = request.input('estado', '')
 
     const alertas = await AlertaEmergencia.query()
@@ -1385,20 +1379,20 @@ export default class ModeratorController {
     if (!alerta) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Alerta de emergencia no encontrada' }))
+        .send(await serialize.withoutWrapping({ error: 'Alerta de emergencia no encontrada' }))
     }
 
     if (alerta.estado === 'resuelta') {
       return response
         .status(409)
-        .send(serialize.withoutWrapping({ error: 'La alerta ya fue resuelta' }))
+        .send(await serialize.withoutWrapping({ error: 'La alerta ya fue resuelta' }))
     }
 
     const zona = await resolverZonaAlerta(alerta.viajeId, numeroLatLng(alerta.lat), numeroLatLng(alerta.lng))
     if (zona && user.zonaModerador && zona !== user.zonaModerador) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'La emergencia pertenece a otra ciudad' }))
+        .send(await serialize.withoutWrapping({ error: 'La emergencia pertenece a otra ciudad' }))
     }
 
     if (alerta.estado === 'pendiente') {
@@ -1432,20 +1426,20 @@ export default class ModeratorController {
     if (!alerta) {
       return response
         .status(404)
-        .send(serialize.withoutWrapping({ error: 'Alerta de emergencia no encontrada' }))
+        .send(await serialize.withoutWrapping({ error: 'Alerta de emergencia no encontrada' }))
     }
 
     if (alerta.estado === 'resuelta') {
       return response
         .status(409)
-        .send(serialize.withoutWrapping({ error: 'La alerta ya fue resuelta' }))
+        .send(await serialize.withoutWrapping({ error: 'La alerta ya fue resuelta' }))
     }
 
     const zona = await resolverZonaAlerta(alerta.viajeId, numeroLatLng(alerta.lat), numeroLatLng(alerta.lng))
     if (zona && user.zonaModerador && zona !== user.zonaModerador) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'La emergencia pertenece a otra ciudad' }))
+        .send(await serialize.withoutWrapping({ error: 'La emergencia pertenece a otra ciudad' }))
     }
 
     alerta.estado = 'resuelta'

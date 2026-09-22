@@ -53,7 +53,8 @@ const dbConfig = defineConfig({
     sqlite: {
       client: 'better-sqlite3',
       connection: {
-        filename: app.tmpPath('db.sqlite3'),
+        // Los tests usan un archivo SQLite dedicado para no tocar la BD de desarrollo.
+        filename: app.tmpPath(app.inTest ? 'test.sqlite3' : 'db.sqlite3'),
       },
       useNullAsDefault: true,
       migrations: {

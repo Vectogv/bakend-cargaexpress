@@ -2,7 +2,6 @@ import db from '@adonisjs/lucid/services/db'
 import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
 import Oferta from '#models/oferta'
-import ConfiguracionPlataforma from '#models/configuracion_plataforma'
 
 /** Distancia haversine en kilómetros. */
 export function distanciaKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -46,25 +45,13 @@ export function normalizarZonas(zonas: unknown): any[] {
 
 export default class GeoService {
   /**
-   * Valida que una coordenada esté dentro de las zonas de cobertura configuradas.
-   * Si no hay zonas configuradas, se considera cubierta (igual que el flujo actual).
-   *
-   * Fuente única de verdad para viajes inmediatos y reservas programadas.
+   * Valida que una coordenada esté dentro de las zonas de cobertura activas.
+   * Si no hay zonas configuradas, se considera cubierta. Delegado a CoverageService
+   * (import dinámico para evitar la dependencia circular con este módulo).
    */
   static async validarCobertura(lat: number, lng: number): Promise<boolean> {
-    const config = await ConfiguracionPlataforma.first()
-    const zonas = normalizarZonas(config?.zonasCobertura)
-    if (zonas.length === 0) return true
-
-    return zonas.some((z: any) => {
-      const radio = Number(z?.radio)
-      const zLat = Number(z?.lat)
-      const zLng = Number(z?.lng)
-      if (!Number.isFinite(radio) || !Number.isFinite(zLat) || !Number.isFinite(zLng)) {
-        return false
-      }
-      return distanciaKm(lat, lng, zLat, zLng) <= radio
-    })
+    const { default: CoverageService } = await import('#services/coverage_service')
+    return CoverageService.estaCubierto(lat, lng)
   }
 
   static async obtenerViajesCercanos(lat: number, lng: number, radioKm: number = 5) {
@@ -89,9 +76,9 @@ export default class GeoService {
       id: String(v.id),
       _id: String(v.id),
       estado: v.estado,
-      precioEstimado: Number(v.precioEstimado),
+      precioEstimado: v.precioEstimado === null || v.precioEstimado === undefined ? null : Number(v.precioEstimado),
       distancia: Math.round((Number((v as any).$extras?.distancia || 0)) * 100) / 100,
-      tiempoEstimado: Number(v.tiempoEstimadoMinutos),
+      tiempoEstimado: v.tiempoEstimadoMinutos === null || v.tiempoEstimadoMinutos === undefined ? null : Number(v.tiempoEstimadoMinutos),
       carga: v.carga,
       descripcion: v.carga,
       createdAt: v.createdAt.toISO(),

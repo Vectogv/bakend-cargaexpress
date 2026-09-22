@@ -1,7 +1,6 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import db from '@adonisjs/lucid/services/db'
-import { setTimeout } from 'node:timers/promises'
 import GpsRateLimitService from '#services/gps_rate_limit_service'
 
 test.group('Socket.IO Reconnection', (group) => {

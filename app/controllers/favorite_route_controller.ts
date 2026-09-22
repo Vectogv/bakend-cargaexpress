@@ -39,7 +39,7 @@ export default class FavoriteRouteController {
     if (!nombre || !origenDireccion || !destinoDireccion) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'Nombre, origen y destino son requeridos' }))
+        .send(await serialize.withoutWrapping({ error: 'Nombre, origen y destino son requeridos' }))
     }
 
     const ruta = await RutaFavorita.create({
@@ -66,7 +66,7 @@ export default class FavoriteRouteController {
     const user = auth.getUserOrFail()
     const ruta = await RutaFavorita.query().where('id', params.id).where('user_id', user.id).first()
     if (!ruta) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Ruta no encontrada' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Ruta no encontrada' }))
     }
     await ruta.delete()
     return serialize.withoutWrapping({ success: true })

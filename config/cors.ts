@@ -24,7 +24,8 @@ const corsConfig = defineConfig({
   origin,
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
   headers: true,
-  exposeHeaders: [],
+  // Paginación de listados del panel (GET /api/admin/users)
+  exposeHeaders: ['X-Total-Count', 'X-Last-Page'],
   credentials: false,
   maxAge: 86400,
 })

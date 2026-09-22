@@ -2,6 +2,7 @@ import Conversacion from '#models/conversacion'
 import MensajeConversacion from '#models/mensaje_conversacion'
 import User from '#models/user'
 import type { HttpContext } from '@adonisjs/core/http'
+import db from '@adonisjs/lucid/services/db'
 import { emitToModerators, getIO } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 
@@ -105,15 +106,21 @@ export default class ConversacionController {
     const usuarioId = request.input('usuarioId')
     const ciudad = request.input('ciudad')
 
-    const lista = await this.listarConversaciones({
-      user,
-      filtroCiudad: user.esModerador || this.isAdmin(user) ? ciudad : null,
-    })
+    // Admin puede elegir ciudad; un moderador solo ve la suya (nunca todas).
+    let filtroCiudad: string | null = null
+    if (this.isAdmin(user)) {
+      filtroCiudad = ciudad || null
+    } else if (user.esModerador) {
+      if (!user.zonaModerador) return serialize.withoutWrapping([])
+      filtroCiudad = user.zonaModerador
+    }
+
+    const lista = await this.listarConversaciones({ user, filtroCiudad })
 
     if (usuarioId) {
       const conv = lista.find((c) => c.usuario?.id === Number(usuarioId))
       if (conv) return serialize.withoutWrapping(conv)
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Conversación no encontrada' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Conversación no encontrada' }))
     }
 
     return serialize.withoutWrapping(lista)
@@ -122,7 +129,7 @@ export default class ConversacionController {
   async store({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     if (!user.esModerador && !this.isAdmin(user)) {
-      return response.status(403).send(serialize.withoutWrapping({ error: 'Solo moderadores o administradores pueden abrir una conversación' }))
+      return response.status(403).send(await serialize.withoutWrapping({ error: 'Solo moderadores o administradores pueden abrir una conversación' }))
     }
 
     const usuarioId = Number(request.input('usuarioId'))
@@ -130,19 +137,19 @@ export default class ConversacionController {
     const ciudad = request.input('ciudad') || user.zonaModerador || null
 
     if (!usuarioId) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'usuarioId es requerido' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'usuarioId es requerido' }))
     }
     if (usuarioId === user.id) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'No puedes conversar contigo mismo' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'No puedes conversar contigo mismo' }))
     }
 
     const destinatario = await User.find(usuarioId)
     if (!destinatario) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
     const rol = destinatario.rol
     if (!['cliente', 'conductor', 'admin'].includes(rol ?? '') && !destinatario.esModerador) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'Solo se puede contactar a clientes, conductores, moderadores o administradores' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'Solo se puede contactar a clientes, conductores, moderadores o administradores' }))
     }
 
     let conversacion = await Conversacion.query()
@@ -190,14 +197,14 @@ export default class ConversacionController {
     const user = auth.getUserOrFail()
     const conversacion = await Conversacion.find(params.id)
     if (!conversacion) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Conversación no encontrada' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Conversación no encontrada' }))
     }
 
     const esModerador = conversacion.moderadorId === user.id
     const esUsuario = conversacion.usuarioId === user.id
     const esAdmin = this.isAdmin(user)
     if (!esModerador && !esUsuario && !esAdmin) {
-      return response.status(403).send(serialize.withoutWrapping({ error: 'No participas en esta conversación' }))
+      return response.status(403).send(await serialize.withoutWrapping({ error: 'No participas en esta conversación' }))
     }
 
     await MensajeConversacion.query()
@@ -232,16 +239,16 @@ export default class ConversacionController {
     const user = auth.getUserOrFail()
     const conversacion = await Conversacion.find(params.id)
     if (!conversacion) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Conversación no encontrada' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Conversación no encontrada' }))
     }
     const esAdmin = this.isAdmin(user)
     if (conversacion.moderadorId !== user.id && conversacion.usuarioId !== user.id && !esAdmin) {
-      return response.status(403).send(serialize.withoutWrapping({ error: 'No participas en esta conversación' }))
+      return response.status(403).send(await serialize.withoutWrapping({ error: 'No participas en esta conversación' }))
     }
 
     const texto = request.input('mensaje')
     if (!texto || typeof texto !== 'string' || texto.trim().length === 0) {
-      return response.status(422).send(serialize.withoutWrapping({ error: 'El mensaje no puede estar vacío' }))
+      return response.status(422).send(await serialize.withoutWrapping({ error: 'El mensaje no puede estar vacío' }))
     }
 
     const msg = await MensajeConversacion.create({
@@ -333,10 +340,24 @@ export default class ConversacionController {
     const q = (request.input('q') || '').toString().trim()
     const limit = Math.min(Number(request.input('limit') || 50), 100)
 
+    // Admin: cualquier usuario. Moderador: staff + conductores de su ciudad; los
+    // clientes solo aparecen al buscar (≥3 caracteres), nunca en un listado masivo.
+    const esAdmin = this.isAdmin(user)
+    const zona = user.zonaModerador
+    const buscaClientes = q.length >= 3
+
     const query = User.query()
       .select('id', 'email', 'nombre', 'apellido', 'telefono', 'avatar', 'rol', 'es_moderador', 'zona_moderador')
       .where((w) => {
-        w.where('rol', 'cliente').orWhere('rol', 'conductor').orWhere('rol', 'admin').orWhere('es_moderador', true)
+        if (esAdmin) {
+          w.where('rol', 'cliente').orWhere('rol', 'conductor').orWhere('rol', 'admin').orWhere('es_moderador', true)
+          return
+        }
+        w.where('rol', 'admin').orWhere('es_moderador', true)
+        if (zona) {
+          w.orWhereIn('id', db.from('conductores').where('ciudad', zona).select('usuario_id'))
+        }
+        if (buscaClientes) w.orWhere('rol', 'cliente')
       })
       .whereNot('id', user.id)
       .orderBy('nombre', 'asc')

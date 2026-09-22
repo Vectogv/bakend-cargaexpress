@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
+import { jsonColumn } from './json_column.js'
 
 export default class ConfiguracionPlataforma extends BaseModel {
   static table = 'configuracion_plataforma'
@@ -13,7 +14,7 @@ export default class ConfiguracionPlataforma extends BaseModel {
   @column()
   declare nequiNombre: string | null
 
-  @column()
+  @column(jsonColumn)
   declare zonasCobertura: any
 
   @column()

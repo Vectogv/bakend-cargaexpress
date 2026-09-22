@@ -10,20 +10,20 @@ export default class ChatController {
     const user = auth.getUserOrFail()
     const viaje = await Viaje.find(params.id)
     if (!viaje) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
     if (viaje.clienteId !== user.id && viaje.conductorId) {
       const conductor = await Conductor.find(viaje.conductorId)
       if (!conductor || conductor.usuarioId !== user.id) {
         return response
           .status(403)
-          .send(serialize.withoutWrapping({ error: 'No participas en este viaje' }))
+          .send(await serialize.withoutWrapping({ error: 'No participas en este viaje' }))
       }
     }
     if (!['aceptado', 'en_curso', 'conductor_en_camino', 'conductor_llegada', 'sos'].includes(viaje.estado)) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El chat solo está disponible durante el viaje' }))
+        .send(await serialize.withoutWrapping({ error: 'El chat solo está disponible durante el viaje' }))
     }
 
     const otrosMensajes =
@@ -68,7 +68,7 @@ export default class ChatController {
     const user = auth.getUserOrFail()
     const viaje = await Viaje.find(params.id)
     if (!viaje) {
-      return response.status(404).send(serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
 
     let esParticipante = viaje.clienteId === user.id
@@ -79,19 +79,19 @@ export default class ChatController {
     if (!esParticipante) {
       return response
         .status(403)
-        .send(serialize.withoutWrapping({ error: 'No participas en este viaje' }))
+        .send(await serialize.withoutWrapping({ error: 'No participas en este viaje' }))
     }
     if (!['aceptado', 'en_curso', 'conductor_en_camino', 'conductor_llegada', 'sos'].includes(viaje.estado)) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El chat solo está disponible durante el viaje' }))
+        .send(await serialize.withoutWrapping({ error: 'El chat solo está disponible durante el viaje' }))
     }
 
     const texto = request.input('mensaje')
     if (!texto || typeof texto !== 'string' || texto.trim().length === 0) {
       return response
         .status(422)
-        .send(serialize.withoutWrapping({ error: 'El mensaje no puede estar vacío' }))
+        .send(await serialize.withoutWrapping({ error: 'El mensaje no puede estar vacío' }))
     }
 
     const msg = await MensajeChat.create({
