@@ -23,6 +23,15 @@ Las que ya existían y siguen siendo necesarias: `APP_KEY`, `DB_HOST`, `DB_PORT`
 `FIREBASE_CREDENTIALS_PATH`, `MAPBOX_ACCESS_TOKEN`, `GOOGLE_SERVICE_ACCOUNT_KEY`,
 `GOOGLE_DRIVE_FOLDER_ID`, `SENTRY_DSN`.
 
+### Variables que faltan hoy en producción
+
+| Variable | Estado actual | Consecuencia |
+|---|---|---|
+| `MAPBOX_ACCESS_TOKEN` | no existe | El mapa del panel de moderación no carga |
+| `FIREBASE_CREDENTIALS_JSON` | no existe | Sin notificaciones push (start.sh no escribe el archivo) |
+| `GOOGLE_SERVICE_ACCOUNT_KEY` | solo existe `GOOGLE_SERVICE_ACCOUNT_PATH` | Ya se acepta el alias; el archivo debe existir en el contenedor |
+| `CORS_ORIGIN` | `https://tu-app.cargaexpress.com ...` (ejemplo, separado por espacios) | Debe listar los dominios reales separados por comas |
+
 ### Decisión pendiente: archivos subidos
 
 Railway no permite un Volume en un servicio con más de una réplica, y
@@ -41,7 +50,7 @@ Sin una de las dos, cada réplica guarda sus propios archivos y un redeploy los 
    ```sql
    SELECT id, email FROM users WHERE es_moderador = 1 AND (zona_moderador IS NULL OR zona_moderador = '');
    ```
-2. El redeploy instala `default-mysql-client` (nixpacks), necesario para los backups.
+2. El redeploy instala `postgresql-client` (nixpacks), necesario para los backups.
 
 ### Después de desplegar
 

@@ -29,6 +29,8 @@ export default await Env.create(new URL('../', import.meta.url), {
 
   GOOGLE_DRIVE_FOLDER_ID: Env.schema.string.optional(),
   GOOGLE_SERVICE_ACCOUNT_KEY: Env.schema.string.optional(),
+  // Alias aceptado para la ruta de la clave de servicio (así está nombrada en Railway).
+  GOOGLE_SERVICE_ACCOUNT_PATH: Env.schema.string.optional(),
   BACKUP_EMAIL: Env.schema.string.optional(),
 
   // Directorio absoluto para archivos subidos (p. ej. mount path de un Volume de Railway).
