@@ -28,6 +28,7 @@ import {
   COLUMNAS_VIAJE_MAPA_SOS,
   datosMapaSos,
 } from '#services/emergency_payload'
+import { adminUpdateUserValidator } from '#validators/user'
 
 export default class AdminController {
   async dashboard({ serialize }: HttpContext) {
@@ -282,7 +283,7 @@ export default class AdminController {
         .status(404)
         .send(await serialize.withoutWrapping({ error: 'Usuario no encontrado' }))
     }
-    const data = request.only(['nombre', 'apellido', 'email', 'telefono', 'edad'])
+    const data = await request.validateUsing(adminUpdateUserValidator)
     if (data.email && data.email !== user.email) {
       const exists = await User.findBy('email', data.email)
       if (exists) {
@@ -1230,12 +1231,22 @@ export default class AdminController {
       user.esModerador = esModerador === true || esModerador === 'true'
     }
     if (zonaModerador !== undefined) {
-      if (zonaModerador && !['cali', 'popayan', 'pasto'].includes(zonaModerador)) {
-        return response
-          .status(422)
-          .send(await serialize.withoutWrapping({ error: 'Zona inválida (cali, popayan, pasto)' }))
+      // La zona debe ser una de las configuradas por el admin en Cobertura. Antes
+      // estaba fijada a cali/popayan/pasto, así que al añadir una ciudad nueva no
+      // se le podía asignar ningún moderador.
+      const clave = zonaModerador ? String(zonaModerador).trim().toLowerCase() : ''
+      if (clave) {
+        const configuradas = (await CoverageService.zonas()).map((z) => z.clave)
+        const validas = configuradas.length > 0 ? configuradas : ['cali', 'popayan', 'pasto']
+        if (!validas.includes(clave)) {
+          return response.status(422).send(
+            await serialize.withoutWrapping({
+              error: `Zona inválida (${validas.join(', ')})`,
+            })
+          )
+        }
       }
-      user.zonaModerador = zonaModerador || null
+      user.zonaModerador = clave || null
     }
     await user.save()
 
