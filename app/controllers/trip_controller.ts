@@ -502,17 +502,29 @@ export default class TripController {
           )
         }
 
-        // Reservas programadas: evitar que el conductor acepte si ya tiene
-        // otro viaje incompatible en la misma franja horaria.
+        // FOR UPDATE sobre el conductor: serializa dos aceptaciones simultáneas
+        // del mismo conductor en viajes distintos.
+        await Conductor.query({ client: trx }).where('id', conductor.id).forUpdate().first()
+
+        // Un conductor = un servicio a la vez (inmediatos) y sin choques de
+        // horario (reservas programadas).
         const conflicto = await TripConflictService.conductorTieneConflicto(
           conductor.id,
           viaje,
           trx
         )
-        if (conflicto) {
+        if (conflicto && viaje.tipoProgramacion === 'programada') {
           throw Object.assign(new Error('CONFLICTO_HORARIO'), {
             statusCode: 409,
+            code: 'CONFLICTO_HORARIO',
             message: 'Tienes otro viaje incompatible en ese horario',
+          })
+        }
+        if (conflicto) {
+          throw Object.assign(new Error('CONDUCTOR_OCUPADO'), {
+            statusCode: 409,
+            code: 'CONDUCTOR_OCUPADO',
+            message: 'Ya estás atendiendo un servicio. Termínalo antes de aceptar otro viaje.',
           })
         }
 
@@ -542,7 +554,9 @@ export default class TripController {
       })
     } catch (err: any) {
       if (err?.statusCode) {
-        return response.status(err.statusCode).send({ error: err.message })
+        return response
+          .status(err.statusCode)
+          .send(err.code ? { error: err.message, code: err.code } : { error: err.message })
       }
       throw err
     }

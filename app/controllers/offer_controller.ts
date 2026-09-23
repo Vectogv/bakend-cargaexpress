@@ -85,6 +85,18 @@ export default class OfferController {
       throw e
     }
 
+    // Un conductor que ya atiende un servicio no puede ofertar en otro viaje
+    // inmediato (en reservas se valida el choque de horario al aceptar).
+    if (
+      viaje.tipoProgramacion !== 'programada' &&
+      (await TripConflictService.conductorOcupado(conductor.id, viaje.id))
+    ) {
+      return response.status(409).send({
+        error: 'Ya estás atendiendo un servicio. Termínalo antes de ofertar en otro viaje.',
+        code: 'CONDUCTOR_OCUPADO',
+      })
+    }
+
     const monto = Number.parseFloat(request.input('monto'))
     if (!monto || monto < 0) {
       return response.status(422).send({ error: 'Monto inválido' })
@@ -275,8 +287,11 @@ export default class OfferController {
         }
 
         // El conductor pudo ser suspendido o desverificado después de ofertar.
+        // FOR UPDATE sobre el conductor: serializa dos aceptaciones simultáneas
+        // de ofertas del mismo conductor en viajes distintos.
         const conductorOferta = await Conductor.query({ client: trx })
           .where('id', oferta.conductorId)
+          .forUpdate()
           .preload('usuario', (q) => q.select('id', 'suspendido'))
           .first()
         if (
@@ -290,16 +305,25 @@ export default class OfferController {
           })
         }
 
-        // Reservas programadas: evitar asignar un conductor con conflicto de horario.
+        // Un conductor = un servicio a la vez (inmediatos) y sin choques de
+        // horario (reservas programadas).
         const conflicto = await TripConflictService.conductorTieneConflicto(
           oferta.conductorId,
           viaje,
           trx
         )
-        if (conflicto) {
+        if (conflicto && viaje.tipoProgramacion === 'programada') {
           throw Object.assign(new Error('CONFLICTO_HORARIO'), {
             statusCode: 409,
+            code: 'CONFLICTO_HORARIO',
             message: 'El conductor tiene otro viaje incompatible en ese horario',
+          })
+        }
+        if (conflicto) {
+          throw Object.assign(new Error('CONDUCTOR_OCUPADO'), {
+            statusCode: 409,
+            code: 'CONDUCTOR_OCUPADO',
+            message: 'El conductor de esta oferta ya está atendiendo otro servicio. Elige otra oferta.',
           })
         }
 
@@ -322,7 +346,9 @@ export default class OfferController {
       })
     } catch (err: any) {
       if (err?.statusCode) {
-        return response.status(err.statusCode).send({ error: err.message })
+        return response
+          .status(err.statusCode)
+          .send(err.code ? { error: err.message, code: err.code } : { error: err.message })
       }
       throw err
     }
