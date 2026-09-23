@@ -512,12 +512,23 @@ export default class TripController {
     let viaje
     if (user.rol === 'conductor') {
       const conductor = await Conductor.findByOrFail('usuario_id', user.id)
-      viaje = await Viaje.query()
-        .where('conductor_id', conductor.id)
+      const viajeDelConductor = () =>
+        Viaje.query()
+          .where('conductor_id', conductor.id)
+          .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
+          .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
+      viaje = await viajeDelConductor()
         .whereIn('estado', ['aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos'])
-        .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
-        .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
         .first()
+      // Sin viaje en curso: el más reciente que espera la confirmación del
+      // cliente, para no perderlo al reiniciar la app. No cuenta como ocupado
+      // (TripConflictService), así que un viaje activo nuevo tiene prioridad.
+      if (!viaje) {
+        viaje = await viajeDelConductor()
+          .where('estado', 'pendiente_confirmacion')
+          .orderBy('id', 'desc')
+          .first()
+      }
     } else {
       viaje = await Viaje.query()
         .where('cliente_id', user.id)

@@ -1,5 +1,6 @@
 import Conductor from '#models/conductor'
 import Ganancia from '#models/ganancia'
+import Oferta from '#models/oferta'
 import UbicacionDriver from '#models/ubicacion_driver'
 import Viaje from '#models/viaje'
 import PDFDocument from 'pdfkit'
@@ -118,6 +119,55 @@ export default class DriverController {
 
     await RedisService.cacheSet(cacheKey, data, 30)
     return serialize.withoutWrapping(data)
+  }
+
+  @ApiOperation({
+    summary: 'Ofertas pendientes del conductor',
+    description:
+      'Devuelve las ofertas del conductor autenticado que siguen pendientes y no han vencido, con su vencimiento (expiresAt) y el origen/destino del viaje',
+  })
+  @ApiResponse({ type: 'object' })
+  async offers({ auth, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    if (user.rol !== 'conductor') {
+      return response.status(403).send({ error: 'Solo los conductores pueden ver sus ofertas' })
+    }
+    const conductor = await Conductor.findBy('usuario_id', user.id)
+    if (!conductor) {
+      return response.status(404).send({ error: 'Perfil de conductor no encontrado' })
+    }
+
+    const ofertas = await Oferta.query()
+      .where('conductor_id', conductor.id)
+      .where('estado', 'pendiente')
+      // Misma comparación que OfferExpiryService (hora local en SQL).
+      .where('expira_at', '>', DateTime.now().toSQL()!)
+      .preload('viaje')
+      .orderBy('created_at', 'desc')
+
+    return serialize.withoutWrapping(
+      ofertas.map((o) => ({
+        id: String(o.id),
+        viajeId: String(o.viajeId),
+        monto: o.monto,
+        estado: o.estado,
+        expiresAt: o.expiraAt ? o.expiraAt.toISO() : null,
+        createdAt: o.createdAt.toISO(),
+        viaje: {
+          origen: {
+            direccion: o.viaje.origenDireccion,
+            lat: Number(o.viaje.origenLat),
+            lng: Number(o.viaje.origenLng),
+          },
+          destino: {
+            direccion: o.viaje.destinoDireccion,
+            lat: Number(o.viaje.destinoLat),
+            lng: Number(o.viaje.destinoLng),
+          },
+          estado: o.viaje.estado,
+        },
+      }))
+    )
   }
 
   @ApiOperation({

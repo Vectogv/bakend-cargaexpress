@@ -109,6 +109,7 @@ router
   .group(() => {
     router.put('status', [controllers.Driver, 'status'])
     router.get('earnings', [controllers.Driver, 'earnings'])
+    router.get('offers', [controllers.Driver, 'offers'])
     router.get('stats', [controllers.Driver, 'stats'])
     router.get('today-stats', [controllers.Driver, 'todayStats'])
     router.get('earnings/history', [controllers.Driver, 'earningsHistory'])
