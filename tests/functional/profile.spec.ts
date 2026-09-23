@@ -1,5 +1,6 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
+import { updateProfileValidator } from '#validators/profile'
 
 test.group('Profile - Show', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
@@ -80,6 +81,31 @@ test.group('Profile - Update', (group) => {
 
     response.assertStatus(200)
     response.assertBodyContains({ nombre: 'Updated', apellido: 'Name', telefono: '123456789', edad: 30 })
+  })
+
+  test('nombre y apellido no pueden quedar vacíos y se recortan', async ({ client, assert }) => {
+    // Igual que adminUpdateUserValidator: si vienen, no pueden quedar vacíos.
+    for (const campo of ['nombre', 'apellido']) {
+      await assert.rejects(() => updateProfileValidator.validate({ [campo]: '   ' }))
+    }
+
+    const token = await registerAndGetToken(client)
+
+    // Por HTTP el bodyparser convierte los textos en blanco a null: se ignoran
+    // y el nombre anterior se conserva.
+    const vacio = await client
+      .put('/api/users/profile')
+      .bearerToken(token)
+      .json({ nombre: '   ', apellido: '' })
+    vacio.assertStatus(200)
+    vacio.assertBodyContains({ nombre: 'Original', apellido: 'User' })
+
+    const recortado = await client
+      .put('/api/users/profile')
+      .bearerToken(token)
+      .json({ nombre: '  Ana  ', apellido: ' Pérez ' })
+    recortado.assertStatus(200)
+    recortado.assertBodyContains({ nombre: 'Ana', apellido: 'Pérez' })
   })
 
   test('update email successfully', async ({ client }) => {
