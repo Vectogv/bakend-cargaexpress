@@ -104,6 +104,14 @@ async function viajePendienteConfirmacion(client: any, clientToken: string, driv
   return tripId
 }
 
+// El moderador solo puede resolver cuando venció el plazo de confirmación del
+// cliente (confirmacionTimeoutMin = 10 min): se simula que ya pasó.
+async function vencerPlazoConfirmacion(tripId: number) {
+  await db.from('viajes').where('id', tripId).update({
+    pendiente_confirmacion_desde: DateTime.now().minus({ minutes: 20 }).toSQL(),
+  })
+}
+
 test.group('H3 - Registro exige edad (>= 18)', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
@@ -367,6 +375,7 @@ test.group('H1 - Cierre sin confirmar notifica y se resuelve', (group) => {
     await db.from('conductores').where('id', driver.conductorId).update({ ciudad: 'cali' })
     const moderador = await crearModerador(client, 'Cali')
     const tripId = await viajePendienteConfirmacion(client, cliente.token, driver)
+    await vencerPlazoConfirmacion(tripId)
 
     const resuelto = await client
       .post(`/api/moderator/trips/${tripId}/resolve-close`)
@@ -382,6 +391,7 @@ test.group('H1 - Cierre sin confirmar notifica y se resuelve', (group) => {
     await db.from('conductores').where('id', driver.conductorId).update({ ciudad: ZONA })
     const moderador = await crearModerador(client, ZONA)
     const tripId = await viajePendienteConfirmacion(client, cliente.token, driver)
+    await vencerPlazoConfirmacion(tripId)
 
     const sinNota = await client
       .post(`/api/moderator/trips/${tripId}/resolve-close`)
@@ -402,6 +412,7 @@ test.group('H1 - Cierre sin confirmar notifica y se resuelve', (group) => {
     await db.from('conductores').where('id', driver.conductorId).update({ ciudad: ZONA })
     const moderador = await crearModerador(client, ZONA)
     const tripId = await viajePendienteConfirmacion(client, cliente.token, driver)
+    await vencerPlazoConfirmacion(tripId)
 
     const resuelto = await client
       .post(`/api/moderator/trips/${tripId}/resolve-close`)

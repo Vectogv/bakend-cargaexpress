@@ -40,6 +40,7 @@ import {
 } from '#services/moderator_trip_events'
 import SignedUploadService from '#services/signed_upload_service'
 import CoverageService, { type Zona } from '#services/coverage_service'
+import antifraudeConfig from '#config/antifraude'
 
 export default class ModeratorController {
   async storeComunicado({ auth, request, response, serialize }: HttpContext) {
@@ -983,6 +984,23 @@ export default class ModeratorController {
 
       if (zona.trim().toLowerCase() !== user.zonaModerador.trim().toLowerCase()) {
         return response.status(403).json({ error: 'El viaje pertenece a otra ciudad' })
+      }
+    }
+
+    // El cliente tiene `confirmacionTimeoutMin` minutos para confirmar o
+    // rechazar el cierre; antes de eso nadie puede resolverlo por él.
+    // (Viajes antiguos sin `pendienteConfirmacionDesde` no se bloquean.)
+    if (viaje.pendienteConfirmacionDesde) {
+      const plazo = viaje.pendienteConfirmacionDesde.plus({
+        minutes: antifraudeConfig.confirmacionTimeoutMin,
+      })
+      if (DateTime.now() < plazo) {
+        const minutosRestantes = Math.max(1, Math.ceil(plazo.diffNow('minutes').minutes))
+        return response.status(409).json({
+          error: `El cliente todavía está dentro del plazo para confirmar el cierre. Podrás resolverlo en ${minutosRestantes} min.`,
+          code: 'CONFIRMACION_EN_PLAZO',
+          minutosRestantes,
+        })
       }
     }
 
