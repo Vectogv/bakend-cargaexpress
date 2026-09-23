@@ -70,6 +70,15 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
   @column()
   declare comprobantePago: string | null
 
+  /** Deuda que cubre el comprobante en revisión (snapshot al subirlo). */
+  @column({
+    consume: (value: unknown) => (value != null ? Number(value) : null),
+  })
+  declare montoComprobante: number | null
+
+  @column.dateTime()
+  declare comprobanteSubidoAt: DateTime | null
+
   @column()
   declare esModerador: boolean
 

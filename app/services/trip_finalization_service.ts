@@ -6,7 +6,9 @@ import Conductor from '#models/conductor'
 import Ganancia from '#models/ganancia'
 import User from '#models/user'
 import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
-import DriverDebtSuspensionService from '#services/driver_debt_suspension_service'
+import DriverDebtSuspensionService, {
+  DIAS_PLAZO_DEUDA_COMISION,
+} from '#services/driver_debt_suspension_service'
 
 /**
  * TripFinalizationService
@@ -253,7 +255,7 @@ export default class TripFinalizationService {
           // La fecha límite se fija solo en el primer viaje sin pagar.
           // Si ya tiene una fecha activa, no se reinicia.
           if (!conductorUser.deudaFechaLimite) {
-            conductorUser.deudaFechaLimite = DateTime.now().plus({ days: 15 })
+            conductorUser.deudaFechaLimite = DateTime.now().plus({ days: DIAS_PLAZO_DEUDA_COMISION })
           }
 
           await conductorUser.useTransaction(trx).save()

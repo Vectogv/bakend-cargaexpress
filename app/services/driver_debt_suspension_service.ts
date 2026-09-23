@@ -11,6 +11,9 @@ export const ESTADOS_SUSPENSION_PAGO = ['suspension_por_pago', 'esperando_confir
 
 export const CODIGO_SUSPENSION_PAGO = 'CUENTA_SUSPENDIDA_POR_PAGO'
 
+/** Días para pagar la deuda de comisión desde el primer viaje sin pagar. */
+export const DIAS_PLAZO_DEUDA_COMISION = 15
+
 /**
  * Suspensión por pago de conductores: la comisión de cada viaje se acumula en
  * `monto_deuda` con una fecha límite (`deuda_fecha_limite`, 15 días desde el

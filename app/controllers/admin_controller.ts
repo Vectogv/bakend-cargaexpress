@@ -28,6 +28,8 @@ import {
   emitTripStatusChanged,
 } from '#start/socket'
 import TripFinalizationService from '#services/trip_finalization_service'
+import { DIAS_PLAZO_DEUDA_COMISION } from '#services/driver_debt_suspension_service'
+import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
 import { sendToMultiple } from '#services/push_notification_service'
 import SignedUploadService from '#services/signed_upload_service'
@@ -1096,6 +1098,8 @@ export default class AdminController {
     user.montoDeuda = null
     user.deudaFechaLimite = null
     user.comprobantePago = null
+    user.montoComprobante = null
+    user.comprobanteSubidoAt = null
     await user.save()
     return serialize.withoutWrapping({
       id: user.id,
@@ -1116,6 +1120,8 @@ export default class AdminController {
         'monto_deuda',
         'deuda_fecha_limite',
         'comprobante_pago',
+        'monto_comprobante',
+        'comprobante_subido_at',
         'created_at'
       )
 
@@ -1126,7 +1132,10 @@ export default class AdminController {
         nombre: `${u.nombre} ${u.apellido}`.trim(),
         email: u.email,
         montoDeuda: u.montoDeuda,
-        monto: Number(u.montoDeuda ?? 0),
+        // Lo que cubre el comprobante (lo que se descuenta al aprobar).
+        montoComprobante: u.montoComprobante,
+        comprobanteSubidoAt: u.comprobanteSubidoAt?.toISO() || null,
+        monto: Number(u.montoComprobante ?? u.montoDeuda ?? 0),
         concepto: 'Deuda activa',
         deudaFechaLimite: u.deudaFechaLimite?.toISO() || null,
         comprobante: SignedUploadService.sign(u.comprobantePago),
@@ -1148,23 +1157,103 @@ export default class AdminController {
         .send(await serialize.withoutWrapping({ error: 'El usuario no tiene un comprobante pendiente' }))
     }
 
-    user.tieneDeudaActiva = false
-    user.estadoCuenta = 'activa'
-    user.montoDeuda = null
-    user.deudaFechaLimite = null
-    user.comprobantePago = null
-    await user.save()
+    // Solo se descuenta lo que cubría el comprobante (la deuda al subirlo). Las
+    // comisiones de viajes terminados durante la revisión siguen pendientes.
+    // Con el usuario bloqueado para no pisar una finalización concurrente.
+    const resultado = await db.transaction(async (trx) => {
+      const u = await User.query({ client: trx }).where('id', user.id).forUpdate().firstOrFail()
+      if (u.estadoCuenta !== 'esperando_confirmacion') return null
+
+      const deuda = Number(u.montoDeuda) || 0
+      // Comprobantes subidos antes de guardar el monto: cubren toda la deuda.
+      const cubierto = u.montoComprobante !== null ? Number(u.montoComprobante) : deuda
+      const restante = Math.max(0, Math.round((deuda - cubierto) * 100) / 100)
+
+      if (u.rol === 'conductor') {
+        await this.marcarComisionesCubiertas(u, cubierto, trx)
+      }
+
+      u.estadoCuenta = 'activa'
+      u.comprobantePago = null
+      u.montoComprobante = null
+      u.comprobanteSubidoAt = null
+      if (restante > 0) {
+        u.montoDeuda = restante
+        u.tieneDeudaActiva = true
+        u.deudaFechaLimite = DateTime.now().plus({ days: DIAS_PLAZO_DEUDA_COMISION })
+      } else {
+        u.montoDeuda = null
+        u.tieneDeudaActiva = false
+        u.deudaFechaLimite = null
+      }
+      await u.useTransaction(trx).save()
+      return u
+    })
+
+    if (!resultado) {
+      return response
+        .status(422)
+        .send(await serialize.withoutWrapping({ error: 'El usuario no tiene un comprobante pendiente' }))
+    }
+
+    const restante = Number(resultado.montoDeuda) || 0
+    const deudaFechaLimite = resultado.deudaFechaLimite?.toISO() ?? null
+    const message =
+      restante > 0
+        ? `Tu pago ha sido confirmado y tu cuenta está activa. Te queda una deuda de $${restante.toLocaleString('es-CO')} por viajes terminados mientras se revisaba el comprobante; tienes ${DIAS_PLAZO_DEUDA_COMISION} días para pagarla.`
+        : 'Tu pago ha sido confirmado. Tu cuenta está activa nuevamente.'
 
     // Cliente o conductor: el conductor escucha en su room driver:{id}.
-    emitToUser(user.id, 'payment:confirmed', {
-      message: 'Tu pago ha sido confirmado. Tu cuenta está activa nuevamente.',
+    emitToUser(resultado.id, 'payment:confirmed', {
+      message,
+      estadoCuenta: resultado.estadoCuenta,
+      montoDeuda: restante,
+      deudaFechaLimite,
     })
 
     return serialize.withoutWrapping({
-      id: user.id,
-      estadoCuenta: user.estadoCuenta,
-      message: 'Pago confirmado. Cuenta reactivada.',
+      id: resultado.id,
+      estadoCuenta: resultado.estadoCuenta,
+      montoDeuda: restante,
+      deudaFechaLimite,
+      message:
+        restante > 0
+          ? `Pago confirmado. Cuenta reactivada con deuda pendiente de $${restante}.`
+          : 'Pago confirmado. Cuenta reactivada.',
     })
+  }
+
+  /**
+   * Marca como pagadas las comisiones del conductor que cubre el comprobante:
+   * de la más vieja a la más nueva, solo las cubiertas por completo y creadas
+   * hasta que se subió el comprobante.
+   */
+  private async marcarComisionesCubiertas(user: User, cubierto: number, trx: TransactionClientContract) {
+    const conductor = await Conductor.query({ client: trx }).where('usuario_id', user.id).first()
+    if (!conductor || cubierto <= 0) return
+
+    const hasta = user.comprobanteSubidoAt?.toMillis() ?? null
+    const pendientes = await Ganancia.query({ client: trx })
+      .where('conductor_id', conductor.id)
+      .where('comision_pagada', false)
+      .whereNotNull('comision')
+      .orderBy('created_at', 'asc')
+      .orderBy('id', 'asc')
+
+    const ids: number[] = []
+    let acumulado = 0
+    for (const g of pendientes) {
+      if (hasta !== null && g.createdAt.toMillis() > hasta) break
+      const siguiente = Math.round((acumulado + Number(g.comision)) * 100) / 100
+      if (siguiente > cubierto) break
+      acumulado = siguiente
+      ids.push(g.id)
+    }
+    if (ids.length === 0) return
+
+    await Ganancia.query({ client: trx })
+      .whereIn('id', ids)
+      .update({ comision_pagada: true, comision_pagada_at: DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss') })
   }
 
   async rejectPayment({ params, response, serialize }: HttpContext) {
@@ -1182,6 +1271,8 @@ export default class AdminController {
 
     user.estadoCuenta = 'suspension_por_pago'
     user.comprobantePago = null
+    user.montoComprobante = null
+    user.comprobanteSubidoAt = null
     await user.save()
 
     const diasRestantes = user.deudaFechaLimite
