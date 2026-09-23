@@ -1,12 +1,17 @@
 import { BaseSeeder } from '@adonisjs/lucid/seeders'
 import db from '@adonisjs/lucid/services/db'
 import hash from '@adonisjs/core/services/hash'
+import { DateTime } from 'luxon'
 
 export default class extends BaseSeeder {
   // Crea cuentas con contraseñas triviales: nunca debe ejecutarse en producción.
   static environment = ['development', 'testing']
 
   async run() {
+    // Lucid lee created_at/updated_at como DateTime: con `new Date()` crudo
+    // (SQLite lo guarda como número) el login fallaba con E_INVALID_DATE_COLUMN_VALUE.
+    const ahora = DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss')
+
     const adminExists = await db.from('users').where('email', 'admin@gmail.com').first()
     if (!adminExists) {
       await db.table('users').insert({
@@ -19,8 +24,8 @@ export default class extends BaseSeeder {
         edad: null,
         full_name: null,
         avatar: null,
-        created_at: new Date(),
-        updated_at: new Date(),
+        created_at: ahora,
+        updated_at: ahora,
       })
       console.log('Admin created: admin@gmail.com / 123456')
     } else if (!adminExists.password.startsWith('$')) {
@@ -42,8 +47,8 @@ export default class extends BaseSeeder {
         edad: 30,
         full_name: null,
         avatar: null,
-        created_at: new Date(),
-        updated_at: new Date(),
+        created_at: ahora,
+        updated_at: ahora,
       })
       console.log('Conductor created: conductor@gmail.com / 123456')
     } else {
@@ -62,8 +67,8 @@ export default class extends BaseSeeder {
         edad: 25,
         full_name: null,
         avatar: null,
-        created_at: new Date(),
-        updated_at: new Date(),
+        created_at: ahora,
+        updated_at: ahora,
       })
       console.log('Client created: cliente@gmail.com / 123456')
     } else {
