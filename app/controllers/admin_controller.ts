@@ -20,7 +20,9 @@ import CoverageService, { validarZonasEntrada } from '#services/coverage_service
 import { DateTime } from 'luxon'
 import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
-import { emitToDriver, emitToClient, emitToAdmin } from '#start/socket'
+import { emitToDriver, emitToClient, emitToAdmin, emitTripStatusChanged } from '#start/socket'
+import TripFinalizationService from '#services/trip_finalization_service'
+import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
 import { sendToMultiple } from '#services/push_notification_service'
 import SignedUploadService from '#services/signed_upload_service'
 import {
@@ -893,7 +895,55 @@ export default class AdminController {
     )
   }
 
-  async resolveDispute({ params, request, response, serialize }: HttpContext) {
+  /**
+   * Lleva a un estado final el viaje de una disputa resuelta.
+   *  • favor_conductor → 'finalizado' con TripFinalizationService (ganancia y
+   *    comisión en una transacción idempotente, igual que confirm-close).
+   *  • favor_cliente   → 'cancelado', sin ganancia ni comisión.
+   * Solo actúa si el viaje sigue en 'disputa' (las disputas abiertas sobre
+   * viajes ya finalizados no cambian su estado).
+   */
+  private async cerrarViajeEnDisputa(
+    viajeId: number,
+    resultado: 'favor_conductor' | 'favor_cliente',
+    adminId: number
+  ): Promise<{ ok: true; viaje: Viaje | null } | { ok: false; statusCode: number; error: string }> {
+    const actual = await Viaje.find(viajeId)
+    if (!actual || actual.estado !== 'disputa') return { ok: true, viaje: actual }
+
+    if (resultado === 'favor_conductor') {
+      const montoFinal = actual.precioFinal ?? actual.precioCliente ?? actual.precioEstimado ?? 0
+      const result = await TripFinalizationService.finalize({
+        viajeId,
+        montoFinal,
+        actorUserId: adminId,
+        actorRol: 'admin',
+      })
+      if (!result.ok) return result
+    } else {
+      await db.transaction(async (trx) => {
+        const viaje = await Viaje.query({ client: trx }).where('id', viajeId).forUpdate().first()
+        if (!viaje || viaje.estado !== 'disputa') return
+        viaje.estado = 'cancelado'
+        viaje.motivoCancelacion = 'Disputa resuelta a favor del cliente'
+        viaje.canceladoAt = DateTime.now()
+        await viaje.useTransaction(trx).save()
+      })
+    }
+
+    const viaje = await Viaje.find(viajeId)
+    if (viaje) {
+      const conductor = viaje.conductorId ? await Conductor.find(viaje.conductorId) : null
+      emitTripStatusChanged(viaje.clienteId, conductor?.usuarioId, {
+        id: String(viaje.id),
+        estado: viaje.estado,
+      })
+      emitTripUpdateToModerators(viaje)
+    }
+    return { ok: true, viaje }
+  }
+
+  async resolveDispute({ auth, params, request, response, serialize }: HttpContext) {
     const disputa = await Disputa.find(params.id)
     if (!disputa) {
       return response
@@ -919,10 +969,38 @@ export default class AdminController {
       )
     }
 
+    // Toma la disputa de forma condicional: si dos admins la resuelven a la
+    // vez, solo uno la procesa (el otro recibe 400).
+    const estadoAnterior = disputa.estado
+    const resueltaAt = DateTime.now()
+    const tomadas = await Disputa.query()
+      .where('id', disputa.id)
+      .whereNot('estado', 'resuelta')
+      .update({
+        estado: 'resuelta',
+        resultado,
+        resuelta_at: resueltaAt.toFormat('yyyy-MM-dd HH:mm:ss'),
+      })
+    if (Number(Array.isArray(tomadas) ? tomadas[0] : tomadas) === 0) {
+      return response
+        .status(400)
+        .send(await serialize.withoutWrapping({ error: 'La disputa ya fue resuelta' }))
+    }
     disputa.estado = 'resuelta'
     disputa.resultado = resultado
-    disputa.resueltaAt = DateTime.now()
-    await disputa.save()
+    disputa.resueltaAt = resueltaAt
+
+    // Cierra el viaje que quedó en 'disputa' (antes quedaba bloqueado para
+    // siempre y el cliente no podía pedir otro viaje).
+    const cierre = await this.cerrarViajeEnDisputa(disputa.viajeId, resultado, auth.user!.id)
+    if (!cierre.ok) {
+      await Disputa.query()
+        .where('id', disputa.id)
+        .update({ estado: estadoAnterior, resultado: null, resuelta_at: null })
+      return response
+        .status(cierre.statusCode)
+        .send(await serialize.withoutWrapping({ error: cierre.error }))
+    }
 
     if (resultado === 'favor_conductor') {
       const cliente = await User.find(disputa.clienteId)
@@ -996,6 +1074,7 @@ export default class AdminController {
       estado: disputa.estado,
       resultado: disputa.resultado,
       resueltaAt: disputa.resueltaAt?.toISO(),
+      viajeEstado: cierre.viaje?.estado ?? null,
     })
   }
 
