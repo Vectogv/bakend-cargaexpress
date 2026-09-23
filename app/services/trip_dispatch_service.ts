@@ -1,6 +1,7 @@
 import Conductor from '#models/conductor'
-import type Viaje from '#models/viaje'
+import Viaje from '#models/viaje'
 import GeoService from '#services/geo_service'
+import { ESTADOS_CONDUCTOR_OCUPADO } from '#services/trip_conflict_service'
 import { emitToDriver } from '#start/socket'
 import { sendToMultiple } from '#services/push_notification_service'
 
@@ -25,11 +26,23 @@ export default class TripDispatchService {
     const conductorIds = cercanosRaw.map((c: any) => c.id)
     if (conductorIds.length === 0) return 0
 
-    const conductoresCercanos = await Conductor.query()
-      .whereIn('id', conductorIds)
-      .preload('usuario')
-
     const esProgramada = viaje.tipoProgramacion === 'programada'
+
+    const query = Conductor.query().whereIn('id', conductorIds).preload('usuario')
+    // Viaje inmediato: no se notifica a conductores que ya atienden un servicio
+    // (no podrían ofertar: ver TripConflictService.conductorOcupado).
+    if (!esProgramada) {
+      query.whereNotIn(
+        'id',
+        Viaje.query()
+          .select('conductor_id')
+          .whereNotNull('conductor_id')
+          .whereIn('estado', ESTADOS_CONDUCTOR_OCUPADO)
+          .where((q) => q.whereNot('tipo_programacion', 'programada').orWhereNot('estado', 'aceptado'))
+      )
+    }
+    const conductoresCercanos = await query
+    if (conductoresCercanos.length === 0) return 0
 
     // F deduplica las notificaciones con `_id ?? id`: siempre enviamos ambas
     // como String, además de `tripId`, para que jamás se cuelgue con "null".

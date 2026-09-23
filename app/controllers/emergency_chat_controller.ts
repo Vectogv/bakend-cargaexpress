@@ -6,13 +6,14 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { emitToModerators, emitToAdmin, getIO } from '#start/socket'
 import { resolverZonaAlerta } from '#services/moderator_trip_events'
 import { sendToToken } from '#services/push_notification_service'
+import { claveDe } from '#services/coverage_service'
 
 export default class EmergencyChatController {
   private async esParticipante(alerta: AlertaEmergencia, _viaje: Viaje | null, user: User, zona: string | null) {
     if (user.rol === 'admin') return true
     if (user.id === alerta.userId) return true
 
-    if (user.esModerador && zona && user.zonaModerador === zona) return true
+    if (user.esModerador && zona && user.zonaModerador && claveDe(user.zonaModerador) === claveDe(zona)) return true
 
     return false
   }

@@ -12,7 +12,9 @@ import User from '#models/user'
  */
 
 const uniq = () => `${Date.now()}${Math.floor(Math.random() * 1e6)}`
-const URL = 'http://localhost:3333'
+// Puerto real del servidor de tests: `node ace test` usa otro aleatorio si
+// el 3333 está ocupado (p. ej. por un `node ace serve` de desarrollo).
+const URL = `http://localhost:${process.env.PORT ?? 3333}`
 
 async function registrar(client: any, rol: 'cliente' | 'admin' | 'moderador') {
   const res = await client.post('/api/auth/register').json({

@@ -39,7 +39,8 @@ import {
   emitTripUpdateToModerators,
 } from '#services/moderator_trip_events'
 import SignedUploadService from '#services/signed_upload_service'
-import CoverageService, { type Zona } from '#services/coverage_service'
+import CoverageService, { claveDe, type Zona } from '#services/coverage_service'
+import antifraudeConfig from '#config/antifraude'
 
 export default class ModeratorController {
   async storeComunicado({ auth, request, response, serialize }: HttpContext) {
@@ -216,7 +217,7 @@ export default class ModeratorController {
         .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
-    if (user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
+    if (user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
@@ -247,7 +248,7 @@ export default class ModeratorController {
         .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
-    if (user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
+    if (user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
@@ -291,7 +292,7 @@ export default class ModeratorController {
     }
 
     const esAdmin = user.rol === 'admin'
-    if (!esAdmin && user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
+    if (!esAdmin && user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
@@ -333,7 +334,7 @@ export default class ModeratorController {
     }
 
     const esAdmin = user.rol === 'admin'
-    if (!esAdmin && user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
+    if (!esAdmin && user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
@@ -981,8 +982,25 @@ export default class ModeratorController {
         return response.status(403).json({ error: 'No se pudo determinar la zona del viaje' })
       }
 
-      if (zona.trim().toLowerCase() !== user.zonaModerador.trim().toLowerCase()) {
+      if (claveDe(zona) !== claveDe(user.zonaModerador)) {
         return response.status(403).json({ error: 'El viaje pertenece a otra ciudad' })
+      }
+    }
+
+    // El cliente tiene `confirmacionTimeoutMin` minutos para confirmar o
+    // rechazar el cierre; antes de eso nadie puede resolverlo por él.
+    // (Viajes antiguos sin `pendienteConfirmacionDesde` no se bloquean.)
+    if (viaje.pendienteConfirmacionDesde) {
+      const plazo = viaje.pendienteConfirmacionDesde.plus({
+        minutes: antifraudeConfig.confirmacionTimeoutMin,
+      })
+      if (DateTime.now() < plazo) {
+        const minutosRestantes = Math.max(1, Math.ceil(plazo.diffNow('minutes').minutes))
+        return response.status(409).json({
+          error: `El cliente todavía está dentro del plazo para confirmar el cierre. Podrás resolverlo en ${minutosRestantes} min.`,
+          code: 'CONFIRMACION_EN_PLAZO',
+          minutosRestantes,
+        })
       }
     }
 

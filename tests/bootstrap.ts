@@ -2,7 +2,7 @@ import { assert } from '@japa/assert'
 import { apiClient } from '@japa/api-client'
 import app from '@adonisjs/core/services/app'
 import type { Config } from '@japa/runner/types'
-import { rm } from 'node:fs/promises'
+import { readFile, rm, writeFile } from 'node:fs/promises'
 import { MigrationRunner } from '@adonisjs/lucid/migration'
 import { pluginAdonisJS } from '@japa/plugin-adonisjs'
 import { dbAssertions } from '@adonisjs/lucid/plugins/db'
@@ -42,6 +42,34 @@ export const plugins: Config['plugins'] = [
  */
 const TEST_DB_FILE = 'test.sqlite3'
 
+function procesoVivo(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error: any) {
+    return error?.code === 'EPERM'
+  }
+}
+
+/**
+ * Impide dos corridas simultáneas de la suite: ambas borrarían y re-migrarían
+ * el mismo tmp/test.sqlite3 y se pisarían los datos (fallos masivos y
+ * aleatorios, p. ej. 422 por zonas de cobertura de la otra corrida).
+ * Devuelve la función que libera el candado al terminar.
+ */
+async function tomarCandado(filename: string) {
+  const candado = `${filename}.lock`
+  const previo = Number(await readFile(candado, 'utf8').catch(() => ''))
+  if (previo && previo !== process.pid && procesoVivo(previo)) {
+    throw new Error(
+      `Ya hay otra corrida de tests usando tmp/${TEST_DB_FILE} (pid ${previo}). ` +
+        `Espera a que termine (o borra ${candado} si ese proceso ya no existe).`
+    )
+  }
+  await writeFile(candado, String(process.pid))
+  return () => rm(candado, { force: true })
+}
+
 /**
  * Prepara una BD SQLite dedicada y limpia (tmp/test.sqlite3) y corre las
  * migraciones. Nunca toca tmp/db.sqlite3 (desarrollo).
@@ -59,6 +87,8 @@ async function prepareTestDatabase() {
     )
   }
 
+  const liberarCandado = await tomarCandado(filename)
+
   // Cierra cualquier conexión abierta antes de borrar el archivo (Windows lo bloquea).
   await db.manager.closeAll()
   for (const suffix of ['', '-journal', '-wal', '-shm']) {
@@ -74,6 +104,8 @@ async function prepareTestDatabase() {
   const runner = new MigrationRunner(db, app, { direction: 'up', connectionName: connection })
   await runner.run()
   if (runner.error) throw runner.error
+
+  return liberarCandado
 }
 
 export const runnerHooks: Required<Pick<Config, 'setup' | 'teardown'>> = {

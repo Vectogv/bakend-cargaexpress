@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import User from '#models/user'
 import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
@@ -32,6 +33,36 @@ import antifraudeConfig from '#config/antifraude'
 import logger from '@adonisjs/core/services/logger'
 import AntifraudeService from '#services/antifraude_service'
 
+/** Estados en los que un viaje del cliente le impide pedir o reservar otro. */
+const ESTADOS_VIAJE_ACTIVO_CLIENTE = [
+  'buscando_conductor',
+  'pendiente',
+  'aceptado',
+  'conductor_en_camino',
+  'conductor_llegada',
+  'en_curso',
+  'entregado',
+  'esperando_confirmacion',
+  'sos',
+  'disputa',
+]
+
+function viajeActivoDelCliente(clienteId: number, trx?: TransactionClientContract) {
+  return Viaje.query(trx ? { client: trx } : {})
+    .where('cliente_id', clienteId)
+    .whereIn('estado', ESTADOS_VIAJE_ACTIVO_CLIENTE)
+    .first()
+}
+
+/**
+ * SELECT ... FOR UPDATE sobre la fila del cliente: serializa la creación de
+ * viajes/reservas del mismo cliente (MySQL). En SQLite es un no-op, pero allí
+ * las transacciones ya se serializan en la única conexión.
+ */
+async function bloquearCliente(clienteId: number, trx: TransactionClientContract) {
+  await User.query({ client: trx }).where('id', clienteId).forUpdate().first()
+}
+
 export default class TripController {
   @ApiOperation({ summary: 'Solicitar un viaje', description: 'Crea una nueva solicitud de viaje' })
   @ApiBody({ type: () => tripRequestValidator })
@@ -50,10 +81,8 @@ export default class TripController {
     }
 
     // Un cliente no puede tener más de un viaje activo simultáneo.
-    const viajeActivo = await Viaje.query()
-      .where('cliente_id', user.id)
-      .whereIn('estado', ['buscando_conductor', 'pendiente', 'aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos', 'disputa'])
-      .first()
+    // Verificación rápida (se repite bajo bloqueo antes de insertar).
+    const viajeActivo = await viajeActivoDelCliente(user.id)
     if (viajeActivo) {
       return response.status(409).send({
         error: 'Ya tienes un viaje activo. Debes cancelarlo o esperar a que termine.',
@@ -71,23 +100,44 @@ export default class TripController {
         .send({ error: await CoverageService.mensajeFueraDeCobertura() })
     }
 
-    const viaje = await Viaje.create({
-      clienteId: user.id,
-      estado: 'creado',
-      origenDireccion: data.origen.direccion,
-      origenLat: data.origen.lat,
-      origenLng: data.origen.lng,
-      destinoDireccion: data.destino.direccion,
-      destinoLat: data.destino.lat,
-      destinoLng: data.destino.lng,
-      carga: data.descripcion || null,
-      precioCliente: data.precioCliente,
-      precioEstimado: data.precioCliente,
+    // Verificación + INSERT atómicos: el FOR UPDATE sobre la fila del cliente
+    // serializa solicitudes simultáneas (doble tap, reintentos sin
+    // X-Idempotency-Key), así solo una puede crear el viaje.
+    const creado = await db.transaction(async (trx) => {
+      await bloquearCliente(user.id, trx)
+      const activo = await viajeActivoDelCliente(user.id, trx)
+      if (activo) return { activo }
+
+      const nuevo = await Viaje.create(
+        {
+          clienteId: user.id,
+          estado: 'creado',
+          origenDireccion: data.origen.direccion,
+          origenLat: data.origen.lat,
+          origenLng: data.origen.lng,
+          destinoDireccion: data.destino.direccion,
+          destinoLat: data.destino.lat,
+          destinoLng: data.destino.lng,
+          carga: data.descripcion || null,
+          precioCliente: data.precioCliente,
+          precioEstimado: data.precioCliente,
+        },
+        { client: trx }
+      )
+
+      // Transicion inmediata a buscando_conductor
+      nuevo.estado = 'buscando_conductor'
+      await nuevo.useTransaction(trx).save()
+      return { viaje: nuevo }
     })
 
-    // Transicion inmediata a buscando_conductor
-    viaje.estado = 'buscando_conductor'
-    await viaje.save()
+    if (creado.activo) {
+      return response.status(409).send({
+        error: 'Ya tienes un viaje activo. Debes cancelarlo o esperar a que termine.',
+        viajeId: String(creado.activo.id),
+      })
+    }
+    const viaje = creado.viaje!
 
     emitToClient(viaje.clienteId, 'trip:status_changed', {
       id: String(viaje.id),
@@ -143,21 +193,8 @@ export default class TripController {
 
     // Un cliente no puede reservar mientras tiene un viaje en curso.
     // Las demás reservas futuras no lo bloquean: puede tener varias programadas.
-    const viajeEnCurso = await Viaje.query()
-      .where('cliente_id', user.id)
-      .whereIn('estado', [
-        'buscando_conductor',
-        'pendiente',
-        'aceptado',
-        'conductor_en_camino',
-        'conductor_llegada',
-        'en_curso',
-        'entregado',
-        'esperando_confirmacion',
-        'sos',
-        'disputa',
-      ])
-      .first()
+    // Verificación rápida (se repite bajo bloqueo antes de insertar).
+    const viajeEnCurso = await viajeActivoDelCliente(user.id)
     if (viajeEnCurso) {
       return response.status(409).send({
         error: 'Ya tienes un viaje activo. Debes cancelarlo o esperar a que termine para reservar otro.',
@@ -188,21 +225,6 @@ export default class TripController {
         .send({ error: await CoverageService.mensajeFueraDeCobertura() })
     }
 
-    // Evitar dos reservas activas del mismo cliente para el mismo horario.
-    const duplicada = await Viaje.query()
-      .where('cliente_id', user.id)
-      .where('tipo_programacion', 'programada')
-      .where('fecha_programada', data.fechaProgramada)
-      .where('hora_programada', data.horaProgramada)
-      .whereNot('estado', 'cancelado')
-      .first()
-    if (duplicada) {
-      return response.status(409).send({
-        error: 'Ya tienes una reserva para esa misma fecha y hora.',
-        viajeId: String(duplicada.id),
-      })
-    }
-
     // La búsqueda de conductor arranca `dispatchLeadMinutes` antes de la hora programada.
     // Se normaliza a la zona del servidor porque Lucid lee las columnas `dateTime`
     // con `DateTime.fromSQL` (sin offset en sqlite/mysql).
@@ -210,24 +232,66 @@ export default class TripController {
       .minus({ minutes: reservationConfig.dispatchLeadMinutes })
       .setZone(DateTime.now().zone)
 
-    const viaje = await Viaje.create({
-      clienteId: user.id,
-      estado: 'reservado',
-      tipoProgramacion: 'programada',
-      fechaProgramada: data.fechaProgramada,
-      horaProgramada: data.horaProgramada,
-      activacionAt,
-      recordatorioEnviado: false,
-      origenDireccion: data.origen.direccion,
-      origenLat: data.origen.lat,
-      origenLng: data.origen.lng,
-      destinoDireccion: data.destino.direccion,
-      destinoLat: data.destino.lat,
-      destinoLng: data.destino.lng,
-      carga: data.descripcion || null,
-      precioCliente: data.precioCliente,
-      precioEstimado: data.precioCliente,
+    // Verificaciones + INSERT atómicos (FOR UPDATE sobre la fila del cliente):
+    // dos reservas simultáneas no pueden pasar ambas las verificaciones.
+    const creada = await db.transaction(async (trx) => {
+      await bloquearCliente(user.id, trx)
+
+      const enCurso = await viajeActivoDelCliente(user.id, trx)
+      if (enCurso) {
+        return {
+          conflicto: {
+            error: 'Ya tienes un viaje activo. Debes cancelarlo o esperar a que termine para reservar otro.',
+            viajeId: String(enCurso.id),
+          },
+        }
+      }
+
+      // Evitar dos reservas activas del mismo cliente para el mismo horario.
+      const duplicada = await Viaje.query({ client: trx })
+        .where('cliente_id', user.id)
+        .where('tipo_programacion', 'programada')
+        .where('fecha_programada', data.fechaProgramada)
+        .where('hora_programada', data.horaProgramada)
+        .whereNot('estado', 'cancelado')
+        .first()
+      if (duplicada) {
+        return {
+          conflicto: {
+            error: 'Ya tienes una reserva para esa misma fecha y hora.',
+            viajeId: String(duplicada.id),
+          },
+        }
+      }
+
+      const nueva = await Viaje.create(
+        {
+          clienteId: user.id,
+          estado: 'reservado',
+          tipoProgramacion: 'programada',
+          fechaProgramada: data.fechaProgramada,
+          horaProgramada: data.horaProgramada,
+          activacionAt,
+          recordatorioEnviado: false,
+          origenDireccion: data.origen.direccion,
+          origenLat: data.origen.lat,
+          origenLng: data.origen.lng,
+          destinoDireccion: data.destino.direccion,
+          destinoLat: data.destino.lat,
+          destinoLng: data.destino.lng,
+          carga: data.descripcion || null,
+          precioCliente: data.precioCliente,
+          precioEstimado: data.precioCliente,
+        },
+        { client: trx }
+      )
+      return { viaje: nueva }
     })
+
+    if (creada.conflicto) {
+      return response.status(409).send(creada.conflicto)
+    }
+    const viaje = creada.viaje!
 
     emitToClient(viaje.clienteId, 'trip:status_changed', {
       id: String(viaje.id),
@@ -502,17 +566,29 @@ export default class TripController {
           )
         }
 
-        // Reservas programadas: evitar que el conductor acepte si ya tiene
-        // otro viaje incompatible en la misma franja horaria.
+        // FOR UPDATE sobre el conductor: serializa dos aceptaciones simultáneas
+        // del mismo conductor en viajes distintos.
+        await Conductor.query({ client: trx }).where('id', conductor.id).forUpdate().first()
+
+        // Un conductor = un servicio a la vez (inmediatos) y sin choques de
+        // horario (reservas programadas).
         const conflicto = await TripConflictService.conductorTieneConflicto(
           conductor.id,
           viaje,
           trx
         )
-        if (conflicto) {
+        if (conflicto && viaje.tipoProgramacion === 'programada') {
           throw Object.assign(new Error('CONFLICTO_HORARIO'), {
             statusCode: 409,
+            code: 'CONFLICTO_HORARIO',
             message: 'Tienes otro viaje incompatible en ese horario',
+          })
+        }
+        if (conflicto) {
+          throw Object.assign(new Error('CONDUCTOR_OCUPADO'), {
+            statusCode: 409,
+            code: 'CONDUCTOR_OCUPADO',
+            message: 'Ya estás atendiendo un servicio. Termínalo antes de aceptar otro viaje.',
           })
         }
 
@@ -542,7 +618,9 @@ export default class TripController {
       })
     } catch (err: any) {
       if (err?.statusCode) {
-        return response.status(err.statusCode).send({ error: err.message })
+        return response
+          .status(err.statusCode)
+          .send(err.code ? { error: err.message, code: err.code } : { error: err.message })
       }
       throw err
     }

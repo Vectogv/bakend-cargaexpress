@@ -5,6 +5,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import { getIO } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
+import { claveDe } from '#services/coverage_service'
 
 export default class ConversacionController {
   private isAdmin(user: User) {
@@ -291,14 +292,14 @@ export default class ConversacionController {
     // no recibía nada en tiempo real), más la ciudad de la conversación y cada
     // participante en su propia sala.
     const salas = new Set<string>(['admin'])
-    if (conversacion.ciudad) salas.add(`moderator:${conversacion.ciudad.trim().toLowerCase()}`)
+    if (conversacion.ciudad) salas.add(`moderator:${claveDe(conversacion.ciudad)}`)
 
     for (const o of otros) {
       const esAdminDest = o.rol === 'admin'
       const esModDest = o.esModerador || o.rol === 'moderador'
       const esConductorDest = o.rol === 'conductor'
       if (esAdminDest) salas.add('admin')
-      else if (esModDest) salas.add(`moderator:${(o.zonaModerador || conversacion.ciudad || '').trim().toLowerCase()}`)
+      else if (esModDest) salas.add(`moderator:${claveDe(o.zonaModerador || conversacion.ciudad || '')}`)
       else if (esConductorDest) salas.add(`driver:${o.id}`)
       else salas.add(`client:${o.id}`)
     }
