@@ -26,6 +26,8 @@ export default class PaymentController {
       deudaFechaLimite: user.deudaFechaLimite?.toISO() || null,
       diasRestantes: diasRestantes !== null && diasRestantes > 0 ? diasRestantes : 0,
       estadoCuenta: user.estadoCuenta,
+      // Monto del comprobante en revisión (null si no hay uno).
+      montoComprobante: user.montoComprobante ?? null,
       nequiNumero: config?.nequiNumero || null,
       nequiNombre: config?.nequiNombre || null,
     })
@@ -53,8 +55,12 @@ export default class PaymentController {
     const fileName = `comprobante-${user.id}-${randomUUID()}.${file.extname}`
     await file.move(StorageService.uploadsDir(), { name: fileName })
 
+    // El comprobante cubre la deuda de este momento: lo que se sume mientras
+    // está en revisión (viajes en curso que terminan) sigue pendiente.
     user.comprobantePago = `/storage/uploads/${fileName}`
     user.estadoCuenta = 'esperando_confirmacion'
+    user.montoComprobante = Number(user.montoDeuda) || 0
+    user.comprobanteSubidoAt = DateTime.now()
     await user.save()
 
     const config = await ConfiguracionPlataforma.unica()
@@ -64,6 +70,7 @@ export default class PaymentController {
       userId: user.id,
       nombre: `${user.nombre} ${user.apellido}`,
       montoDeuda: user.montoDeuda,
+      montoComprobante: user.montoComprobante,
       comprobante: SignedUploadService.sign(user.comprobantePago),
       nequi: nequiInfo,
     })
@@ -71,6 +78,7 @@ export default class PaymentController {
     return serialize.withoutWrapping({
       comprobante: SignedUploadService.sign(user.comprobantePago),
       estadoCuenta: user.estadoCuenta,
+      montoComprobante: user.montoComprobante,
       message: 'Comprobante recibido. El administrador lo verificará en breve.',
     })
   }
