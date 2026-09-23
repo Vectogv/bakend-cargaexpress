@@ -5,7 +5,7 @@ import User from '#models/user'
 import db from '@adonisjs/lucid/services/db'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
-import { getIO, emitToClient, emitToDriver, emitTripStatusChanged } from '#start/socket'
+import { emitToClient, emitToDriver, emitTripStatusChanged } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
 import TripConflictService from '#services/trip_conflict_service'
@@ -577,8 +577,9 @@ export default class OfferController {
     oferta.estado = 'rechazada'
     await oferta.save()
 
-    const io = getIO()
-    io.to(`driver:${oferta.conductor.usuarioId}`).emit('offer:rejected', {
+    // Helper a prueba de fallos: la oferta ya quedó rechazada en BD, así que
+    // un Socket.IO no disponible no debe convertir la respuesta en un 500.
+    emitToDriver(oferta.conductor.usuarioId, 'offer:rejected', {
       viajeId: String(viaje.id),
       ofertaId: String(oferta.id),
     })
