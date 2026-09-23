@@ -11,10 +11,10 @@ export default class PaymentController {
   async info({ auth, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     const cachedConfig = await RedisService.cacheGet<any>('config:plataforma')
-    let config = cachedConfig ? null : await ConfiguracionPlataforma.first()
+    let config = cachedConfig ? null : await ConfiguracionPlataforma.unica()
     if (!config && cachedConfig) config = cachedConfig
     if (!config) {
-      config = await ConfiguracionPlataforma.first()
+      config = await ConfiguracionPlataforma.unica()
       if (config) await RedisService.cacheSet('config:plataforma', config.toJSON(), 300)
     }
     const diasRestantes = user.deudaFechaLimite
@@ -57,7 +57,7 @@ export default class PaymentController {
     user.estadoCuenta = 'esperando_confirmacion'
     await user.save()
 
-    const config = await ConfiguracionPlataforma.first()
+    const config = await ConfiguracionPlataforma.unica()
     const nequiInfo = config ? { numero: config.nequiNumero, nombre: config.nequiNombre } : null
 
     emitToAdmin('admin:payment_proof', {

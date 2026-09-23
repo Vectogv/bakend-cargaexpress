@@ -1194,7 +1194,7 @@ export default class AdminController {
   }
 
   async updateConfig({ request, serialize }: HttpContext) {
-    let config = await ConfiguracionPlataforma.first()
+    let config = await ConfiguracionPlataforma.unica()
     if (!config) {
       config = await ConfiguracionPlataforma.create({})
     }
@@ -1226,7 +1226,7 @@ export default class AdminController {
       return response.status(422).send(await serialize.withoutWrapping({ error: resultado.error }))
     }
 
-    let config = await ConfiguracionPlataforma.first()
+    let config = await ConfiguracionPlataforma.unica()
     if (!config) {
       config = await ConfiguracionPlataforma.create({})
     }
@@ -1259,7 +1259,7 @@ export default class AdminController {
   }
 
   async updateBanner({ request, response, serialize }: HttpContext) {
-    let config = await ConfiguracionPlataforma.first()
+    let config = await ConfiguracionPlataforma.unica()
     if (!config) {
       config = await ConfiguracionPlataforma.create({})
     }

@@ -102,6 +102,49 @@ test.group('Cobertura por zonas', (group) => {
     fuera.assertStatus(422)
   })
 
+  test('las zonas siguen ahí al recargar aunque haya varias filas de configuración', async ({ client, assert }) => {
+    // Reproduce el fallo de producción: la tabla tenía más de una fila y
+    // `ConfiguracionPlataforma.first()` (LIMIT 1 sin ORDER BY) no garantiza devolver
+    // la misma en PostgreSQL, así que se guardaba en una fila y se leía de otra. El
+    // admin veía "guardado" y, al recargar, la zona había desaparecido.
+    await ConfiguracionPlataforma.create({ nequiNombre: 'fila vieja' })
+    await ConfiguracionPlataforma.create({ nequiNombre: 'fila nueva' })
+
+    const token = await tokenDe(client, 'admin')
+    const guardar = await client
+      .put('/api/admin/config/coverage')
+      .bearerToken(token)
+      .json({ zonasCobertura: [{ nombre: 'Popayán', tipo: 'circulo', lat: 2.4419, lng: -76.6063, radio: 9 }] })
+    guardar.assertStatus(200)
+
+    // Releer, como hace el panel al recargar la página.
+    const recargado = await client.get('/api/admin/config/coverage').bearerToken(token)
+    recargado.assertStatus(200)
+    const zonas = (recargado.body() as any).zonasCobertura
+    assert.lengthOf(zonas, 1, 'la zona se perdió al recargar')
+    assert.equal(zonas[0].clave, 'popayan')
+    assert.equal(zonas[0].radio, 9)
+
+    // Y el servicio que valida los viajes ve lo mismo.
+    assert.lengthOf(await CoverageService.zonasActivas(), 1)
+  })
+
+  test('guardar dos veces seguidas no pierde la zona', async ({ client, assert }) => {
+    await ConfiguracionPlataforma.create({ nequiNombre: 'fila vieja' })
+    const token = await tokenDe(client, 'admin')
+    const zona = { nombre: 'Cali', tipo: 'circulo', lat: 3.4516, lng: -76.532, radio: 15 }
+
+    for (const intento of [1, 2]) {
+      const res = await client.put('/api/admin/config/coverage').bearerToken(token).json({ zonasCobertura: [zona] })
+      res.assertStatus(200)
+      assert.lengthOf((res.body() as any).zonasCobertura, 1, `intento ${intento}`)
+    }
+
+    const zonas = await CoverageService.zonas()
+    assert.lengthOf(zonas, 1)
+    assert.equal(zonas[0].nombre, 'Cali')
+  })
+
   test('rechaza zonas con coordenadas inválidas', async ({ client }) => {
     const admin = await tokenDe(client, 'admin')
     const res = await client

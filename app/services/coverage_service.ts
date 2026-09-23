@@ -129,7 +129,7 @@ export function validarZonasEntrada(entrada: unknown): { zonas: Zona[] } | { err
 
 export default class CoverageService {
   static async zonas(): Promise<Zona[]> {
-    const config = await ConfiguracionPlataforma.first()
+    const config = await ConfiguracionPlataforma.unica()
     return normalizarZonas(config?.zonasCobertura)
       .map(normalizarZona)
       .filter((z): z is Zona => z !== null)
