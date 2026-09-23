@@ -1085,19 +1085,24 @@ export default class TripController {
         finalizadoAt: result.viaje.finalizadoAt,
       })
     } else {
-      // Cliente rechaza → crear disputa y volver a en_curso
+      // Cliente rechaza → el viaje pasa a 'disputa'. Un viaje tiene una sola
+      // disputa: si el cliente ya abrió una (POST /api/disputes), se reutiliza.
       const conductor = await Conductor.findByOrFail('id', viaje.conductorId!)
-      
-      const disputa = await Disputa.create({
-        viajeId: viaje.id,
-        conductorId: conductor.id,
-        clienteId: viaje.clienteId,
-        estado: 'abierta',
-        problema: 'cliente_rechaza_cierre',
-        descripcion: motivo || 'El cliente rechazó el cierre del servicio solicitado por el conductor',
-        versionConductor: 'Conductor solicitó cierre del servicio',
-        versionCliente: motivo || 'Cliente rechazó el cierre',
-      })
+
+      const existente = await Disputa.query().where('viaje_id', viaje.id).first()
+      const disputa =
+        existente ??
+        (await Disputa.create({
+          viajeId: viaje.id,
+          conductorId: conductor.id,
+          clienteId: viaje.clienteId,
+          estado: 'abierta',
+          problema: 'cliente_rechaza_cierre',
+          descripcion:
+            motivo || 'El cliente rechazó el cierre del servicio solicitado por el conductor',
+          versionConductor: 'Conductor solicitó cierre del servicio',
+          versionCliente: motivo || 'Cliente rechazó el cierre',
+        }))
 
       viaje.estado = 'disputa'
       await viaje.save()
