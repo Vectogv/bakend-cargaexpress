@@ -1636,6 +1636,7 @@ export default class AdminController {
       id: String(viaje.id),
       estado: viaje.estado,
       motivo: viaje.motivoCancelacion,
+      canceladoPor: 'admin',
     })
 
     if (viaje.conductorId) {
@@ -1645,6 +1646,7 @@ export default class AdminController {
           id: String(viaje.id),
           estado: viaje.estado,
           motivo: viaje.motivoCancelacion,
+          canceladoPor: 'admin',
         })
       }
     }
