@@ -1144,8 +1144,13 @@ export default class TripController {
     const data = await request.validateUsing(tripCancelValidator)
     const viaje = await Viaje.findOrFail(params.id)
 
-    // Solo el admin puede cancelar un viaje en curso o en estados avanzados
-    if (['en_curso', 'conductor_llegada'].includes(viaje.estado) && user.rol !== 'admin') {
+    // Solo el admin puede cancelar un viaje en curso o en estados avanzados.
+    // Durante un SOS el cliente tampoco cancela directo: debe solicitarlo
+    // (request-cancellation) para que lo revise el administrador.
+    const requiereRevision =
+      (['en_curso', 'conductor_llegada'].includes(viaje.estado) && user.rol !== 'admin') ||
+      (viaje.estado === 'sos' && user.rol === 'cliente')
+    if (requiereRevision) {
       return response.status(403).send({ error: 'No puedes cancelar un viaje en curso. Debes solicitar la cancelación al administrador.' })
     }
 

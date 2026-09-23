@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
+import testUtils from '@adonisjs/core/services/test_utils'
 import ConfiguracionPlataforma from '#models/configuracion_plataforma'
 import User from '#models/user'
 
@@ -174,5 +175,63 @@ test.group('Disputa única al rechazar el cierre', (group) => {
     assert.lengthOf(disputas, 1)
     assert.equal(Number(rechazo.body().disputaId), Number(disputas[0].id))
     assert.equal(disputas[0].problema, 'cliente_rechaza_cierre')
+  })
+})
+
+test.group('Cancelación durante SOS requiere revisión', (group) => {
+  // Transacción global: las alertas SOS de prueba no deben filtrarse a otras
+  // suites (/api/sos lista todas las alertas de la base).
+  group.each.setup(async () => {
+    const rollback = await testUtils.db().withGlobalTransaction()
+    await ConfiguracionPlataforma.query().delete()
+    return rollback
+  })
+
+  test('el cliente no puede cancelar directamente un viaje en SOS', async ({ client, assert }) => {
+    const { cliente, tripId } = await viajeEnSos(client)
+
+    const res = await client
+      .post(`/api/trips/${tripId}/cancel`)
+      .bearerToken(cliente.token)
+      .json({ motivo: 'Ya no lo necesito' })
+    res.assertStatus(403)
+
+    const viaje = await db.from('viajes').where('id', tripId).first()
+    assert.equal(viaje.estado, 'sos')
+  })
+
+  test('el cliente puede solicitar la cancelación de un viaje en SOS', async ({
+    client,
+    assert,
+  }) => {
+    const { cliente, tripId } = await viajeEnSos(client)
+
+    const res = await client
+      .post(`/api/trips/${tripId}/request-cancellation`)
+      .bearerToken(cliente.token)
+      .json({ motivo: 'Emergencia en ruta' })
+    assert.oneOf(res.status(), [200, 201])
+
+    const solicitud = await db
+      .from('solicitudes_cancelacion')
+      .where('viaje_id', tripId)
+      .where('estado', 'pendiente')
+      .first()
+    assert.isNotNull(solicitud)
+  })
+
+  test('el admin sí puede cancelar un viaje en SOS', async ({ client, assert }) => {
+    const { tripId } = await viajeEnSos(client)
+    const adminToken = await crearAdmin(client)
+
+    const res = await client
+      .post(`/api/trips/${tripId}/cancel`)
+      .bearerToken(adminToken)
+      .json({ motivo: 'Cancelado por soporte tras SOS' })
+    res.assertStatus(200)
+    res.assertBodyContains({ estado: 'cancelado' })
+
+    const viaje = await db.from('viajes').where('id', tripId).first()
+    assert.equal(viaje.estado, 'cancelado')
   })
 })
