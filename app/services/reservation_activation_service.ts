@@ -112,6 +112,10 @@ export default class ReservationActivationService {
         }
 
         row.estado = 'buscando_conductor'
+        // activacion_at pasa a ser el momento real en que inició la búsqueda
+        // (el scheduler pudo activarla tarde); el vencimiento de la búsqueda
+        // (BusquedaTimeoutService) cuenta desde aquí.
+        row.activacionAt = DateTime.now()
         await row.useTransaction(trx).save()
         return row
       })

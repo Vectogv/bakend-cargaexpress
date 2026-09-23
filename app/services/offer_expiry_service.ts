@@ -27,6 +27,23 @@ export default class OfferExpiryService {
       .preload('conductor')
       .preload('viaje')
 
+    return this.expirar(candidatas)
+  }
+
+  /**
+   * Expira todas las ofertas pendientes de un viaje (p. ej. cuando la búsqueda
+   * de conductor venció y el sistema cancela el viaje), con los mismos avisos.
+   */
+  static async expirarDelViaje(viajeId: number): Promise<number[]> {
+    const candidatas = await Oferta.query()
+      .where('viaje_id', viajeId)
+      .where('estado', 'pendiente')
+      .preload('conductor')
+      .preload('viaje')
+    return this.expirar(candidatas)
+  }
+
+  private static async expirar(candidatas: Oferta[]): Promise<number[]> {
     const expiradas: number[] = []
     for (const oferta of candidatas) {
       try {

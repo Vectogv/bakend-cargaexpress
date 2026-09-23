@@ -10,7 +10,8 @@ const OFFERS_TICK_LOCK_MS = 25_000
 /**
  * Ejecuta cada minuto la activación de reservas programadas, el aviso de cierres
  * sin confirmar y la suspensión por pago de conductores con deuda vencida
- * (DriverDebtSuspensionService; también `node ace debts:suspend`) y, cada 30 s,
+ * (DriverDebtSuspensionService; también `node ace debts:suspend`), la cancelación
+ * de búsquedas de conductor vencidas (BusquedaTimeoutService) y, cada 30 s,
  * el barrido de ofertas vencidas (OfferExpiryService; también `node ace offers:expire`).
  *
  * Es seguro con múltiples réplicas (Railway corre 2): un lock distribuido en
@@ -97,6 +98,9 @@ export default class ReservationSchedulerProvider {
       const { default: DriverDebtSuspensionService } = await import(
         '#services/driver_debt_suspension_service'
       )
+      const { default: BusquedaTimeoutService } = await import(
+        '#services/busqueda_timeout_service'
+      )
 
       const acquired = await RedisService.acquireLock('reservation:scheduler:tick', TICK_LOCK_MS)
       if (!acquired) return
@@ -114,6 +118,9 @@ export default class ReservationSchedulerProvider {
 
         // Conductores con deuda de comisión vencida: suspensión por pago.
         await DriverDebtSuspensionService.suspenderVencidos()
+
+        // Búsquedas de conductor vencidas (BUSQUEDA_TIMEOUT_MIN): el sistema cancela el viaje.
+        await BusquedaTimeoutService.expirarBusquedasVencidas()
       } finally {
         await RedisService.releaseLock('reservation:scheduler:tick')
       }
