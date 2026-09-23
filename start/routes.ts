@@ -317,6 +317,17 @@ router.get('/api/config/coverage', async ({ serialize }) => {
 
 router.get('/api/config/mapbox', [controllers.Mapbox, 'token']).use(middleware.auth())
 
+// Reglas que la app cliente muestra al usuario; salen de la misma config que aplica el backend.
+router
+  .get('/api/config/cliente', async ({ serialize }) => {
+    const { default: antifraudeConfig } = await import('#config/antifraude')
+    return serialize.withoutWrapping({
+      radioCierreKm: antifraudeConfig.radioCierreKm,
+      confirmacionTimeoutMin: antifraudeConfig.confirmacionTimeoutMin,
+    })
+  })
+  .use(middleware.auth())
+
 router
   .group(() => {
     router.post('comunicados', [controllers.Moderator, 'storeComunicado'])
