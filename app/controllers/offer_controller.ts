@@ -12,6 +12,7 @@ import TripConflictService from '#services/trip_conflict_service'
 import AntifraudeService from '#services/antifraude_service'
 import { distanciaKm } from '#services/geo_service'
 import antifraudeConfig from '#config/antifraude'
+import DriverDebtSuspensionService from '#services/driver_debt_suspension_service'
 
 export default class OfferController {
   async store({ auth, request, response, params }: HttpContext) {
@@ -49,6 +50,10 @@ export default class OfferController {
     }
     if (conductor.estadoVerificacion !== 'aprobado') {
       return response.status(403).send({ error: 'Tu cuenta de conductor no está verificada.' })
+    }
+    const bloqueoPago = DriverDebtSuspensionService.bloqueo(user)
+    if (bloqueoPago) {
+      return response.status(403).send(bloqueoPago)
     }
 
     const viaje = await Viaje.find(params.id)
@@ -292,12 +297,13 @@ export default class OfferController {
         const conductorOferta = await Conductor.query({ client: trx })
           .where('id', oferta.conductorId)
           .forUpdate()
-          .preload('usuario', (q) => q.select('id', 'suspendido'))
+          .preload('usuario', (q) => q.select('id', 'suspendido', 'estado_cuenta'))
           .first()
         if (
           !conductorOferta ||
           conductorOferta.estadoVerificacion !== 'aprobado' ||
-          conductorOferta.usuario?.suspendido
+          conductorOferta.usuario?.suspendido ||
+          DriverDebtSuspensionService.estaSuspendido(conductorOferta.usuario?.estadoCuenta)
         ) {
           throw Object.assign(new Error('CONDUCTOR_NO_HABILITADO'), {
             statusCode: 409,

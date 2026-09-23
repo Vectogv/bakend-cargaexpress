@@ -16,6 +16,7 @@ import RedisService from '#services/redis_service'
 import db from '@adonisjs/lucid/services/db'
 import reservationConfig from '#config/reservations'
 import SignedUploadService from '#services/signed_upload_service'
+import DriverDebtSuspensionService from '#services/driver_debt_suspension_service'
 
 /**
  * Totales de ganancias de UN conductor (opcionalmente desde una fecha). Las subconsultas
@@ -60,6 +61,13 @@ export default class DriverController {
 
     if (data.online && conductor.estadoVerificacion !== 'aprobado') {
       return response.status(403).send({ error: 'Debes estar verificado para ponerte online' })
+    }
+
+    // Deuda de comisión vencida (o comprobante en revisión): puede desconectarse,
+    // pero no volver a conectarse hasta que el admin apruebe el pago.
+    const bloqueo = data.online ? DriverDebtSuspensionService.bloqueo(user) : null
+    if (bloqueo) {
+      return response.status(403).send(bloqueo)
     }
 
     conductor.online = data.online

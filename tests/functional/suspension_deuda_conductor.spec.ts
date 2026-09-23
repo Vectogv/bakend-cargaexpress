@@ -17,6 +17,7 @@ import DriverDebtSuspensionService from '#services/driver_debt_suspension_servic
 const uniq = () => `${Date.now()}${Math.floor(Math.random() * 1e6)}`
 const URL = `http://localhost:${process.env.PORT ?? 3333}`
 const ORIGEN = { direccion: 'Parque Caldas, Popayán', lat: 2.4419, lng: -76.6063 }
+const DESTINO = { direccion: 'Terminal, Popayán', lat: 2.4569, lng: -76.5952 }
 
 async function registrar(client: any, rol: 'cliente' | 'conductor') {
   const extra =
@@ -66,6 +67,22 @@ async function conductorConDeuda(
   await user.save()
 
   return { ...usuario, conductorId: conductor.id }
+}
+
+async function registrarCliente(client: any) {
+  const cliente = await registrar(client, 'cliente')
+  return cliente.token
+}
+
+const pedirViaje = async (client: any, token: string) => {
+  const res = await client.post('/api/trips/request').bearerToken(token).json({
+    origen: ORIGEN,
+    destino: DESTINO,
+    descripcion: 'Caja',
+    precioCliente: 60000,
+  })
+  res.assertStatus(200)
+  return (res.body() as { id: string }).id
 }
 
 function conectar(token: string): Promise<Socket> {
@@ -162,5 +179,121 @@ test.group('Suspensión por deuda vencida del conductor', (group) => {
     } finally {
       socket.disconnect()
     }
+  })
+})
+
+const CODE = 'CUENTA_SUSPENDIDA_POR_PAGO'
+
+test.group('Conductor suspendido por pago: qué puede y qué no', (group) => {
+  group.each.setup(async () => {
+    await ConfiguracionPlataforma.query().delete()
+  })
+
+  for (const estado of ['suspension_por_pago', 'esperando_confirmacion']) {
+    test(`en ${estado} no puede ponerse online pero sí offline`, async ({ client, assert }) => {
+      const driver = await conductorConDeuda(client, { estado })
+      await Conductor.query().where('id', driver.conductorId).update({ online: false })
+
+      const online = await client.put('/api/drivers/status').bearerToken(driver.token).json({ online: true })
+      online.assertStatus(403)
+      online.assertBodyContains({ code: CODE, estadoCuenta: estado })
+      assert.isString((online.body() as any).error)
+      assert.isFalse(Boolean((await Conductor.findOrFail(driver.conductorId)).online))
+
+      const offline = await client.put('/api/drivers/status').bearerToken(driver.token).json({ online: false })
+      offline.assertStatus(200)
+    })
+
+    test(`en ${estado} no puede ofertar`, async ({ client }) => {
+      const tokenC = await registrarCliente(client)
+      const driver = await conductorConDeuda(client, { estado })
+      const viajeId = await pedirViaje(client, tokenC)
+
+      const oferta = await client.post(`/api/trips/${viajeId}/offers`).bearerToken(driver.token).json({ monto: 50000 })
+      oferta.assertStatus(403)
+      oferta.assertBodyContains({ code: CODE, estadoCuenta: estado })
+    })
+  }
+
+  test('suspendido puede iniciar sesión, ver su deuda y ganancias, y subir el comprobante', async ({
+    client,
+    assert,
+  }) => {
+    const driver = await conductorConDeuda(client, { estado: 'suspension_por_pago' })
+    const user = await User.findOrFail(driver.id)
+
+    const login = await client.post('/api/auth/login').json({ email: user.email, password: 'Password123' })
+    login.assertStatus(200)
+
+    const deuda = await client.get('/api/payment/debt').bearerToken(driver.token)
+    deuda.assertStatus(200)
+    assert.equal((deuda.body() as any).estadoCuenta, 'suspension_por_pago')
+
+    const ganancias = await client.get('/api/drivers/earnings').bearerToken(driver.token)
+    ganancias.assertStatus(200)
+
+    // Sin archivo: pasa el control de estado y falla solo por el archivo.
+    const comprobante = await client.post('/api/payment/proof').bearerToken(driver.token)
+    comprobante.assertStatus(400)
+  })
+
+  test('el cliente no puede aceptar la oferta de un conductor suspendido después de ofertar', async ({
+    client,
+  }) => {
+    const tokenC = await registrarCliente(client)
+    const driver = await conductorConDeuda(client, { vence: DateTime.now().plus({ days: 1 }) })
+    const viajeId = await pedirViaje(client, tokenC)
+    const oferta = await client.post(`/api/trips/${viajeId}/offers`).bearerToken(driver.token).json({ monto: 50000 })
+    oferta.assertStatus(201)
+    const ofertaId = (oferta.body() as { id: string }).id
+
+    await User.query().where('id', driver.id).update({ estado_cuenta: 'suspension_por_pago' })
+
+    const acepta = await client.post(`/api/trips/${viajeId}/offers/${ofertaId}/accept`).bearerToken(tokenC)
+    acepta.assertStatus(409)
+  })
+
+  test('el endpoint obsoleto de aceptación directa también lo bloquea', async ({ client }) => {
+    const tokenC = await registrarCliente(client)
+    const driver = await conductorConDeuda(client, { estado: 'suspension_por_pago' })
+    const viajeId = await pedirViaje(client, tokenC)
+
+    const acepta = await client.post(`/api/trips/${viajeId}/accept`).bearerToken(driver.token)
+    acepta.assertStatus(403)
+    acepta.assertBodyContains({ code: CODE })
+  })
+
+  test('si lo suspenden en pleno viaje, puede terminarlo pero queda offline', async ({ client, assert }) => {
+    const tokenC = await registrarCliente(client)
+    const driver = await conductorConDeuda(client, { vence: DateTime.now().plus({ days: 1 }) })
+    const viajeId = await pedirViaje(client, tokenC)
+    const oferta = await client.post(`/api/trips/${viajeId}/offers`).bearerToken(driver.token).json({ monto: 60000 })
+    const ofertaId = (oferta.body() as { id: string }).id
+    ;(await client.post(`/api/trips/${viajeId}/offers/${ofertaId}/accept`).bearerToken(tokenC)).assertStatus(200)
+    for (const ruta of ['confirm-arrival', 'confirm-pickup', 'start-trip']) {
+      ;(await client.post(`/api/trips/${viajeId}/${ruta}`).bearerToken(driver.token)).assertStatus(200)
+    }
+
+    // La deuda vence durante el viaje.
+    await User.query().where('id', driver.id).update({
+      deuda_fecha_limite: DateTime.now().minus({ minutes: 1 }).toSQL(),
+    })
+    assert.include(await DriverDebtSuspensionService.suspenderVencidos(), driver.id)
+
+    await Conductor.query().where('id', driver.conductorId).update({
+      ultima_ubicacion_lat: DESTINO.lat,
+      ultima_ubicacion_lng: DESTINO.lng,
+      ubicacion_actualizada_en: DateTime.now().toSQL(),
+    })
+    const completa = await client.post(`/api/trips/${viajeId}/complete`).bearerToken(driver.token).json({ montoFinal: 60000 })
+    completa.assertStatus(200)
+    const cierre = await client.post(`/api/trips/${viajeId}/confirm-close`).bearerToken(tokenC).json({ confirmar: true })
+    cierre.assertStatus(200)
+    assert.equal((cierre.body() as any).estado, 'finalizado')
+
+    assert.isFalse(Boolean((await Conductor.findOrFail(driver.conductorId)).online))
+    const user = await User.findOrFail(driver.id)
+    assert.equal(user.estadoCuenta, 'suspension_por_pago')
+    assert.isAbove(Number(user.montoDeuda), 12000)
   })
 })

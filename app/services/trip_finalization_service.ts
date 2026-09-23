@@ -6,6 +6,7 @@ import Conductor from '#models/conductor'
 import Ganancia from '#models/ganancia'
 import User from '#models/user'
 import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
+import DriverDebtSuspensionService from '#services/driver_debt_suspension_service'
 
 /**
  * TripFinalizationService
@@ -232,15 +233,18 @@ export default class TripFinalizationService {
             .forUpdate()
             .firstOrFail()
 
-          conductor.totalViajes += 1
-          conductor.online = true
-          await conductor.useTransaction(trx).save()
-
-          // 4. Acumular deuda de comisión en el usuario del conductor
           const conductorUser = await User.query({ client: trx })
             .where('id', conductor.usuarioId)
             .forUpdate()
             .firstOrFail()
+
+          conductor.totalViajes += 1
+          // Suspendido por pago (deuda vencida o comprobante en revisión): termina
+          // el viaje pero no vuelve a quedar disponible.
+          conductor.online = !DriverDebtSuspensionService.estaSuspendido(conductorUser.estadoCuenta)
+          await conductor.useTransaction(trx).save()
+
+          // 4. Acumular deuda de comisión en el usuario del conductor
 
           const deudaAnterior = Number(conductorUser.montoDeuda) || 0
           conductorUser.montoDeuda = Math.round((deudaAnterior + comision) * 100) / 100

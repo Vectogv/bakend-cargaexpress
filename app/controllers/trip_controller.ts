@@ -28,6 +28,7 @@ import reservationConfig from '#config/reservations'
 import { parseScheduledDateTime } from '#services/reservation_time'
 import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
 import TripFinalizationService from '#services/trip_finalization_service'
+import DriverDebtSuspensionService from '#services/driver_debt_suspension_service'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
 import antifraudeConfig from '#config/antifraude'
 import logger from '@adonisjs/core/services/logger'
@@ -559,6 +560,11 @@ export default class TripController {
 
     if (conductor.estadoVerificacion !== 'aprobado') {
       return response.status(403).send({ error: 'Tu cuenta de conductor no está verificada.' })
+    }
+
+    const bloqueoPago = DriverDebtSuspensionService.bloqueo(user)
+    if (bloqueoPago) {
+      return response.status(403).send(bloqueoPago)
     }
 
     // ── Transacción con bloqueo pesimista ─────────────────────────────
