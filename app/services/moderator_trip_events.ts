@@ -1,6 +1,6 @@
 import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
-import CoverageService from '#services/coverage_service'
+import CoverageService, { claveDe } from '#services/coverage_service'
 import { emitToModerators } from '#start/socket'
 import { getTripEstadoLabel } from './trip_status_labels.js'
 
@@ -21,7 +21,11 @@ export function calcularDistanciaKm(lat1: number, lng1: number, lat2: number, ln
 export async function resolverZonaViaje(viaje: Viaje): Promise<string | null> {
   if (viaje.conductorId) {
     const conductor = await Conductor.find(viaje.conductorId)
-    if (conductor?.ciudad) return conductor.ciudad.trim().toLowerCase()
+    // `ciudad` es texto libre del registro ('Popayán', 'POPAYAN '...): se
+    // normaliza igual que las claves de zona (sin tildes, minúsculas).
+    // Pendiente: validar la ciudad contra las zonas configuradas al registrar.
+    const clave = conductor?.ciudad ? claveDe(conductor.ciudad) : ''
+    if (clave) return clave
   }
 
   if (viaje.origenLat !== null && viaje.origenLng !== null) {

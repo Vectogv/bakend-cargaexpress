@@ -8,6 +8,7 @@ import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
 import MensajeChat from '#models/mensaje_chat'
 import RedisService from '#services/redis_service'
+import { claveDe } from '#services/coverage_service'
 
 let io: SocketServer | null = null
 
@@ -80,7 +81,7 @@ export function emitToAdmin(event: string, data: unknown) {
 
 export function emitToModerators(zona: string, event: string, data: unknown) {
   try {
-    getIO().to(`moderator:${zona.trim().toLowerCase()}`).emit(event, data)
+    getIO().to(`moderator:${claveDe(zona)}`).emit(event, data)
   } catch {
     logger.warn(`Socket.io not available, skipping emitToModerators event: ${event}`)
   }
@@ -188,7 +189,7 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
 
     // Unirse a rooms según rol
     if (user.esModerador && user.zonaModerador) {
-      socket.join(`moderator:${user.zonaModerador.trim().toLowerCase()}`)
+      socket.join(`moderator:${claveDe(user.zonaModerador)}`)
       logger.info(`Moderator ${user.id} joined room moderator:${user.zonaModerador}`)
     }
     if (user.esLider) {

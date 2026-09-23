@@ -130,4 +130,16 @@ test.group('Auditoría #4/#8 - moderador resuelve cierres pendientes', (group) =
     vencido.assertBodyContains({ estado: 'finalizado' })
   })
 
+  test('la ciudad del conductor con tilde y mayúsculas coincide con la zona', async ({ client }) => {
+    const tripId = await viajePendienteConfirmacion(client, 'Popayán ')
+    const moderador = await crearModerador(client, 'popayan')
+    await vencerPlazo(tripId)
+
+    const res = await client
+      .post(`/api/moderator/trips/${tripId}/resolve-close`)
+      .bearerToken(moderador)
+      .json({ resolucion: 'finalizar', nota: NOTA })
+    res.assertStatus(200)
+    res.assertBodyContains({ estado: 'finalizado' })
+  })
 })

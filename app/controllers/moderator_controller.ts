@@ -39,7 +39,7 @@ import {
   emitTripUpdateToModerators,
 } from '#services/moderator_trip_events'
 import SignedUploadService from '#services/signed_upload_service'
-import CoverageService, { type Zona } from '#services/coverage_service'
+import CoverageService, { claveDe, type Zona } from '#services/coverage_service'
 import antifraudeConfig from '#config/antifraude'
 
 export default class ModeratorController {
@@ -217,7 +217,7 @@ export default class ModeratorController {
         .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
-    if (user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
+    if (user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
@@ -248,7 +248,7 @@ export default class ModeratorController {
         .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
-    if (user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
+    if (user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
@@ -292,7 +292,7 @@ export default class ModeratorController {
     }
 
     const esAdmin = user.rol === 'admin'
-    if (!esAdmin && user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
+    if (!esAdmin && user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
@@ -334,7 +334,7 @@ export default class ModeratorController {
     }
 
     const esAdmin = user.rol === 'admin'
-    if (!esAdmin && user.zonaModerador && conductor.ciudad !== user.zonaModerador) {
+    if (!esAdmin && user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
@@ -982,7 +982,7 @@ export default class ModeratorController {
         return response.status(403).json({ error: 'No se pudo determinar la zona del viaje' })
       }
 
-      if (zona.trim().toLowerCase() !== user.zonaModerador.trim().toLowerCase()) {
+      if (claveDe(zona) !== claveDe(user.zonaModerador)) {
         return response.status(403).json({ error: 'El viaje pertenece a otra ciudad' })
       }
     }
