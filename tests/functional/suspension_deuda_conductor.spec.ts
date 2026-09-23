@@ -297,3 +297,81 @@ test.group('Conductor suspendido por pago: qué puede y qué no', (group) => {
     assert.isAbove(Number(user.montoDeuda), 12000)
   })
 })
+
+async function adminToken(client: any) {
+  const admin = await registrar(client, 'cliente')
+  await User.query().where('id', admin.id).update({ rol: 'admin' })
+  return admin.token
+}
+
+test.group('Pago de la deuda del conductor suspendido', (group) => {
+  group.each.setup(async () => {
+    await ConfiguracionPlataforma.query().delete()
+  })
+
+  test('al aprobar el pago la cuenta vuelve a activa, se borra la deuda y puede conectarse y ofertar', async ({
+    client,
+    assert,
+  }) => {
+    const admin = await adminToken(client)
+    const tokenC = await registrarCliente(client)
+    const driver = await conductorConDeuda(client, { estado: 'esperando_confirmacion' })
+    await User.query().where('id', driver.id).update({ comprobante_pago: '/storage/uploads/c.png' })
+    const viajeId = await pedirViaje(client, tokenC)
+
+    const socket = await conectar(driver.token)
+    const confirmados: any[] = []
+    socket.on('payment:confirmed', (d) => confirmados.push(d))
+    try {
+      const confirma = await client.put(`/api/admin/payments/${driver.id}/confirm`).bearerToken(admin)
+      confirma.assertStatus(200)
+      await esperar(300)
+      assert.lengthOf(confirmados, 1)
+    } finally {
+      socket.disconnect()
+    }
+
+    const user = await User.findOrFail(driver.id)
+    assert.equal(user.estadoCuenta, 'activa')
+    assert.isNull(user.montoDeuda)
+    assert.isNull(user.deudaFechaLimite)
+    assert.isFalse(Boolean(user.tieneDeudaActiva))
+
+    const online = await client.put('/api/drivers/status').bearerToken(driver.token).json({ online: true })
+    online.assertStatus(200)
+    const oferta = await client.post(`/api/trips/${viajeId}/offers`).bearerToken(driver.token).json({ monto: 50000 })
+    oferta.assertStatus(201)
+
+    // Ya sin deuda, el barrido no lo vuelve a suspender.
+    assert.notInclude(await DriverDebtSuspensionService.suspenderVencidos(), driver.id)
+  })
+
+  test('al rechazar el comprobante vuelve a suspension_por_pago, se le avisa y sigue bloqueado', async ({
+    client,
+    assert,
+  }) => {
+    const admin = await adminToken(client)
+    const driver = await conductorConDeuda(client, { estado: 'esperando_confirmacion' })
+    await User.query().where('id', driver.id).update({ comprobante_pago: '/storage/uploads/c.png' })
+
+    const socket = await conectar(driver.token)
+    const rechazos: any[] = []
+    socket.on('payment:rejected', (d) => rechazos.push(d))
+    try {
+      const rechaza = await client.put(`/api/admin/payments/${driver.id}/reject`).bearerToken(admin)
+      rechaza.assertStatus(200)
+      await esperar(300)
+      assert.lengthOf(rechazos, 1)
+      // La fecha límite ya pasó: no se anuncian días negativos.
+      assert.equal(rechazos[0].diasRestantes, 0)
+      assert.notInclude(rechazos[0].message, '-')
+    } finally {
+      socket.disconnect()
+    }
+
+    assert.equal((await User.findOrFail(driver.id)).estadoCuenta, 'suspension_por_pago')
+    const online = await client.put('/api/drivers/status').bearerToken(driver.token).json({ online: true })
+    online.assertStatus(403)
+    online.assertBodyContains({ code: CODE })
+  })
+})

@@ -20,7 +20,13 @@ import CoverageService, { validarZonasEntrada } from '#services/coverage_service
 import { DateTime } from 'luxon'
 import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
-import { emitToDriver, emitToClient, emitToAdmin, emitTripStatusChanged } from '#start/socket'
+import {
+  emitToDriver,
+  emitToClient,
+  emitToUser,
+  emitToAdmin,
+  emitTripStatusChanged,
+} from '#start/socket'
 import TripFinalizationService from '#services/trip_finalization_service'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
 import { sendToMultiple } from '#services/push_notification_service'
@@ -1149,7 +1155,8 @@ export default class AdminController {
     user.comprobantePago = null
     await user.save()
 
-    emitToClient(user.id, 'payment:confirmed', {
+    // Cliente o conductor: el conductor escucha en su room driver:{id}.
+    emitToUser(user.id, 'payment:confirmed', {
       message: 'Tu pago ha sido confirmado. Tu cuenta está activa nuevamente.',
     })
 
@@ -1178,11 +1185,14 @@ export default class AdminController {
     await user.save()
 
     const diasRestantes = user.deudaFechaLimite
-      ? Math.ceil(user.deudaFechaLimite.diff(DateTime.now(), 'days').days)
+      ? Math.max(0, Math.ceil(user.deudaFechaLimite.diff(DateTime.now(), 'days').days))
       : 0
 
-    emitToClient(user.id, 'payment:rejected', {
-      message: `Tu comprobante no fue válido. Te quedan ${diasRestantes} días para pagar.`,
+    emitToUser(user.id, 'payment:rejected', {
+      message:
+        diasRestantes > 0
+          ? `Tu comprobante no fue válido. Te quedan ${diasRestantes} días para pagar.`
+          : 'Tu comprobante no fue válido. Tu cuenta sigue suspendida: sube un nuevo comprobante de pago.',
       diasRestantes,
     })
 
