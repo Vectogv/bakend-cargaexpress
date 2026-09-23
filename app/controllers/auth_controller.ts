@@ -27,6 +27,12 @@ async function issueRefreshToken(userId: number): Promise<string> {
   return value
 }
 
+const DUPLICADO = {
+  placa: { error: 'Esa placa ya está registrada por otro conductor.', code: 'PLACA_DUPLICADA' },
+  cedula: { error: 'Esa cédula ya está registrada por otro conductor.', code: 'CEDULA_DUPLICADA' },
+  email: { error: 'Ese correo ya está registrado.', code: 'EMAIL_DUPLICADO' },
+}
+
 let dummyHash: string | null = null
 async function getDummyHash() {
   dummyHash = dummyHash || (await hash.make(randomUUID()))
@@ -52,26 +58,65 @@ export default class AuthController {
       })
     }
 
-    const user = await User.create({
-      nombre: data.nombre,
-      apellido: data.apellido,
-      email: data.email,
-      password: data.password,
-      telefono: data.telefono || null,
-      rol: data.rol,
-      edad: data.edad || null,
-    })
+    // Placa y cédula son únicas: se responde 409 con un mensaje claro en vez
+    // del error de base de datos.
+    if (data.rol === 'conductor') {
+      const existente = await Conductor.query()
+        .where('placa', data.placa!)
+        .orWhere('cedula', data.cedula!)
+        .select('placa', 'cedula')
+        .first()
+      if (existente) {
+        return response.status(409).send(
+          existente.placa === data.placa ? DUPLICADO.placa : DUPLICADO.cedula
+        )
+      }
+    }
 
-    if (user.rol === 'conductor') {
-      await Conductor.create({
-        usuarioId: user.id,
-        cedula: data.cedula!,
-        placa: data.placa!,
-        tipoVehiculo: data.tipoVehiculo || null,
-        capacidad: data.capacidad || null,
-        ciudad: data.ciudad || null,
-        estadoVerificacion: 'pendiente',
+    // Usuario y perfil de conductor se crean juntos: si falla el perfil no
+    // queda un usuario huérfano (rol conductor sin fila en `conductores`).
+    let user: User
+    try {
+      user = await db.transaction(async (trx) => {
+        const nuevo = await User.create(
+          {
+            nombre: data.nombre,
+            apellido: data.apellido,
+            email: data.email,
+            password: data.password,
+            telefono: data.telefono || null,
+            rol: data.rol,
+            edad: data.edad || null,
+          },
+          { client: trx }
+        )
+
+        if (nuevo.rol === 'conductor') {
+          await Conductor.create(
+            {
+              usuarioId: nuevo.id,
+              cedula: data.cedula!,
+              placa: data.placa!,
+              tipoVehiculo: data.tipoVehiculo || null,
+              capacidad: data.capacidad || null,
+              ciudad: data.ciudad || null,
+              estadoVerificacion: 'pendiente',
+            },
+            { client: trx }
+          )
+        }
+        return nuevo
       })
+    } catch (err: any) {
+      // Carrera entre dos registros simultáneos: la restricción UNIQUE de la BD
+      // es la última defensa (MySQL ER_DUP_ENTRY / SQLite UNIQUE constraint).
+      const mensaje = String(err?.message || '')
+      if (err?.code === 'ER_DUP_ENTRY' || mensaje.includes('UNIQUE constraint failed')) {
+        if (mensaje.includes('placa')) return response.status(409).send(DUPLICADO.placa)
+        if (mensaje.includes('cedula')) return response.status(409).send(DUPLICADO.cedula)
+        if (mensaje.includes('email')) return response.status(409).send(DUPLICADO.email)
+      }
+      throw err
     }
 
     const token = await User.accessTokens.create(user, [], { expiresIn: '7 days' })
