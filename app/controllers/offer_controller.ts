@@ -191,6 +191,7 @@ export default class OfferController {
       viajeId: String(oferta.viajeId),
       monto: oferta.monto,
       estado: oferta.estado,
+      expiresAt: oferta.expiraAt ? oferta.expiraAt.toISO() : null,
       createdAt: oferta.createdAt ? oferta.createdAt.toISO() : new Date().toISOString(),
     })
   }
