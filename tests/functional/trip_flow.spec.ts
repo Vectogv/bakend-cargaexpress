@@ -5,6 +5,10 @@ import { io } from 'socket.io-client'
 import { setTimeout } from 'node:timers/promises'
 import GpsRateLimitService from '#services/gps_rate_limit_service'
 
+// Puerto real del servidor de tests: `node ace test` usa otro aleatorio si
+// el 3333 está ocupado (p. ej. por un `node ace serve` de desarrollo).
+const SOCKET_URL = `http://localhost:${process.env.PORT ?? 3333}`
+
 // Resets the (in-memory / Redis) GPS rate limiter for a conductor so that a
 // fresh location PUT always succeeds even when conductor IDs are reused
 // after transaction rollbacks.
@@ -104,11 +108,11 @@ test.group('Trip Flow QA Test', (group) => {
     locationRes.assertStatus(200)
     
     // Fix: Use query param for socket auth (server reads from query.token)
-    const clientSocket = io('http://localhost:3333', {
+    const clientSocket = io(SOCKET_URL, {
       query: { token: clientToken }
     })
     
-    const driverSocket = io('http://localhost:3333', {
+    const driverSocket = io(SOCKET_URL, {
       query: { token: driverToken }
     })
     
