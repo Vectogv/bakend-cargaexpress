@@ -43,9 +43,14 @@ const ESTADOS_VIAJE_ACTIVO_CLIENTE = [
   'en_curso',
   'entregado',
   'esperando_confirmacion',
+  // El conductor finalizó y falta que el cliente confirme la entrega.
+  'pendiente_confirmacion',
   'sos',
   'disputa',
 ]
+
+/** Estados que GET /api/trips/active devuelve al cliente como su viaje actual. */
+const ESTADOS_VIAJE_ACTUAL_CLIENTE = ['creado', ...ESTADOS_VIAJE_ACTIVO_CLIENTE]
 
 function viajeActivoDelCliente(clienteId: number, trx?: TransactionClientContract) {
   return Viaje.query(trx ? { client: trx } : {})
@@ -502,7 +507,7 @@ export default class TripController {
     } else {
       viaje = await Viaje.query()
         .where('cliente_id', user.id)
-        .whereIn('estado', ['creado', 'buscando_conductor', 'pendiente', 'aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos', 'disputa'])
+        .whereIn('estado', ESTADOS_VIAJE_ACTUAL_CLIENTE)
         .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
         .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
         .first()
