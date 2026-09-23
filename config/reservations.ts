@@ -34,6 +34,13 @@ const reservationConfig = {
   /** Máximo de reservas a activar en una ejecución del scheduler. */
   activationBatchSize: Number(env.get('RESERVATION_ACTIVATION_BATCH_SIZE', 50)),
 
+  /**
+   * Minutos que un viaje puede seguir buscando conductor (`buscando_conductor`
+   * o `pendiente` sin oferta aceptada) antes de que el sistema lo cancele.
+   * Se cuentan desde que inició la búsqueda (creación, o activación si es reserva).
+   */
+  busquedaTimeoutMin: Number(env.get('BUSQUEDA_TIMEOUT_MIN', 15)),
+
   /** Zona horaria de operación (Popayán/Cali/Pasto). */
   timezone: env.get('RESERVATION_TIMEZONE', 'America/Bogota'),
 }

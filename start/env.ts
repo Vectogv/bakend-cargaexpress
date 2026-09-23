@@ -54,6 +54,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   RESERVATION_ACTIVATION_BATCH_SIZE: Env.schema.number.optional(),
   RESERVATION_TIMEZONE: Env.schema.string.optional(),
   RESERVATION_SCHEDULER_ENABLED: Env.schema.boolean.optional(),
+  BUSQUEDA_TIMEOUT_MIN: Env.schema.number.optional(),
 
   // ── Antifraude ────────────────────────────────────────────────
   ANTIFRAUDE_RADIO_CIERRE_KM: Env.schema.number.optional(),
