@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { DateTime } from 'luxon'
 import ConfiguracionPlataforma from '#models/configuracion_plataforma'
 import User from '#models/user'
 import CoverageService from '#services/coverage_service'
@@ -63,6 +64,39 @@ test.group('Cobertura por zonas', (group) => {
 
     const dentro = await client.post('/api/trips/request').bearerToken(await tokenDe(client, 'cliente')).json(viaje(2.44, -76.61))
     dentro.assertStatus(200)
+  })
+
+  test('rechaza viajes y reservas con destino fuera de cobertura', async ({ client }) => {
+    const admin = await tokenDe(client, 'admin')
+    await client
+      .put('/api/admin/config/coverage')
+      .bearerToken(admin)
+      .json({ zonasCobertura: [POPAYAN] })
+
+    const destinoFuera = {
+      ...viaje(2.44, -76.61),
+      destino: { direccion: 'Bogotá', lat: 4.65, lng: -74.05 },
+    }
+    const mensaje =
+      'El destino está fuera de nuestra zona de cobertura. Lo sentimos, por el momento solo operamos en Popayán.'
+
+    const pedido = await client
+      .post('/api/trips/request')
+      .bearerToken(await tokenDe(client, 'cliente'))
+      .json(destinoFuera)
+    pedido.assertStatus(422)
+    pedido.assertBodyContains({ error: mensaje })
+
+    const reserva = await client
+      .post('/api/trips/reserve')
+      .bearerToken(await tokenDe(client, 'cliente'))
+      .json({
+        ...destinoFuera,
+        fechaProgramada: DateTime.now().setZone('America/Bogota').plus({ days: 1 }).toISODate(),
+        horaProgramada: '10:00',
+      })
+    reserva.assertStatus(422)
+    reserva.assertBodyContains({ error: mensaje })
   })
 
   test('una zona pausada deja de aceptar viajes', async ({ client }) => {

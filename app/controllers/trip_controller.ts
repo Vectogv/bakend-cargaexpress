@@ -59,6 +59,23 @@ function viajeActivoDelCliente(clienteId: number, trx?: TransactionClientContrac
     .first()
 }
 
+type Punto = { lat: number; lng: number }
+
+/**
+ * Cobertura compartida por viajes inmediatos y reservas: origen y destino deben
+ * estar dentro de una zona activa. Devuelve el mensaje de error o null.
+ */
+async function errorDeCobertura(origen: Punto, destino: Punto): Promise<string | null> {
+  if (!(await GeoService.validarCobertura(origen.lat, origen.lng))) {
+    return CoverageService.mensajeFueraDeCobertura()
+  }
+  if (!(await GeoService.validarCobertura(destino.lat, destino.lng))) {
+    const zonas = await CoverageService.mensajeFueraDeCobertura()
+    return `El destino está fuera de nuestra zona de cobertura. ${zonas}`
+  }
+  return null
+}
+
 /**
  * SELECT ... FOR UPDATE sobre la fila del cliente: serializa la creación de
  * viajes/reservas del mismo cliente (MySQL). En SQLite es un no-op, pero allí
@@ -97,12 +114,10 @@ export default class TripController {
 
     const data = await request.validateUsing(tripRequestValidator)
 
-    // Validación de cobertura compartida con las reservas programadas.
-    const dentroCobertura = await GeoService.validarCobertura(data.origen.lat, data.origen.lng)
-    if (!dentroCobertura) {
-      return response
-        .status(422)
-        .send({ error: await CoverageService.mensajeFueraDeCobertura() })
+    // Validación de cobertura (origen y destino) compartida con las reservas programadas.
+    const fueraDeCobertura = await errorDeCobertura(data.origen, data.destino)
+    if (fueraDeCobertura) {
+      return response.status(422).send({ error: fueraDeCobertura })
     }
 
     // Verificación + INSERT atómicos: el FOR UPDATE sobre la fila del cliente
@@ -222,12 +237,10 @@ export default class TripController {
       })
     }
 
-    // Misma validación de cobertura que el viaje inmediato.
-    const dentroCobertura = await GeoService.validarCobertura(data.origen.lat, data.origen.lng)
-    if (!dentroCobertura) {
-      return response
-        .status(422)
-        .send({ error: await CoverageService.mensajeFueraDeCobertura() })
+    // Misma validación de cobertura (origen y destino) que el viaje inmediato.
+    const fueraDeCobertura = await errorDeCobertura(data.origen, data.destino)
+    if (fueraDeCobertura) {
+      return response.status(422).send({ error: fueraDeCobertura })
     }
 
     // La búsqueda de conductor arranca `dispatchLeadMinutes` antes de la hora programada.
