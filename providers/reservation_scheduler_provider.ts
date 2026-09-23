@@ -8,8 +8,10 @@ const OFFERS_TICK_MS = 30_000
 const OFFERS_TICK_LOCK_MS = 25_000
 
 /**
- * Ejecuta cada minuto la activación de reservas programadas y, cada 30 s, el
- * barrido de ofertas vencidas (OfferExpiryService; también `node ace offers:expire`).
+ * Ejecuta cada minuto la activación de reservas programadas, el aviso de cierres
+ * sin confirmar y la suspensión por pago de conductores con deuda vencida
+ * (DriverDebtSuspensionService; también `node ace debts:suspend`) y, cada 30 s,
+ * el barrido de ofertas vencidas (OfferExpiryService; también `node ace offers:expire`).
  *
  * Es seguro con múltiples réplicas (Railway corre 2): un lock distribuido en
  * Redis garantiza que solo una instancia haga el barrido en cada ventana.
@@ -17,8 +19,9 @@ const OFFERS_TICK_LOCK_MS = 25_000
  * ReservationActivationService sigue impidiendo activaciones duplicadas.
  *
  * Se puede deshabilitar con RESERVATION_SCHEDULER_ENABLED=false y usar en su
- * lugar `node ace reservations:activate` y `node ace offers:expire` desde un cron
- * externo (la bandera apaga ambos barridos). En tests no se inicia.
+ * lugar `node ace reservations:activate`, `node ace debts:suspend` y
+ * `node ace offers:expire` desde un cron externo (la bandera apaga todos los
+ * barridos). En tests no se inicia.
  *
  * IMPORTANTE: los módulos de la app se importan de forma diferida. Importar los
  * modelos en el nivel superior del provider (durante el registro) rompe el
@@ -91,6 +94,9 @@ export default class ReservationSchedulerProvider {
       const { default: ConfirmacionTimeoutService } = await import(
         '#services/confirmacion_timeout_service'
       )
+      const { default: DriverDebtSuspensionService } = await import(
+        '#services/driver_debt_suspension_service'
+      )
 
       const acquired = await RedisService.acquireLock('reservation:scheduler:tick', TICK_LOCK_MS)
       if (!acquired) return
@@ -105,6 +111,9 @@ export default class ReservationSchedulerProvider {
 
         // H1: Notificar al moderador de zona cuando un cierre quedó sin confirmar por el cliente.
         await ConfirmacionTimeoutService.notificarConfirmacionesVencidas()
+
+        // Conductores con deuda de comisión vencida: suspensión por pago.
+        await DriverDebtSuspensionService.suspenderVencidos()
       } finally {
         await RedisService.releaseLock('reservation:scheduler:tick')
       }
