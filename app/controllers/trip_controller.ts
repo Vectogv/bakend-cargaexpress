@@ -1240,10 +1240,13 @@ export default class TripController {
       motivo: viaje.motivoCancelacion,
     })
 
+    // canceladoPor: la app muestra el aviso correcto (no "por el conductor"
+    // cuando canceló el propio cliente).
     emitToClient(viaje.clienteId, 'trip:cancelled', {
       id: String(viaje.id),
       estado: viaje.estado,
       motivo: viaje.motivoCancelacion,
+      canceladoPor: user.rol,
     })
 
     if (viaje.conductorId) {
@@ -1253,6 +1256,7 @@ export default class TripController {
           id: String(viaje.id),
           estado: viaje.estado,
           motivo: viaje.motivoCancelacion,
+          canceladoPor: user.rol,
         })
 
         emitToDriver(conductor.usuarioId, 'driver:stop_gps', {
