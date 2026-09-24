@@ -224,6 +224,7 @@ export default class OfferController {
           foto: o.conductor.fotoConductor,
           calificacion: o.conductor.calificacion,
           rating: o.conductor.calificacion,
+          totalViajes: o.conductor.totalViajes,
           placa: o.conductor.placa,
           tipoVehiculo: o.conductor.tipoVehiculo,
         },
@@ -386,6 +387,7 @@ export default class OfferController {
         tipoVehiculo: oferta.conductor.tipoVehiculo,
         placa: oferta.conductor.placa,
         rating: oferta.conductor.calificacion,
+        totalViajes: oferta.conductor.totalViajes,
       },
       estado: 'aceptado',
     })

@@ -271,4 +271,70 @@ test.group('Trip Flow QA Test', (group) => {
     const viajeFinal = await db.from('viajes').where('id', tripId).first()
     assert.equal(viajeFinal.estado, 'finalizado')
   })
+
+  test('GET /api/trips/:id and /api/trips/active include the driver rating', async ({ client, assert }) => {
+    // Regresión: el cliente mostraba "Nuevo" para conductores con
+    // calificación real porque `formatViajeResponse` no incluía
+    // `calificacion`/`totalViajes` en el objeto `conductor`.
+    const clientReg = await client.post('/api/auth/register').json({
+      nombre: 'Rating Client', apellido: 'Test',
+      email: `rating-client-${Date.now()}@test.com`,
+      password: '123456', rol: 'cliente', edad: 30
+    })
+    clientReg.assertStatus(200)
+    const clientToken = clientReg.body().token
+
+    const driverReg = await client.post('/api/auth/register').json({
+      nombre: 'Rating Driver', apellido: 'Test',
+      email: `rating-driver-${Date.now()}@test.com`,
+      password: '123456', rol: 'conductor', edad: 30,
+      cedula: `${Date.now()}`, placa: `RT-${Date.now()}`,
+      tipoVehiculo: 'camioneta', capacidad: '1000 kg'
+    })
+    driverReg.assertStatus(200)
+    const driverToken = driverReg.body().token
+    const driverUserId = driverReg.body().id
+
+    // Conductor verificado y con calificación real (como conductor1 en prod).
+    await db.from('conductores').where('usuario_id', driverUserId).update({
+      estado_verificacion: 'aprobado',
+      calificacion: 5,
+      total_viajes: 12,
+    })
+
+    const trip = await client.post('/api/trips/request')
+      .header('Authorization', `Bearer ${clientToken}`)
+      .json({
+        origen: { direccion: 'Calle 1', lat: 3.4516, lng: -76.5320 },
+        destino: { direccion: 'Calle 2', lat: 3.4520, lng: -76.5310 },
+        descripcion: 'rating test', precioCliente: 50000
+      })
+    trip.assertStatus(200)
+    const tripId = trip.body().id
+
+    await resetGpsLimiter(driverUserId)
+    const locationRes = await client.put('/api/drivers/location')
+      .header('Authorization', `Bearer ${driverToken}`)
+      .json({ lat: 3.4516, lng: -76.5320, heading: 0, accuracy: 10 })
+    locationRes.assertStatus(200)
+
+    await setTimeout(500)
+    const accept = await client.post(`/api/trips/${tripId}/accept`)
+      .header('Authorization', `Bearer ${driverToken}`)
+    accept.assertStatus(200)
+
+    // GET /api/trips/:id (usado por el cliente para ver el detalle del viaje)
+    const show = await client.get(`/api/trips/${tripId}`)
+      .header('Authorization', `Bearer ${clientToken}`)
+    show.assertStatus(200)
+    assert.equal(Number(show.body().conductor.calificacion), 5)
+    assert.equal(Number(show.body().conductor.totalViajes), 12)
+
+    // GET /api/trips/active (usado para el sondeo/polling del viaje activo)
+    const activeTrip = await client.get('/api/trips/active')
+      .header('Authorization', `Bearer ${clientToken}`)
+    activeTrip.assertStatus(200)
+    assert.equal(Number(activeTrip.body().conductor.calificacion), 5)
+    assert.equal(Number(activeTrip.body().conductor.totalViajes), 12)
+  })
 })

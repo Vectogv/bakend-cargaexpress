@@ -516,7 +516,7 @@ export default class TripController {
         Viaje.query()
           .where('conductor_id', conductor.id)
           .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
-          .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
+          .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'total_viajes', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
       viaje = await viajeDelConductor()
         .whereIn('estado', ['aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos'])
         .first()
@@ -534,7 +534,7 @@ export default class TripController {
         .where('cliente_id', user.id)
         .whereIn('estado', ESTADOS_VIAJE_ACTUAL_CLIENTE)
         .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
-        .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
+        .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'total_viajes', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
         .first()
     }
 
@@ -674,6 +674,7 @@ export default class TripController {
           placa: resultado.viaje.conductor.placa,
           foto: resultado.viaje.conductor.fotoConductor,
           calificacion: resultado.viaje.conductor.calificacion,
+          totalViajes: resultado.viaje.conductor.totalViajes,
         },
         tiempoEstimadoMinutos: resultado.viaje.tiempoEstimadoMinutos ?? null,
         aceptadoAt: resultado.viaje.aceptadoAt?.toISO() ?? null,
@@ -691,6 +692,7 @@ export default class TripController {
         placa: resultado.viaje.conductor.placa,
         foto: resultado.viaje.conductor.fotoConductor,
         calificacion: resultado.viaje.conductor.calificacion,
+        totalViajes: resultado.viaje.conductor.totalViajes,
       },
       tiempoEstimadoMinutos: resultado.viaje.tiempoEstimadoMinutos,
       aceptadoAt: resultado.viaje.aceptadoAt?.toISO() ?? null,
@@ -1496,6 +1498,10 @@ export default class TripController {
             telefono: viaje.conductor.usuario.telefono,
             placa: viaje.conductor.placa,
             tipoVehiculo: viaje.conductor.tipoVehiculo,
+            // F lib/contracts/calificacion.dart lee `calificacion`/`totalViajes`
+            // del conductor para decidir si muestra "Nuevo" o el promedio.
+            calificacion: viaje.conductor.calificacion,
+            totalViajes: viaje.conductor.totalViajes,
           }
         : null,
       origen: {
