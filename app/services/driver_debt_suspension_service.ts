@@ -29,7 +29,14 @@ export const DIAS_PLAZO_DEUDA_COMISION = 15
  * La deuda de clientes (acuerdo de pago de disputas) no pasa por aquí.
  */
 export default class DriverDebtSuspensionService {
-  /** Suspende a los conductores con deuda vencida y devuelve los ids suspendidos. */
+  /**
+   * Suspende a los conductores con deuda vencida y devuelve los ids suspendidos.
+   * Solo toca `estado_cuenta = 'activa'`: un conductor que ya subió el
+   * comprobante (`esperando_confirmacion`) o que ya está `suspension_por_pago`
+   * queda fuera, aunque su `deuda_fecha_limite` haya pasado. Como ahora se
+   * puede subir el comprobante desde 'activa' (sin esperar a que venza el
+   * plazo), esto evita suspenderlo mientras el admin revisa su pago.
+   */
   static async suspenderVencidos(): Promise<number[]> {
     const ahora = DateTime.now().toSQL()!
     const candidatos = await User.query()

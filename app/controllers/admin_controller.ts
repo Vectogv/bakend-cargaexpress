@@ -1269,7 +1269,13 @@ export default class AdminController {
         .send(await serialize.withoutWrapping({ error: 'El usuario no tiene un comprobante pendiente' }))
     }
 
-    user.estadoCuenta = 'suspension_por_pago'
+    // El comprobante se podía subir desde 'activa' (deuda sin vencer todavía),
+    // así que al rechazar hay que devolver al usuario a su estado anterior en
+    // vez de suspenderlo siempre: si el plazo no ha vencido, sigue 'activa'
+    // (el scheduler lo suspenderá si llega a vencer); si ya venció, vuelve a
+    // 'suspension_por_pago'.
+    const plazoVigente = user.deudaFechaLimite !== null && DateTime.now() < user.deudaFechaLimite
+    user.estadoCuenta = plazoVigente ? 'activa' : 'suspension_por_pago'
     user.comprobantePago = null
     user.montoComprobante = null
     user.comprobanteSubidoAt = null
@@ -1280,17 +1286,21 @@ export default class AdminController {
       : 0
 
     emitToUser(user.id, 'payment:rejected', {
-      message:
-        diasRestantes > 0
+      message: plazoVigente
+        ? `Tu comprobante no fue válido. Te quedan ${diasRestantes} días para pagar tu deuda.`
+        : diasRestantes > 0
           ? `Tu comprobante no fue válido. Te quedan ${diasRestantes} días para pagar.`
           : 'Tu comprobante no fue válido. Tu cuenta sigue suspendida: sube un nuevo comprobante de pago.',
       diasRestantes,
+      estadoCuenta: user.estadoCuenta,
     })
 
     return serialize.withoutWrapping({
       id: user.id,
       estadoCuenta: user.estadoCuenta,
-      message: 'Pago rechazado. El usuario vuelve a suspensión por pago.',
+      message: plazoVigente
+        ? 'Pago rechazado. El usuario vuelve a estar activo, con la deuda pendiente.'
+        : 'Pago rechazado. El usuario vuelve a suspensión por pago.',
     })
   }
 

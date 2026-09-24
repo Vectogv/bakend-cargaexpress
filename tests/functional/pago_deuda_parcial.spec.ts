@@ -345,3 +345,92 @@ test.group('Aprobar pago: solo se descuenta lo que cubría el comprobante', (gro
     assert.isFalse(Boolean(user.tieneDeudaActiva))
   })
 })
+
+/**
+ * Pagar en cualquier momento: ya no hace falta esperar a que venza el plazo
+ * (estado 'suspension_por_pago') para subir el comprobante. Basta con tener
+ * deuda pendiente y no tener ya uno en revisión.
+ */
+test.group('Pagar en cualquier momento (antes de que venza el plazo)', (group) => {
+  group.each.setup(async () => {
+    await ConfiguracionPlataforma.query().delete()
+  })
+
+  test('conductor activo con deuda sin vencer puede subir el comprobante y queda esperando_confirmacion', async ({
+    client,
+    assert,
+  }) => {
+    const driver = await conductorConComisiones(client, { vence: DateTime.now().plus({ days: 5 }) })
+    assert.equal((await User.findOrFail(driver.id)).estadoCuenta, 'activa')
+
+    await subirComprobante(client, driver.token)
+
+    const user = await User.findOrFail(driver.id)
+    assert.equal(user.estadoCuenta, 'esperando_confirmacion')
+    assert.equal(Number(user.montoComprobante), 12000)
+  })
+
+  test('sin deuda pendiente no puede subir comprobante', async ({ client, assert }) => {
+    const cliente = await registrar(client, 'cliente')
+
+    const res = await client
+      .post('/api/payment/proof')
+      .bearerToken(cliente.token)
+      .file('file', PNG, { filename: 'comprobante.png', contentType: 'image/png' })
+    res.assertStatus(422)
+    res.assertBodyContains({ error: 'No tienes una deuda pendiente por pagar' })
+    assert.equal((await User.findOrFail(cliente.id)).estadoCuenta, 'activa')
+  })
+
+  test('con un comprobante ya en revisión no puede subir otro', async ({ client }) => {
+    const driver = await conductorConComisiones(client, { vence: DateTime.now().plus({ days: 5 }) })
+    await subirComprobante(client, driver.token)
+
+    const res = await client
+      .post('/api/payment/proof')
+      .bearerToken(driver.token)
+      .file('file', PNG, { filename: 'otro.png', contentType: 'image/png' })
+    res.assertStatus(422)
+    res.assertBodyContains({ error: 'Ya tienes un comprobante en revisión' })
+  })
+
+  test('si rechazan el comprobante subido antes del plazo, vuelve a activa (no a suspensión) y puede seguir trabajando', async ({
+    client,
+    assert,
+  }) => {
+    const admin = await adminToken(client)
+    const driver = await conductorConComisiones(client, { vence: DateTime.now().plus({ days: 5 }) })
+    await subirComprobante(client, driver.token)
+    assert.equal((await User.findOrFail(driver.id)).estadoCuenta, 'esperando_confirmacion')
+
+    const rechaza = await client.put(`/api/admin/payments/${driver.id}/reject`).bearerToken(admin)
+    rechaza.assertStatus(200)
+    assert.equal((rechaza.body() as any).estadoCuenta, 'activa')
+
+    const user = await User.findOrFail(driver.id)
+    assert.equal(user.estadoCuenta, 'activa')
+    assert.equal(Number(user.montoDeuda), 12000)
+    assert.isNull(user.comprobantePago)
+    assert.isNull(user.montoComprobante)
+    assert.isNull(user.comprobanteSubidoAt)
+
+    // Sigue activo: puede ponerse online y el barrido no lo toca hasta que venza el plazo.
+    const online = await client.put('/api/drivers/status').bearerToken(driver.token).json({ online: true })
+    online.assertStatus(200)
+    assert.notInclude(await DriverDebtSuspensionService.suspenderVencidos(), driver.id)
+  })
+
+  test('si el plazo ya venció, rechazar el comprobante vuelve a suspension_por_pago', async ({ client, assert }) => {
+    const admin = await adminToken(client)
+    const driver = await conductorConComisiones(client, {
+      vence: DateTime.now().minus({ hours: 1 }),
+      estado: 'suspension_por_pago',
+    })
+    await subirComprobante(client, driver.token)
+
+    const rechaza = await client.put(`/api/admin/payments/${driver.id}/reject`).bearerToken(admin)
+    rechaza.assertStatus(200)
+    assert.equal((rechaza.body() as any).estadoCuenta, 'suspension_por_pago')
+    assert.equal((await User.findOrFail(driver.id)).estadoCuenta, 'suspension_por_pago')
+  })
+})

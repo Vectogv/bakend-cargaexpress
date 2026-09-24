@@ -35,10 +35,19 @@ export default class PaymentController {
 
   async uploadProof({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    if (user.estadoCuenta !== 'suspension_por_pago') {
+    // Paga cuando quiera: no hace falta esperar a que venza el plazo (estado
+    // 'suspension_por_pago') para subir el comprobante. Solo se bloquea si no
+    // hay deuda o si ya hay un comprobante en revisión.
+    if (user.estadoCuenta === 'esperando_confirmacion') {
       return response
         .status(422)
-        .send(await serialize.withoutWrapping({ error: 'No tienes una suspensión por pago activa' }))
+        .send(await serialize.withoutWrapping({ error: 'Ya tienes un comprobante en revisión' }))
+    }
+    const deuda = Number(user.montoDeuda) || 0
+    if (deuda <= 0) {
+      return response
+        .status(422)
+        .send(await serialize.withoutWrapping({ error: 'No tienes una deuda pendiente por pagar' }))
     }
 
     const file = request.file('file', {

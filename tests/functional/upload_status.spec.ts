@@ -24,9 +24,10 @@ test.group('Upload Status - No File', (group) => {
   test('POST /api/payment/proof returns 400 when no file uploaded', async ({ client }) => {
     const { token, email } = await registerAndGetToken(client, 'cliente')
 
-    // Set user estadoCuenta to suspension_por_pago to pass the validation
+    // Set user estadoCuenta and a pending debt to pass the validation
     const testUser = await User.findBy('email', email)
     testUser!.estadoCuenta = 'suspension_por_pago'
+    testUser!.montoDeuda = 10000
     await testUser!.save()
 
     const response = await client
