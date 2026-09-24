@@ -18,6 +18,7 @@ import db from '@adonisjs/lucid/services/db'
 import reservationConfig from '#config/reservations'
 import SignedUploadService from '#services/signed_upload_service'
 import DriverDebtSuspensionService from '#services/driver_debt_suspension_service'
+import { ESTADOS_CONDUCTOR_OCUPADO } from '#services/trip_conflict_service'
 
 /**
  * Totales de ganancias de UN conductor (opcionalmente desde una fecha). Las subconsultas
@@ -252,9 +253,14 @@ export default class DriverController {
       lng: data.lng,
     })
 
+    // Se relaya la ubicación mientras el conductor está atendiendo el viaje
+    // (mismo criterio que TripConflictService: asignado y aún no lo cierra),
+    // no solo en 'aceptado'/'en_curso'. De lo contrario el cliente se queda
+    // sin `driver:location` durante 'conductor_en_camino', 'conductor_llegada'
+    // y 'sos'.
     const viajeActivo = await Viaje.query()
       .where('conductor_id', conductor.id)
-      .whereIn('estado', ['aceptado', 'en_curso'])
+      .whereIn('estado', ESTADOS_CONDUCTOR_OCUPADO)
       .first()
 
     if (viajeActivo) {
@@ -285,7 +291,7 @@ export default class DriverController {
         lng: data.lng,
       })
 
-      if (viajeActivo.estado === 'aceptado') {
+      if (viajeActivo.estado === 'aceptado' || viajeActivo.estado === 'conductor_en_camino') {
         const R = 6371
         const destLat = viajeActivo.origenLat
         const destLng = viajeActivo.origenLng

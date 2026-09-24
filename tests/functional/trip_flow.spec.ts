@@ -337,4 +337,91 @@ test.group('Trip Flow QA Test', (group) => {
     assert.equal(Number(activeTrip.body().conductor.calificacion), 5)
     assert.equal(Number(activeTrip.body().conductor.totalViajes), 12)
   })
+
+  test('driver:location se relaya al cliente mientras el conductor está en camino (conductor_en_camino)', async ({ client, assert }) => {
+    // Regresión: DriverController#location solo relayaba `driver:location` para
+    // viajes en 'aceptado'/'en_curso'. Mientras el conductor iba hacia el punto
+    // de recogida ('conductor_en_camino') el cliente no recibía ninguna
+    // actualización y el mapa se quedaba sin camión y sin distancia.
+    const clientReg = await client.post('/api/auth/register').json({
+      nombre: 'EnCamino Client', apellido: 'Test',
+      email: `encamino-client-${Date.now()}@test.com`,
+      password: '123456', rol: 'cliente', edad: 30,
+    })
+    clientReg.assertStatus(200)
+    const clientToken = clientReg.body().token
+
+    const driverReg = await client.post('/api/auth/register').json({
+      nombre: 'EnCamino Driver', apellido: 'Test',
+      email: `encamino-driver-${Date.now()}@test.com`,
+      password: '123456', rol: 'conductor', edad: 30,
+      cedula: `${Date.now()}`, placa: `EC-${Date.now()}`,
+      tipoVehiculo: 'camioneta', capacidad: '1000 kg',
+    })
+    driverReg.assertStatus(200)
+    const driverToken = driverReg.body().token
+    const driverUserId = driverReg.body().id
+
+    await db.from('conductores').where('usuario_id', driverUserId).update({
+      estado_verificacion: 'aprobado',
+    })
+
+    const trip = await client.post('/api/trips/request')
+      .header('Authorization', `Bearer ${clientToken}`)
+      .json({
+        origen: { direccion: 'Calle 1', lat: 3.4516, lng: -76.5320 },
+        destino: { direccion: 'Calle 2', lat: 3.4520, lng: -76.5310 },
+        descripcion: 'en camino test', precioCliente: 50000,
+      })
+    trip.assertStatus(200)
+    const tripId = trip.body().id
+
+    await resetGpsLimiter(driverUserId)
+    const firstLocation = await client.put('/api/drivers/location')
+      .header('Authorization', `Bearer ${driverToken}`)
+      .json({ lat: 3.4516, lng: -76.5320, heading: 0, accuracy: 10 })
+    firstLocation.assertStatus(200)
+
+    await setTimeout(500)
+    const accept = await client.post(`/api/trips/${tripId}/accept`)
+      .header('Authorization', `Bearer ${driverToken}`)
+    accept.assertStatus(200)
+
+    let viaje = await db.from('viajes').where('id', tripId).first()
+    assert.equal(viaje.estado, 'aceptado')
+
+    // Conductor confirma que va en camino: aceptado -> conductor_en_camino
+    const confirmArrival = await client.post(`/api/trips/${tripId}/confirm-arrival`)
+      .header('Authorization', `Bearer ${driverToken}`)
+    confirmArrival.assertStatus(200)
+    assert.equal(confirmArrival.body().estado, 'conductor_en_camino')
+
+    viaje = await db.from('viajes').where('id', tripId).first()
+    assert.equal(viaje.estado, 'conductor_en_camino')
+
+    const clientSocket = io(SOCKET_URL, { query: { token: clientToken } })
+    const clientEvents: Array<{ event: string; lat?: number; lng?: number }> = []
+    clientSocket.on('driver:location', (data: any) =>
+      clientEvents.push({ event: 'driver:location', lat: data.lat, lng: data.lng })
+    )
+    await new Promise<void>((resolve) => clientSocket.on('connect', () => resolve()))
+
+    await resetGpsLimiter(driverUserId)
+    const movedLocation = await client.put('/api/drivers/location')
+      .header('Authorization', `Bearer ${driverToken}`)
+      .json({ lat: 3.4517, lng: -76.5319, heading: 45, accuracy: 10 })
+    movedLocation.assertStatus(200)
+
+    await setTimeout(1000)
+
+    const received = clientEvents.find((e) => e.event === 'driver:location')
+    assert.isDefined(
+      received,
+      'El cliente debe recibir driver:location mientras el viaje está en conductor_en_camino'
+    )
+    assert.strictEqual(received!.lat, 3.4517)
+    assert.strictEqual(received!.lng, -76.5319)
+
+    try { clientSocket.disconnect() } catch {}
+  }).timeout(30000)
 })
