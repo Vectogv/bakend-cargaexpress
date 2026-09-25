@@ -1,0 +1,11 @@
+node_modules
+build
+tmp
+.git
+.env
+.env.*
+!.env.example
+*.log
+storage/uploads
+firebase-credentials.json
+google-service-account*.json
