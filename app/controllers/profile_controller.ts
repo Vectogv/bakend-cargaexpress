@@ -5,6 +5,7 @@ import db from '@adonisjs/lucid/services/db'
 import { randomUUID } from 'node:crypto'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import SignedUploadService from '#services/signed_upload_service'
+import logger from '@adonisjs/core/services/logger'
 
 export default class ProfileController {
   @ApiOperation({
@@ -138,6 +139,9 @@ export default class ProfileController {
     const { fcmToken } = request.only(['fcmToken'])
     user.fcmToken = fcmToken || null
     await user.save()
+    logger.info(
+      `Token FCM ${fcmToken ? `registrado (…${String(fcmToken).slice(-8)})` : 'borrado'} para usuario ${user.id}`
+    )
     return serialize.withoutWrapping({ fcmToken: user.fcmToken })
   }
 }

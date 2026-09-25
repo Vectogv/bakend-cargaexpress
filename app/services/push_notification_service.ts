@@ -120,11 +120,17 @@ export async function sendToToken(
     message.apns = { payload: { aps: { sound } } }
   }
 
+  // Sufijo del token: identifica el dispositivo en los logs sin exponerlo.
+  const dispositivo = `…${token.slice(-8)}`
   try {
     await messaging.send(message)
+    logger.info(`FCM enviado a ${dispositivo}: ${title}`)
   } catch (err: any) {
-    if (err.code === 'messaging/registration-token-not-registered') return
-    logger.error(`FCM send error: ${err.message}`)
+    if (err.code === 'messaging/registration-token-not-registered') {
+      logger.warn(`FCM token no registrado (${dispositivo}): la app debe volver a registrarlo`)
+      return
+    }
+    logger.error(`FCM send error (${dispositivo}): ${err.message}`)
   }
 }
 

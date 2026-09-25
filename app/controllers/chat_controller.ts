@@ -4,6 +4,7 @@ import Conductor from '#models/conductor'
 import type { HttpContext } from '@adonisjs/core/http'
 import { emitToClient, emitToDriver } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
+import logger from '@adonisjs/core/services/logger'
 
 export default class ChatController {
   async index({ auth, params, response, serialize }: HttpContext) {
@@ -140,6 +141,8 @@ export default class ChatController {
             `Nuevo mensaje de ${msg.remitente.nombre || ''}`,
             msg.mensaje
           )
+        } else {
+          logger.info(`Chat viaje ${viaje.id}: usuario ${destinatarioId} sin token FCM, no se envía push`)
         }
       }
     }
