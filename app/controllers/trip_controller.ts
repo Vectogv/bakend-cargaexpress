@@ -21,6 +21,7 @@ import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators
 import { emitToClient, emitToDriver, emitToAdmin, emitTripStatusChanged } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 import GeoService, { distanciaKm } from '#services/geo_service'
+import { rutaDelViaje, payloadRuta } from '#services/trip_route_service'
 import CoverageService from '#services/coverage_service'
 import TripDispatchService from '#services/trip_dispatch_service'
 import TripConflictService from '#services/trip_conflict_service'
@@ -417,6 +418,32 @@ export default class TripController {
       page: result.currentPage,
       limit: result.perPage,
     })
+  }
+
+  /**
+   * Ruta y ETA actuales del viaje (la misma para cliente y conductor), para
+   * dibujarla al abrir la pantalla sin esperar a que el conductor se mueva.
+   * Usa la caché de trip_route_service: normalmente no llama a Mapbox.
+   */
+  async route({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const viaje = await Viaje.find(params.id)
+    if (!viaje) return response.status(404).json({ error: 'Viaje no encontrado' })
+    const conductor = viaje.conductorId ? await Conductor.find(viaje.conductorId) : null
+    if (viaje.clienteId !== user.id && conductor?.usuarioId !== user.id) {
+      return response.status(403).json({ error: 'No participas en este viaje' })
+    }
+    if (!conductor?.ultimaUbicacionLat || !conductor?.ultimaUbicacionLng) {
+      return response.status(404).json({ error: 'Aún no hay ubicación del conductor', code: 'SIN_UBICACION' })
+    }
+    const estado = await rutaDelViaje(viaje, [
+      Number(conductor.ultimaUbicacionLat),
+      Number(conductor.ultimaUbicacionLng),
+    ])
+    if (!estado) {
+      return response.status(404).json({ error: 'El viaje no está en una fase con ruta', code: 'SIN_RUTA' })
+    }
+    return response.json(payloadRuta(viaje.id, estado, true))
   }
 
   /**

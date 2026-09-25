@@ -10,7 +10,14 @@ import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
 import { DateTime } from 'luxon'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
-import { emitToClient, emitToAdmin } from '#start/socket'
+import { emitToClient, emitToAdmin, emitToDriver } from '#start/socket'
+import { rutaDelViaje, payloadRuta, distanciaM } from '#services/trip_route_service'
+
+/**
+ * Viajes a los que ya se envió el push "Conductor cerca": antes salía en cada
+ * actualización de ubicación (cada ~10 s) mientras estuviera a < 500 m.
+ */
+const avisoCercaEnviado = new Set<number>()
 import GpsRateLimitService from '#services/gps_rate_limit_service'
 import FraudDetectionService from '#services/fraud_detection_service'
 import RedisService from '#services/redis_service'
@@ -291,24 +298,26 @@ export default class DriverController {
         lng: data.lng,
       })
 
+      // Ruta y ETA calculados aquí para ambos (trip_route_service: Mapbox con
+      // tráfico, cacheado por fase; la línea sólo viaja cuando cambia).
+      const estadoRuta = await rutaDelViaje(viajeActivo, [data.lat, data.lng])
+      if (estadoRuta) {
+        const eta = payloadRuta(viajeActivo.id, estadoRuta, false)
+        emitToClient(viajeActivo.clienteId, 'trip:eta_update', eta)
+        emitToDriver(user.id, 'trip:eta_update', eta)
+        if (estadoRuta.recalculada) {
+          const ruta = payloadRuta(viajeActivo.id, estadoRuta, true)
+          emitToClient(viajeActivo.clienteId, 'trip:route_update', ruta)
+          emitToDriver(user.id, 'trip:route_update', ruta)
+        }
+      }
+
       if (viajeActivo.estado === 'aceptado' || viajeActivo.estado === 'conductor_en_camino') {
-        const R = 6371
-        const destLat = viajeActivo.origenLat
-        const destLng = viajeActivo.origenLng
-        const dLat = ((destLat - data.lat) * Math.PI) / 180
-        const dLng = ((destLng - data.lng) * Math.PI) / 180
-        const a =
-          Math.sin(dLat / 2) ** 2 +
-          Math.cos((data.lat * Math.PI) / 180) *
-            Math.cos((destLat * Math.PI) / 180) *
-            Math.sin(dLng / 2) ** 2
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        const distanciaKm = R * c
-        const minutos = Math.ceil((distanciaKm / 30) * 60)
+        const distanciaKm =
+          distanciaM([data.lat, data.lng], [Number(viajeActivo.origenLat), Number(viajeActivo.origenLng)]) / 1000
 
-        emitToClient(viajeActivo.clienteId, 'trip:eta_update', { minutos })
-
-        if (distanciaKm < 0.5) {
+        if (distanciaKm < 0.5 && !avisoCercaEnviado.has(viajeActivo.id)) {
+          avisoCercaEnviado.add(viajeActivo.id)
           emitToClient(viajeActivo.clienteId, 'trip:driver_nearby', {
             lat: data.lat,
             lng: data.lng,
