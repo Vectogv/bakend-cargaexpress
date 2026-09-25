@@ -848,6 +848,15 @@ export default class TripController {
 
     emitTripUpdateToModerators(viaje)
 
+    const clienteInicio = await User.find(viaje.clienteId)
+    if (clienteInicio?.fcmToken) {
+      await sendToToken(
+        clienteInicio.fcmToken,
+        'Tu viaje comenzó',
+        'El conductor recogió tu carga y va hacia el destino.'
+      )
+    }
+
     return serialize.withoutWrapping({
       id: String(viaje.id),
       estado: viaje.estado,
@@ -1012,6 +1021,16 @@ export default class TripController {
     })
 
     emitTripUpdateToModerators(viaje)
+
+    // Push: el cliente debe confirmar aunque no tenga la app abierta.
+    const clienteCierre = await User.find(viaje.clienteId)
+    if (clienteCierre?.fcmToken) {
+      await sendToToken(
+        clienteCierre.fcmToken,
+        'Tu carga llegó al destino',
+        'El conductor terminó la entrega. Entra a la app para confirmarla.'
+      )
+    }
 
     return serialize.withoutWrapping({
       id: String(viaje.id),
