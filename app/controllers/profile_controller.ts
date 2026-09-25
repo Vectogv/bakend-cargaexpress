@@ -136,7 +136,13 @@ export default class ProfileController {
 
   async updateFcmToken({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const { fcmToken } = request.only(['fcmToken'])
+    const { fcmToken, error } = request.only(['fcmToken', 'error'])
+    // La app informa por qué no obtuvo el token (diagnóstico); no se borra
+    // el token que ya hubiera.
+    if (!fcmToken && error) {
+      logger.warn(`Usuario ${user.id} sin token FCM: ${String(error).slice(0, 300)}`)
+      return serialize.withoutWrapping({ fcmToken: user.fcmToken ? 'registrado' : null })
+    }
     user.fcmToken = fcmToken || null
     await user.save()
     logger.info(
