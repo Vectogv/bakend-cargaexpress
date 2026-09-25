@@ -34,8 +34,10 @@ export const tripReserveValidator = vine.create({
   horaProgramada: vine.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
 })
 
+// `montoFinal` es opcional e ignorado si el viaje ya tiene precio acordado
+// (trip_controller.complete): se acepta para no romper apps anteriores.
 export const tripCompleteValidator = vine.create({
-  montoFinal: vine.number().min(0),
+  montoFinal: vine.number().min(0).optional(),
 })
 
 export const tripCancelValidator = vine.create({

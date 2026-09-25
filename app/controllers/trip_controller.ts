@@ -933,7 +933,11 @@ export default class TripController {
 
     // Cambiar a pendiente_confirmacion
     viaje.estado = 'pendiente_confirmacion'
-    viaje.precioFinal = data.montoFinal
+    // El precio es el acordado al aceptar la oferta (offer_controller fija
+    // precioFinal = oferta.monto): el conductor no lo puede cambiar al cerrar.
+    // `montoFinal` sólo se usa si el viaje no tiene ningún precio (legado).
+    viaje.precioFinal =
+      viaje.precioFinal ?? viaje.precioCliente ?? viaje.precioEstimado ?? data.montoFinal ?? 0
     viaje.completadoAt = DateTime.now()
     viaje.pendienteConfirmacionDesde = DateTime.now()
     viaje.moderadorNotificadoEn = null
@@ -970,7 +974,7 @@ export default class TripController {
       fueraDeRango,
       distanciaKm: distDestinoKm,
       justificacion: fueraDeRango ? justificacion : undefined,
-      montoFinal: data.montoFinal,
+      montoFinal: viaje.precioFinal,
     })
 
     emitTripStatusChanged(viaje.clienteId, conductor.usuarioId, {

@@ -305,6 +305,7 @@ await fijarUbicacion(conductor.conductorId, latKm(DESTINO.lat, 0.5), DESTINO.lng
 
     const viaje = await db.from('viajes').where('id', tripId).first()
     assert.equal(viaje.estado, 'finalizado')
-    assert.equal(viaje.precio_final, 52000)
+    // El precio es el acordado (50000); el montoFinal del conductor se ignora.
+    assert.equal(Number(viaje.precio_final), 50000)
   })
 })

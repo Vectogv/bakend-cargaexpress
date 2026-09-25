@@ -152,6 +152,19 @@ test.group('Disputa única al rechazar el cierre', (group) => {
     assert.equal(viaje.estado, 'disputa')
   })
 
+  test('el conductor no puede cambiar el precio acordado al cerrar', async ({ client, assert }) => {
+    const { driver, tripId } = await viajeEnCurso(client)
+    await ubicar(driver.conductorId, DESTINO.lat, DESTINO.lng)
+    const cierre = await client
+      .post(`/api/trips/${tripId}/complete`)
+      .bearerToken(driver.token)
+      .json({ montoFinal: 99999 })
+    cierre.assertStatus(200)
+    cierre.assertBodyContains({ montoFinal: 40000 })
+    const viaje = await db.from('viajes').where('id', tripId).first()
+    assert.equal(Number(viaje.precio_final), 40000)
+  })
+
   test('sin disputa previa, rechazar el cierre crea una sola', async ({ client, assert }) => {
     const { cliente, driver, tripId } = await viajeEnCurso(client)
     await ubicar(driver.conductorId, DESTINO.lat, DESTINO.lng)
