@@ -39,6 +39,7 @@ import {
   datosMapaSos,
 } from '#services/emergency_payload'
 import { adminUpdateUserValidator } from '#validators/user'
+import { restaurarViajeTrasSos } from '#services/sos_trip_service'
 
 export default class AdminController {
   async dashboard({ serialize }: HttpContext) {
@@ -846,10 +847,13 @@ export default class AdminController {
 
     alerta.atendida = true
     await alerta.save()
+    // El viaje sale de 'sos' (antes quedaba atascado sin poder completarse).
+    const estadoViaje = await restaurarViajeTrasSos(alerta)
 
     return serialize.withoutWrapping({
       id: alerta.id,
       atendida: alerta.atendida,
+      estadoViaje,
     })
   }
 

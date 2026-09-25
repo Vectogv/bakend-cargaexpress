@@ -40,6 +40,7 @@ import {
 } from '#services/moderator_trip_events'
 import SignedUploadService from '#services/signed_upload_service'
 import CoverageService, { claveDe, type Zona } from '#services/coverage_service'
+import { restaurarViajeTrasSos } from '#services/sos_trip_service'
 import antifraudeConfig from '#config/antifraude'
 
 export default class ModeratorController {
@@ -1495,6 +1496,8 @@ export default class ModeratorController {
       alerta.atendidaAt = DateTime.now()
     }
     await alerta.save()
+    // El viaje sale de 'sos' (antes quedaba atascado sin poder completarse).
+    await restaurarViajeTrasSos(alerta)
 
     await alerta.load('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email'))
     await alerta.load('viaje', (vq) =>

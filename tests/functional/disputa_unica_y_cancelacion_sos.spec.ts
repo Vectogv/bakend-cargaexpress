@@ -100,15 +100,12 @@ async function viajeEnCurso(client: any) {
 /** Viaje en curso con SOS activado por el conductor. */
 async function viajeEnSos(client: any) {
   const ctx = await viajeEnCurso(client)
-  const sos = await client
-    .post('/api/emergency')
-    .bearerToken(ctx.driver.token)
-    .json({
-      viajeId: ctx.tripId,
-      lat: ORIGEN.lat,
-      lng: ORIGEN.lng,
-      motivo: 'Vehículo interceptado',
-    })
+  const sos = await client.post('/api/emergency').bearerToken(ctx.driver.token).json({
+    viajeId: ctx.tripId,
+    lat: ORIGEN.lat,
+    lng: ORIGEN.lng,
+    motivo: 'Vehículo interceptado',
+  })
   sos.assertStatus(201)
   const fila = await db.from('viajes').where('id', ctx.tripId).first()
   if (fila.estado !== 'sos') throw new Error(`Se esperaba estado sos, está en ${fila.estado}`)
@@ -218,6 +215,52 @@ test.group('Cancelación durante SOS requiere revisión', (group) => {
       .where('estado', 'pendiente')
       .first()
     assert.isNotNull(solicitud)
+  })
+
+  test('al resolver el SOS el viaje vuelve a en_curso y se puede completar', async ({
+    client,
+    assert,
+  }) => {
+    const { driver, tripId } = await viajeEnSos(client)
+    const alerta = await db.from('alertas_emergencia').where('viaje_id', tripId).first()
+    const adminToken = await crearAdmin(client)
+
+    const res = await client
+      .put(`/api/admin/emergencies/${alerta.id}/resolve`)
+      .bearerToken(adminToken)
+    res.assertStatus(200)
+    res.assertBodyContains({ estadoViaje: 'en_curso' })
+    const viaje = await db.from('viajes').where('id', tripId).first()
+    assert.equal(viaje.estado, 'en_curso')
+
+    await ubicar(driver.conductorId, DESTINO.lat, DESTINO.lng)
+    const cierre = await client
+      .post(`/api/trips/${tripId}/complete`)
+      .bearerToken(driver.token)
+      .json({ montoFinal: 40000 })
+    cierre.assertStatus(200)
+  })
+
+  test('con otra alerta sin atender el viaje sigue en SOS', async ({ client, assert }) => {
+    const { cliente, tripId } = await viajeEnSos(client)
+    const segunda = await client
+      .post('/api/emergency')
+      .bearerToken(cliente.token)
+      .json({ viajeId: tripId, motivo: 'También el cliente' })
+    segunda.assertStatus(201)
+    const primera = await db
+      .from('alertas_emergencia')
+      .where('viaje_id', tripId)
+      .orderBy('id')
+      .first()
+    const adminToken = await crearAdmin(client)
+
+    const res = await client
+      .put(`/api/admin/emergencies/${primera.id}/resolve`)
+      .bearerToken(adminToken)
+    res.assertStatus(200)
+    const viaje = await db.from('viajes').where('id', tripId).first()
+    assert.equal(viaje.estado, 'sos')
   })
 
   test('el admin sí puede cancelar un viaje en SOS', async ({ client, assert }) => {
