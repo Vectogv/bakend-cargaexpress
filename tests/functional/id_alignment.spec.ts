@@ -85,6 +85,8 @@ test.group('ID alignment with Flutter contract', (group) => {
     for (const trip of trips) {
       assert.isString(trip._id)
       assert.isString(trip.id)
+      // Sin esto el conductor no ve el chip "Reserva" en su lista de solicitudes.
+      assert.equal(trip.tipoProgramacion, 'inmediata')
     }
   })
 

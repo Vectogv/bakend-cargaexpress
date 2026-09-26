@@ -556,6 +556,15 @@ export default class OfferController {
       ).catch(() => {})
     }
 
+    // Aviso al conductor: antes no se le avisaba nada, solo lo veía en pantalla.
+    if (user.fcmToken) {
+      await sendToToken(
+        user.fcmToken,
+        'Llegaste',
+        'Contacta al cliente y confirma la recogida de la carga'
+      ).catch(() => {})
+    }
+
     emitTripUpdateToModerators(viaje)
 
     return { id: String(viaje.id), estado: viaje.estado }

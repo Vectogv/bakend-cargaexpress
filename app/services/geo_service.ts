@@ -82,6 +82,11 @@ export default class GeoService {
       carga: v.carga,
       descripcion: v.carga,
       createdAt: v.createdAt.toISO(),
+      // Una reserva activada llega aquí (buscando_conductor); sin esto el
+      // conductor no ve el chip "Reserva" en su lista de solicitudes.
+      tipoProgramacion: v.tipoProgramacion ?? 'inmediata',
+      fechaProgramada: v.fechaProgramada,
+      horaProgramada: v.horaProgramada,
       cliente: {
         id: String(v.cliente.id),
         _id: String(v.cliente.id),

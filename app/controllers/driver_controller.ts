@@ -18,6 +18,8 @@ import { rutaDelViaje, payloadRuta, distanciaM } from '#services/trip_route_serv
  * actualización de ubicación (cada ~10 s) mientras estuviera a < 500 m.
  */
 const avisoCercaEnviado = new Set<number>()
+/** Igual, pero para el push "llega en 5 min" (una vez por viaje, hacia origen o destino). */
+const avisoEta5Enviado = new Set<number>()
 import GpsRateLimitService from '#services/gps_rate_limit_service'
 import FraudDetectionService from '#services/fraud_detection_service'
 import RedisService from '#services/redis_service'
@@ -310,6 +312,24 @@ export default class DriverController {
           const ruta = payloadRuta(viajeActivo.id, estadoRuta, true, actualizadaEn)
           emitToClient(viajeActivo.clienteId, 'trip:route_update', ruta)
           emitToDriver(user.id, 'trip:route_update', ruta)
+        }
+
+        // Push "llega en 5 min", una vez por viaje (hacia origen o destino).
+        if (
+          eta.minutos !== null &&
+          eta.minutos !== undefined &&
+          eta.minutos <= 5 &&
+          !avisoEta5Enviado.has(viajeActivo.id)
+        ) {
+          avisoEta5Enviado.add(viajeActivo.id)
+          const cliente = await import('#models/user').then((m) => m.default.find(viajeActivo.clienteId))
+          if (cliente?.fcmToken) {
+            const { sendToToken } = await import('#services/push_notification_service')
+            const destino = eta.fase === 'destino' ? 'a tu destino' : 'al punto de recogida'
+            await sendToToken(cliente.fcmToken, 'Tu conductor está cerca', `Llega ${destino} en unos 5 minutos`).catch(
+              () => {}
+            )
+          }
         }
       }
 
