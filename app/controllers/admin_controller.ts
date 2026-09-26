@@ -585,8 +585,12 @@ export default class AdminController {
       .preload('cliente', (q) =>
         q.select('id', 'nombre', 'apellido', 'email', 'reputacion', 'visibilidad')
       )
+      // `usuario_id` es obligatorio en el select: sin él Lucid no puede precargar `usuario`
+      // y el listado responde 500 en cuanto existe un reporte.
       .preload('conductor', (q) =>
-        q.select('id', 'placa').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido'))
+        q
+          .select('id', 'placa', 'usuario_id')
+          .preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido'))
       )
       .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion', 'estado'))
       .orderBy('created_at', 'desc')
@@ -1659,7 +1663,9 @@ export default class AdminController {
     const reportes = await ReporteModerador.query()
       .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
       .preload('conductor', (q) =>
-        q.select('id', 'placa').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido'))
+        q
+          .select('id', 'placa', 'usuario_id')
+          .preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido'))
       )
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
