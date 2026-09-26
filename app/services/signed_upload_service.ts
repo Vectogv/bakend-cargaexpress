@@ -3,11 +3,11 @@ import env from '#start/env'
 
 /**
  * Documentos con datos personales (cédula, licencia, comprobantes, soportes de
- * disputa). Solo se sirven con una URL firmada de corta duración; el resto de
+ * disputa, adjuntos de tickets de soporte). Solo se sirven con una URL firmada de corta duración; el resto de
  * archivos (avatar, fotos de vehículo, banner, foto de entrega) siguen públicos
  * porque la app los muestra a otros usuarios.
  */
-const PRIVATE_PREFIXES = ['cedula-', 'licencia-', 'comprobante-', 'dispute-']
+const PRIVATE_PREFIXES = ['cedula-', 'licencia-', 'comprobante-', 'dispute-', 'ticket-']
 
 const TTL_SECONDS = 60 * 60 // 1 hora
 const UPLOADS_PREFIX = '/storage/uploads/'

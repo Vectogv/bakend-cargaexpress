@@ -26,5 +26,6 @@ export const controllers = {
   Report: () => import('#controllers/report_controller'),
   Settings: () => import('#controllers/settings_controller'),
   Support: () => import('#controllers/support_controller'),
+  Ticket: () => import('#controllers/ticket_controller'),
   Trip: () => import('#controllers/trip_controller'),
 }
