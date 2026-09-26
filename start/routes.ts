@@ -254,9 +254,14 @@ router
   .as('favorites')
   .use(middleware.auth())
 
+// Ayuda pública: solo FAQ y datos de contacto estáticos (nada sensible). La app la
+// muestra en la pantalla de soporte antes de iniciar sesión, por eso no exige auth.
+router
+  .get('/api/support/help', [controllers.Support, 'help'])
+  .use(middleware.rateLimit({ max: 60, windowMs: 60_000 }))
+
 router
   .group(() => {
-    router.get('help', [controllers.Support, 'help'])
     router.get('emergency', [controllers.Support, 'emergency'])
     // Tickets de soporte del usuario (cliente/conductor): solo ve los suyos.
     router.get('tickets', [controllers.Ticket, 'index'])
