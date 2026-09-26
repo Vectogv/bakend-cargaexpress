@@ -35,6 +35,8 @@ export interface EstadoRuta {
   etaMin: number
   /** true si en esta llamada se pidió una ruta nueva (hay que reenviarla). */
   recalculada: boolean
+  /** Posición del conductor con la que se calculó (la que ve el cliente). */
+  conductor: Punto
 }
 
 export const DESVIO_M = 200
@@ -224,11 +226,22 @@ export async function rutaDelViaje(
   const restanteM = recalculada ? ruta!.distanciaM : pos.restanteM
   const proporcion = ruta!.distanciaM > 0 ? restanteM / ruta!.distanciaM : 0
   const etaMin = Math.max(1, Math.ceil((ruta!.duracionSeg * proporcion) / 60))
-  return { ruta: ruta!, restanteM, etaMin, recalculada }
+  return { ruta: ruta!, restanteM, etaMin, recalculada, conductor }
 }
 
-/** Payload común de `trip:route_update` / GET /trips/:id/route. */
-export function payloadRuta(viajeId: number, estado: EstadoRuta, incluirLinea: boolean) {
+/**
+ * Payload común de `trip:eta_update` / `trip:route_update` / GET /trips/:id/route.
+ * Trae la posición del conductor con la que se calculó (`conductor: {lat, lng}`
+ * y `ubicacionActualizadaEn` si se conoce): con el socket cortado en segundo
+ * plano el cliente pierde `driver:location`, y sondeando GET /route recupera
+ * dónde va el conductor sin depender del socket.
+ */
+export function payloadRuta(
+  viajeId: number,
+  estado: EstadoRuta,
+  incluirLinea: boolean,
+  ubicacionActualizadaEn?: string | null
+) {
   return {
     tripId: String(viajeId),
     fase: estado.ruta.fase,
@@ -236,6 +249,8 @@ export function payloadRuta(viajeId: number, estado: EstadoRuta, incluirLinea: b
     restanteM: Math.round(estado.restanteM),
     distanciaM: Math.round(estado.ruta.distanciaM),
     aproximada: estado.ruta.fuente === 'recta',
+    conductor: { lat: estado.conductor[0], lng: estado.conductor[1] },
+    ubicacionActualizadaEn: ubicacionActualizadaEn ?? null,
     ...(incluirLinea ? { coords: estado.ruta.coords } : {}),
   }
 }

@@ -443,7 +443,9 @@ export default class TripController {
     if (!estado) {
       return response.status(404).json({ error: 'El viaje no está en una fase con ruta', code: 'SIN_RUTA' })
     }
-    return response.json(payloadRuta(viaje.id, estado, true))
+    return response.json(
+      payloadRuta(viaje.id, estado, true, conductor.ubicacionActualizadaEn?.toISO() ?? null)
+    )
   }
 
   /**

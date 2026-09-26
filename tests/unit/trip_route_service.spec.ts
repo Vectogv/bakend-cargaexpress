@@ -3,6 +3,7 @@ import {
   faseDe,
   posicionEnRuta,
   rutaDelViaje,
+  payloadRuta,
   limpiarCacheRutas,
   type Punto,
   type ProveedorRuta,
@@ -110,6 +111,24 @@ test.group('Ruta y ETA del viaje (trip_route_service)', (group) => {
     assert.equal(r!.ruta.fuente, 'recta')
     assert.lengthOf(r!.ruta.coords, 2)
     assert.isAtLeast(r!.etaMin, 1)
+  })
+
+  test('el payload trae la posición del conductor (respaldo del cliente sin socket)', async ({
+    assert,
+  }) => {
+    const { proveedor } = proveedorFalso()
+    const conductor: Punto = [ORIGEN[0] - 0.01, ORIGEN[1] + 0.002]
+    const estado = await rutaDelViaje(viaje('conductor_en_camino'), conductor, { proveedor, ahora: 1 })
+    const eta = payloadRuta(7, estado!, false, '2026-09-25T10:00:00.000Z')
+    assert.equal(eta.tripId, '7')
+    assert.deepEqual(eta.conductor, { lat: conductor[0], lng: conductor[1] })
+    assert.equal(eta.ubicacionActualizadaEn, '2026-09-25T10:00:00.000Z')
+    assert.notProperty(eta, 'coords')
+    // GET /route sin fecha conocida y con la línea completa.
+    const ruta = payloadRuta(7, estado!, true)
+    assert.isNull(ruta.ubicacionActualizadaEn)
+    assert.deepEqual(ruta.conductor, eta.conductor)
+    assert.lengthOf(ruta.coords!, 4)
   })
 
   test('fuera de las fases con ruta no se calcula nada', async ({ assert }) => {

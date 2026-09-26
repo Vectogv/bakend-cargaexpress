@@ -302,11 +302,12 @@ export default class DriverController {
       // tráfico, cacheado por fase; la línea sólo viaja cuando cambia).
       const estadoRuta = await rutaDelViaje(viajeActivo, [data.lat, data.lng])
       if (estadoRuta) {
-        const eta = payloadRuta(viajeActivo.id, estadoRuta, false)
+        const actualizadaEn = conductor.ubicacionActualizadaEn?.toISO() ?? null
+        const eta = payloadRuta(viajeActivo.id, estadoRuta, false, actualizadaEn)
         emitToClient(viajeActivo.clienteId, 'trip:eta_update', eta)
         emitToDriver(user.id, 'trip:eta_update', eta)
         if (estadoRuta.recalculada) {
-          const ruta = payloadRuta(viajeActivo.id, estadoRuta, true)
+          const ruta = payloadRuta(viajeActivo.id, estadoRuta, true, actualizadaEn)
           emitToClient(viajeActivo.clienteId, 'trip:route_update', ruta)
           emitToDriver(user.id, 'trip:route_update', ruta)
         }
