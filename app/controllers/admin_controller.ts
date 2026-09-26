@@ -31,7 +31,7 @@ import TripFinalizationService from '#services/trip_finalization_service'
 import { DIAS_PLAZO_DEUDA_COMISION } from '#services/driver_debt_suspension_service'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
-import { sendToMultiple } from '#services/push_notification_service'
+import { sendToMultiple, sendToToken } from '#services/push_notification_service'
 import SignedUploadService from '#services/signed_upload_service'
 import {
   COLUMNAS_CONDUCTOR_MAPA_SOS,
@@ -1785,12 +1785,16 @@ export default class AdminController {
     let solicitud = await SolicitudCancelacion.query()
       .where('id', params.id)
       .where('estado', 'pendiente')
+      .preload('viaje')
+      .preload('conductor', (q) => q.preload('usuario'))
       .first()
 
     if (!solicitud) {
       solicitud = await SolicitudCancelacion.query()
         .where('viaje_id', params.id)
         .where('estado', 'pendiente')
+        .preload('viaje')
+        .preload('conductor', (q) => q.preload('usuario'))
         .first()
     }
 
@@ -1801,6 +1805,46 @@ export default class AdminController {
     solicitud.estado = 'rechazado'
     solicitud.resueltoAt = DateTime.now()
     await solicitud.save()
+
+    // Antes esto no le avisaba a nadie: el conductor o cliente que pidió la
+    // cancelación se quedaba esperando sin saber que fue rechazada, y el
+    // viaje seguía en curso sin que ninguna de las dos partes lo supiera.
+    // La solicitud no guarda quién la pidió (no hay columna solicitanteRol),
+    // así que se avisa a ambas partes del viaje, igual que approveCancellation
+    // avisa a ambas cuando sí se aprueba.
+    const viaje = solicitud.viaje
+    const conductor = solicitud.conductor
+    const payload = {
+      id: String(solicitud.id),
+      viajeId: String(viaje.id),
+      estado: 'rechazado',
+      motivo: solicitud.motivo,
+    }
+
+    emitToClient(viaje.clienteId, 'trip:cancellation_rejected', payload)
+    if (conductor) {
+      emitToDriver(conductor.usuarioId, 'trip:cancellation_rejected', payload)
+    }
+
+    const cliente = await User.find(viaje.clienteId)
+    if (cliente?.fcmToken) {
+      await sendToToken(
+        cliente.fcmToken,
+        'Solicitud de cancelación rechazada',
+        'El administrador rechazó la solicitud de cancelación. El viaje continúa.'
+      )
+    }
+
+    if (conductor) {
+      const conductorUser = await User.find(conductor.usuarioId)
+      if (conductorUser?.fcmToken) {
+        await sendToToken(
+          conductorUser.fcmToken,
+          'Solicitud de cancelación rechazada',
+          'El administrador rechazó la solicitud de cancelación. El viaje continúa.'
+        )
+      }
+    }
 
     return serialize.withoutWrapping({
       id: String(solicitud.id),

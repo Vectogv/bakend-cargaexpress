@@ -4,6 +4,7 @@ import db from '@adonisjs/lucid/services/db'
 import testUtils from '@adonisjs/core/services/test_utils'
 import ConfiguracionPlataforma from '#models/configuracion_plataforma'
 import User from '#models/user'
+import Disputa from '#models/disputa'
 
 /**
  * 1) Un viaje tiene una sola disputa: si el cliente ya abrió una disputa y luego
@@ -165,6 +166,53 @@ test.group('Disputa única al rechazar el cierre', (group) => {
     assert.equal(Number(viaje.precio_final), 40000)
   })
 
+  test('si la única disputa del viaje ya está resuelta, rechazar el cierre crea una nueva (no la reutiliza)', async ({
+    client,
+    assert,
+  }) => {
+    const { cliente, driver, tripId } = await viajeEnCurso(client)
+    await ubicar(driver.conductorId, DESTINO.lat, DESTINO.lng)
+    ;(
+      await client
+        .post(`/api/trips/${tripId}/complete`)
+        .bearerToken(driver.token)
+        .json({ montoFinal: 40000 })
+    ).assertStatus(200)
+
+    // Simula una disputa anterior del mismo viaje que un admin ya cerró
+    // (p. ej. un ciclo previo de cierre → disputa → resuelta).
+    const resuelta = await Disputa.create({
+      viajeId: tripId,
+      conductorId: driver.conductorId,
+      clienteId: cliente.id,
+      estado: 'resuelta',
+      problema: 'cliente_rechaza_cierre',
+      descripcion: 'Disputa anterior ya resuelta',
+      versionConductor: 'Conductor solicitó cierre del servicio',
+      versionCliente: 'Cliente rechazó el cierre',
+      resultado: 'favor_conductor',
+      resueltaAt: DateTime.now(),
+    })
+
+    const rechazo = await client
+      .post(`/api/trips/${tripId}/confirm-close`)
+      .bearerToken(cliente.token)
+      .json({ confirmar: false, motivo: 'Otra vez no llegó completa' })
+    rechazo.assertStatus(200)
+    rechazo.assertBodyContains({ id: String(tripId), estado: 'disputa' })
+
+    const nuevaDisputaId = Number(rechazo.body().disputaId)
+    assert.notEqual(nuevaDisputaId, resuelta.id, 'debe crear una disputa nueva, no reutilizar la resuelta')
+
+    const disputas = await db.from('disputas').where('viaje_id', tripId).orderBy('id')
+    assert.lengthOf(disputas, 2, 'debe haber dos disputas: la resuelta y la nueva')
+    const nueva = disputas.find((d: any) => d.id === nuevaDisputaId)
+    assert.equal(nueva.estado, 'abierta')
+
+    const viaje = await db.from('viajes').where('id', tripId).first()
+    assert.equal(viaje.estado, 'disputa')
+  })
+
   test('sin disputa previa, rechazar el cierre crea una sola', async ({ client, assert }) => {
     const { cliente, driver, tripId } = await viajeEnCurso(client)
     await ubicar(driver.conductorId, DESTINO.lat, DESTINO.lng)
@@ -289,5 +337,81 @@ test.group('Cancelación durante SOS requiere revisión', (group) => {
 
     const viaje = await db.from('viajes').where('id', tripId).first()
     assert.equal(viaje.estado, 'cancelado')
+  })
+})
+
+test.group('Rechazar solicitud de cancelación avisa a las partes', (group) => {
+  group.each.setup(async () => {
+    const rollback = await testUtils.db().withGlobalTransaction()
+    await ConfiguracionPlataforma.query().delete()
+    return rollback
+  })
+
+  test('el admin rechaza la solicitud: queda en rechazado, el viaje sigue en curso y no falla al notificar', async ({
+    client,
+    assert,
+  }) => {
+    const { driver, tripId } = await viajeEnCurso(client)
+    const adminToken = await crearAdmin(client)
+
+    const solicitud = await client
+      .post(`/api/trips/${tripId}/request-cancellation`)
+      .bearerToken(driver.token)
+      .json({ motivo: 'Ya no puedo hacer el viaje' })
+    assert.oneOf(solicitud.status(), [200, 201])
+
+    const pendiente = await db
+      .from('solicitudes_cancelacion')
+      .where('viaje_id', tripId)
+      .where('estado', 'pendiente')
+      .first()
+    assert.isNotNull(pendiente)
+
+    const rechazo = await client
+      .post(`/api/admin/cancellation-requests/${pendiente.id}/reject`)
+      .bearerToken(adminToken)
+
+    // No debe fallar aunque getIO() no esté disponible en el entorno de
+    // pruebas (emitToClient/emitToDriver lo capturan) ni aunque ninguna
+    // de las partes tenga fcmToken registrado.
+    rechazo.assertStatus(200)
+    rechazo.assertBodyContains({ id: String(pendiente.id), estado: 'rechazado' })
+
+    const actualizada = await db
+      .from('solicitudes_cancelacion')
+      .where('id', pendiente.id)
+      .first()
+    assert.equal(actualizada.estado, 'rechazado')
+    assert.isNotNull(actualizada.resuelto_at)
+
+    // El rechazo no cancela el viaje: sigue en curso.
+    const viaje = await db.from('viajes').where('id', tripId).first()
+    assert.equal(viaje.estado, 'en_curso')
+  })
+
+  test('rechazar por tripId (fallback sin id de solicitud) también funciona', async ({
+    client,
+    assert,
+  }) => {
+    const { cliente, tripId } = await viajeEnCurso(client)
+    const adminToken = await crearAdmin(client)
+
+    const solicitud = await client
+      .post(`/api/trips/${tripId}/request-cancellation`)
+      .bearerToken(cliente.token)
+      .json({ motivo: 'Cambié de planes' })
+    assert.oneOf(solicitud.status(), [200, 201])
+
+    const rechazo = await client
+      .post(`/api/admin/cancellation-requests/${tripId}/reject`)
+      .bearerToken(adminToken)
+    rechazo.assertStatus(200)
+    rechazo.assertBodyContains({ estado: 'rechazado' })
+
+    const pendientes = await db
+      .from('solicitudes_cancelacion')
+      .where('viaje_id', tripId)
+      .where('estado', 'pendiente')
+    assert.lengthOf(pendientes, 0)
   })
 })

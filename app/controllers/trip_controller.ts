@@ -1207,10 +1207,17 @@ export default class TripController {
       })
     } else {
       // Cliente rechaza → el viaje pasa a 'disputa'. Un viaje tiene una sola
-      // disputa: si el cliente ya abrió una (POST /api/disputes), se reutiliza.
+      // disputa activa: si el cliente ya abrió una (POST /api/disputes) y
+      // sigue abierta o en revisión, se reutiliza. Si la única disputa que
+      // existe ya quedó resuelta (p. ej. un cierre anterior del mismo viaje
+      // que un admin ya cerró), no se reutiliza: se abre una disputa nueva.
       const conductor = await Conductor.findByOrFail('id', viaje.conductorId!)
 
-      const existente = await Disputa.query().where('viaje_id', viaje.id).first()
+      const existente = await Disputa.query()
+        .where('viaje_id', viaje.id)
+        .whereIn('estado', ['abierta', 'en_revision'])
+        .orderBy('created_at', 'desc')
+        .first()
       const disputa =
         existente ??
         (await Disputa.create({
