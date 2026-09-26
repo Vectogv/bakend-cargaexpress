@@ -45,21 +45,24 @@ export default class ReportController {
       estado: 'pendiente',
     })
 
+    // Los reportes NUNCA suspenden automáticamente: solo bajan la reputación y
+    // la visibilidad. A partir del 2º reporte la cuenta queda marcada para que
+    // un admin la revise y decida si suspende con PUT /admin/users/:id/suspend.
     const cliente = await User.find(viaje.clienteId)
     if (cliente) {
       cliente.totalReportes += 1
+      cliente.visibilidad = 'reducida'
 
       if (cliente.totalReportes === 1) {
         cliente.reputacion = Math.max(1.0, cliente.reputacion - 2.0)
-        cliente.visibilidad = 'reducida'
       } else {
         cliente.reputacion = 1.0
-        cliente.visibilidad = 'baneado'
-        cliente.suspendido = true
       }
 
       await cliente.save()
     }
+
+    const requiereRevision = (cliente?.totalReportes ?? 0) >= 2
 
     emitToAdmin('report:new', {
       id: String(reporte.id),
@@ -69,6 +72,7 @@ export default class ReportController {
       motivo: reporte.motivo,
       estado: reporte.estado,
       createdAt: reporte.createdAt.toISO(),
+      requiereRevision,
     })
 
     return response.status(201).send({

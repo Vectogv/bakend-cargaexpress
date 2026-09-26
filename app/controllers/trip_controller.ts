@@ -87,6 +87,41 @@ async function bloquearCliente(clienteId: number, trx: TransactionClientContract
   await User.query({ client: trx }).where('id', clienteId).forUpdate().first()
 }
 
+/** Formatea un monto en pesos colombianos sin decimales (90000 -> "$90.000"). */
+function formatoPesos(monto: number): string {
+  return `$${Math.round(monto).toLocaleString('es-CO', { maximumFractionDigits: 0 })}`
+}
+
+/**
+ * 403 de cuenta no activa al pedir/reservar viajes: el mensaje orienta al
+ * cliente según el motivo (deuda vencida, comprobante en revisión, u otro),
+ * y siempre lleva `code`, `estadoCuenta` y `montoDeuda` para que la app
+ * lo lleve directo a Pagos.
+ */
+function errorCuentaNoActiva(
+  user: Pick<User, 'estadoCuenta' | 'montoDeuda'>,
+  mensajePorDefecto: string
+) {
+  let error = mensajePorDefecto
+
+  if (user.estadoCuenta === 'suspension_por_pago') {
+    const monto = Number(user.montoDeuda) || 0
+    error =
+      monto > 0
+        ? `Tienes un saldo pendiente de ${formatoPesos(monto)}. Paga y sube el comprobante en Pagos para volver a pedir viajes.`
+        : 'Tienes un saldo pendiente. Paga y sube el comprobante en Pagos para volver a pedir viajes.'
+  } else if (user.estadoCuenta === 'esperando_confirmacion') {
+    error = 'Tu comprobante de pago está en revisión. Podrás pedir viajes cuando sea aprobado.'
+  }
+
+  return {
+    error,
+    code: 'CUENTA_NO_ACTIVA',
+    estadoCuenta: user.estadoCuenta,
+    montoDeuda: user.montoDeuda,
+  }
+}
+
 export default class TripController {
   @ApiOperation({ summary: 'Solicitar un viaje', description: 'Crea una nueva solicitud de viaje' })
   @ApiBody({ type: () => tripRequestValidator })
@@ -101,7 +136,7 @@ export default class TripController {
     if (user.estadoCuenta !== 'activa') {
       return response
         .status(403)
-        .send({ error: 'Tu cuenta no está activa. No puedes solicitar viajes.' })
+        .send(errorCuentaNoActiva(user, 'Tu cuenta no está activa. No puedes solicitar viajes.'))
     }
 
     // Un cliente no puede tener más de un viaje activo simultáneo.
@@ -210,7 +245,9 @@ export default class TripController {
       return response.status(403).send({ error: 'Solo los clientes pueden reservar viajes.' })
     }
     if (user.estadoCuenta !== 'activa') {
-      return response.status(403).send({ error: 'Tu cuenta no está activa. No puedes reservar viajes.' })
+      return response
+        .status(403)
+        .send(errorCuentaNoActiva(user, 'Tu cuenta no está activa. No puedes reservar viajes.'))
     }
 
     // Un cliente no puede reservar mientras tiene un viaje en curso.

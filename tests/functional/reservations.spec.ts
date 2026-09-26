@@ -123,9 +123,12 @@ test.group('Reservas programadas', (group) => {
     res.assertStatus(400)
   })
 
-  test('rechaza a un cliente inactivo', async ({ client }) => {
+  test('rechaza a un cliente inactivo', async ({ client, assert }) => {
     const { token, id } = await registerClient(client)
-    await db.from('users').where('id', Number(id)).update({ estado_cuenta: 'suspension_por_pago' })
+    await db
+      .from('users')
+      .where('id', Number(id))
+      .update({ estado_cuenta: 'suspension_por_pago', monto_deuda: 90000 })
 
     const res = await client
       .post('/api/trips/reserve')
@@ -133,6 +136,30 @@ test.group('Reservas programadas', (group) => {
       .json(reservePayload(futureDate(2), '08:00'))
 
     res.assertStatus(403)
+    assert.equal(res.body().code, 'CUENTA_NO_ACTIVA')
+    assert.equal(res.body().estadoCuenta, 'suspension_por_pago')
+    assert.equal(
+      res.body().error,
+      'Tienes un saldo pendiente de $90.000. Paga y sube el comprobante en Pagos para volver a pedir viajes.'
+    )
+  })
+
+  test('rechaza a un cliente con comprobante en revisión', async ({ client, assert }) => {
+    const { token, id } = await registerClient(client)
+    await db.from('users').where('id', Number(id)).update({ estado_cuenta: 'esperando_confirmacion' })
+
+    const res = await client
+      .post('/api/trips/reserve')
+      .header('Authorization', `Bearer ${token}`)
+      .json(reservePayload(futureDate(2), '08:00'))
+
+    res.assertStatus(403)
+    assert.equal(res.body().code, 'CUENTA_NO_ACTIVA')
+    assert.equal(res.body().estadoCuenta, 'esperando_confirmacion')
+    assert.equal(
+      res.body().error,
+      'Tu comprobante de pago está en revisión. Podrás pedir viajes cuando sea aprobado.'
+    )
   })
 
   test('rechaza a un usuario que no es cliente', async ({ client }) => {
@@ -301,5 +328,54 @@ test.group('Reservas programadas', (group) => {
 
     const viaje = await db.from('viajes').where('id', Number(res.body().id)).first()
     assert.equal(viaje.tipo_programacion, 'inmediata')
+  })
+
+  test('/api/trips/request rechaza a un cliente con deuda vencida (sin monto)', async ({
+    client,
+    assert,
+  }) => {
+    const { token, id } = await registerClient(client)
+    await db.from('users').where('id', Number(id)).update({ estado_cuenta: 'suspension_por_pago' })
+
+    const res = await client
+      .post('/api/trips/request')
+      .header('Authorization', `Bearer ${token}`)
+      .json({
+        origen: { direccion: 'Calle 1', lat: 3.4516, lng: -76.532 },
+        destino: { direccion: 'Calle 2', lat: 3.452, lng: -76.531 },
+        descripcion: 'carga inmediata',
+        precioCliente: 50000,
+      })
+
+    res.assertStatus(403)
+    assert.equal(res.body().code, 'CUENTA_NO_ACTIVA')
+    assert.equal(res.body().estadoCuenta, 'suspension_por_pago')
+    assert.equal(
+      res.body().error,
+      'Tienes un saldo pendiente. Paga y sube el comprobante en Pagos para volver a pedir viajes.'
+    )
+  })
+
+  test('/api/trips/request rechaza con el mensaje actual cuando el motivo no es deuda', async ({
+    client,
+    assert,
+  }) => {
+    const { token, id } = await registerClient(client)
+    await db.from('users').where('id', Number(id)).update({ estado_cuenta: 'bloqueada_admin' })
+
+    const res = await client
+      .post('/api/trips/request')
+      .header('Authorization', `Bearer ${token}`)
+      .json({
+        origen: { direccion: 'Calle 1', lat: 3.4516, lng: -76.532 },
+        destino: { direccion: 'Calle 2', lat: 3.452, lng: -76.531 },
+        descripcion: 'carga inmediata',
+        precioCliente: 50000,
+      })
+
+    res.assertStatus(403)
+    assert.equal(res.body().code, 'CUENTA_NO_ACTIVA')
+    assert.equal(res.body().estadoCuenta, 'bloqueada_admin')
+    assert.equal(res.body().error, 'Tu cuenta no está activa. No puedes solicitar viajes.')
   })
 })

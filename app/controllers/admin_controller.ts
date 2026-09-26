@@ -106,6 +106,9 @@ export default class AdminController {
         'es_moderador',
         'zona_moderador',
         'es_lider',
+        'estado_cuenta',
+        'tiene_deuda_activa',
+        'monto_deuda',
         'created_at'
       )
       .orderBy('created_at', 'desc')
@@ -146,6 +149,9 @@ export default class AdminController {
         esModerador: u.esModerador,
         zonaModerador: u.zonaModerador,
         esLider: u.esLider,
+        estadoCuenta: u.estadoCuenta,
+        tieneDeudaActiva: u.tieneDeudaActiva,
+        montoDeuda: u.montoDeuda,
         createdAt: u.createdAt?.toISO(),
       }))
     )

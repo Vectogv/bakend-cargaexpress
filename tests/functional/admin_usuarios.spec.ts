@@ -147,6 +147,27 @@ test.group('Admin - alta y edición de usuarios', (group) => {
     rechazado.assertStatus(422)
   })
 
+  test('el listado de usuarios trae estadoCuenta, tieneDeudaActiva y montoDeuda', async ({
+    client,
+    assert,
+  }) => {
+    const admin = await adminToken(client)
+    const email = `deudor_${uniq()}@test.com`
+    const nuevo = await crear(client, { email })
+    const id = Number((nuevo.body() as { id: string }).id)
+    await User.query()
+      .where('id', id)
+      .update({ estado_cuenta: 'suspension_por_pago', tiene_deuda_activa: true, monto_deuda: 90000 })
+
+    const res = await client.get('/api/admin/users').bearerToken(admin).qs({ search: email })
+    res.assertStatus(200)
+    const usuario = (res.body() as any[]).find((u) => u.id === id)
+    assert.isDefined(usuario)
+    assert.equal(usuario.estadoCuenta, 'suspension_por_pago')
+    assert.isTrue(Boolean(usuario.tieneDeudaActiva))
+    assert.equal(Number(usuario.montoDeuda), 90000)
+  })
+
   test('sin zonas configuradas siguen valiendo las tres ciudades originales', async ({ client }) => {
     const admin = await adminToken(client)
     const nuevo = await crear(client)
