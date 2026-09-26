@@ -60,9 +60,11 @@ export async function emitTripUpdateToModerators(viaje: Viaje, detalles?: Record
     if (!zona) return
 
     await viaje.load('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
-    await viaje.load('conductor', (q) =>
-      q.select('id', 'usuario_id', 'placa', 'tipo_vehiculo', 'ciudad').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono'))
-    )
+    if (viaje.conductorId) {
+      await viaje.load('conductor', (q) =>
+        q.select('id', 'usuario_id', 'placa', 'tipo_vehiculo', 'ciudad').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono'))
+      )
+    }
 
     const payload = {
       id: String(viaje.id),
