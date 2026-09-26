@@ -29,6 +29,10 @@ export default class Reporte extends BaseModel {
   @column()
   declare estado: string
 
+  /** 'conductor' (reporta al cliente) o 'cliente' (reporta al conductor). */
+  @column()
+  declare reportadoPor: string
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

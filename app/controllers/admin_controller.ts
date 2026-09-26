@@ -601,6 +601,7 @@ export default class AdminController {
         motivo: r.motivo,
         descripcion: r.descripcion,
         estado: r.estado,
+        reportadoPor: r.reportadoPor,
         cliente: r.cliente
           ? {
               nombre: `${r.cliente.nombre || ''} ${r.cliente.apellido || ''}`.trim(),
