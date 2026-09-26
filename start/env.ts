@@ -65,6 +65,8 @@ export default await Env.create(new URL('../', import.meta.url), {
   CORS_ALLOW_LOCALHOST: Env.schema.boolean.optional(),
   ANTIFRAUDE_CONFIRMACION_TIMEOUT_MIN: Env.schema.number.optional(),
   ANTIFRAUDE_PENALIZACION_CANCELACION: Env.schema.number.optional(),
+  // Tope de deuda de comisión (COP) a partir del cual el conductor no oferta.
+  DRIVER_DEBT_MAX_AMOUNT: Env.schema.number.optional(),
 
   // ── Observabilidad ────────────────────────────────────────────
   // Token Bearer para /metrics. Sin él, /metrics solo responde en desarrollo.

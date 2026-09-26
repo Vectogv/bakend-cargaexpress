@@ -178,6 +178,8 @@ export default class TripController {
           carga: data.descripcion || null,
           precioCliente: data.precioCliente,
           precioEstimado: data.precioCliente,
+          receptorNombre: data.receptorNombre || null,
+          receptorTelefono: data.receptorTelefono || null,
         },
         { client: trx }
       )
@@ -227,6 +229,8 @@ export default class TripController {
         lng: viaje.destinoLng,
       },
       precioEstimado: viaje.precioEstimado,
+      receptorNombre: viaje.receptorNombre,
+      receptorTelefono: viaje.receptorTelefono,
       createdAt: viaje.createdAt.toISO(),
     })
   }
@@ -339,6 +343,8 @@ export default class TripController {
           carga: data.descripcion || null,
           precioCliente: data.precioCliente,
           precioEstimado: data.precioCliente,
+          receptorNombre: data.receptorNombre || null,
+          receptorTelefono: data.receptorTelefono || null,
         },
         { client: trx }
       )
@@ -389,6 +395,8 @@ export default class TripController {
         },
         carga: viaje.carga,
         precioEstimado: viaje.precioEstimado,
+        receptorNombre: viaje.receptorNombre,
+        receptorTelefono: viaje.receptorTelefono,
         fechaProgramada: viaje.fechaProgramada,
         horaProgramada: viaje.horaProgramada,
       activacionAt: viaje.activacionAt?.toISO() ?? null,
@@ -450,7 +458,7 @@ export default class TripController {
 
     const result = await query.paginate(page, limit)
     return serialize.withoutWrapping({
-      data: result.all().map((v) => this.formatViajeResponse(v)),
+      data: result.all().map((v) => this.formatViajeResponse(v, user.rol)),
       total: result.total,
       page: result.currentPage,
       limit: result.perPage,
@@ -608,7 +616,7 @@ export default class TripController {
       return response.status(404).send({ error: 'No active trip' })
     }
 
-    return serialize.withoutWrapping(this.formatViajeResponse(viaje))
+    return serialize.withoutWrapping(this.formatViajeResponse(viaje, user.rol))
   }
 
   @ApiOperation({ summary: 'Aceptar un viaje (OBSOLETO)', description: 'OBSOLETO: usar POST /trips/:id/offers/:offerId/accept. Este endpoint será eliminado en la próxima versión mayor.' })
@@ -1002,6 +1010,22 @@ export default class TripController {
           error: `Estás a ${distDestinoKm.toFixed(2)} km del destino. Para cerrar el servicio debes justificar el motivo.`,
           code: 'JUSTIFICACION_REQUERIDA',
           distanciaKm: distDestinoKm,
+        })
+      }
+    } else if (viaje.pinEntrega) {
+      // Cierre normal: quien recibe le dicta al conductor el PIN que el cliente
+      // recibió al aceptar la oferta. Un viaje sin PIN (aceptado por el endpoint
+      // obsoleto o antes de esta regla) cierra como siempre.
+      if (!data.pin) {
+        return response.status(422).send({
+          error: 'Pide a quien recibe la carga el PIN de entrega de 4 dígitos.',
+          code: 'PIN_REQUERIDO',
+        })
+      }
+      if (data.pin !== viaje.pinEntrega) {
+        return response.status(422).send({
+          error: 'El PIN de entrega no coincide. Verifícalo con quien recibe la carga.',
+          code: 'PIN_INCORRECTO',
         })
       }
     }
@@ -1525,7 +1549,7 @@ export default class TripController {
       }
     }
     const result = await query.paginate(page, limit)
-    const data = result.all().map((v) => this.formatViajeResponse(v))
+    const data = result.all().map((v) => this.formatViajeResponse(v, user.rol))
     return serialize.withoutWrapping({
       data,
       total: result.total,
@@ -1568,12 +1592,12 @@ export default class TripController {
       soloVistaPrevia = !esCliente && !esConductor
     }
 
-    const data = this.formatViajeResponse(viaje)
+    const data = this.formatViajeResponse(viaje, user.rol)
     if (soloVistaPrevia) data.cliente.telefono = null
     return serialize.withoutWrapping(data)
   }
 
-  private formatViajeResponse(viaje: Viaje) {
+  private formatViajeResponse(viaje: Viaje, rol: string | null) {
     return {
       id: String(viaje.id),
       _id: String(viaje.id),
@@ -1618,6 +1642,11 @@ export default class TripController {
       horaProgramada: viaje.horaProgramada,
       activacionAt: viaje.activacionAt?.toISO() ?? null,
       fotoEntrega: viaje.fotoEntrega,
+      fotoRecogida: viaje.fotoRecogida,
+      receptorNombre: viaje.receptorNombre,
+      receptorTelefono: viaje.receptorTelefono,
+      // El PIN lo dicta quien recibe: el conductor nunca lo ve por la API.
+      pinEntrega: rol === 'conductor' ? null : viaje.pinEntrega,
       tiempoEstimadoMinutos: viaje.tiempoEstimadoMinutos ?? null,
       tiempoEstimado: viaje.tiempoEstimadoMinutos ?? null,
       // Evitar Number(null) → 0: si el campo es null se manda null.
@@ -1770,5 +1799,46 @@ export default class TripController {
     await viaje.save()
 
     return serialize.withoutWrapping({ fotoEntrega: viaje.fotoEntrega })
+  }
+
+  /** Foto de la carga al recogerla: mismo flujo que deliveryPhoto, en el origen. */
+  async pickupPhoto({ auth, params, request, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const viaje = await Viaje.find(params.id)
+    if (!viaje) {
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
+    }
+
+    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    if (viaje.conductorId !== conductor.id) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ error: 'No eres el conductor de este viaje' }))
+    }
+
+    if (!['conductor_llegada', 'en_curso'].includes(viaje.estado)) {
+      return response
+        .status(422)
+        .send(await serialize.withoutWrapping({ error: 'Solo puedes subir la foto de recogida cuando llegaste al origen o el viaje está en curso' }))
+    }
+
+    const file = request.file('file', {
+      size: '5mb',
+      extnames: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+    })
+    if (!file) {
+      return response.status(400).send({ error: 'No file uploaded' })
+    }
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
+
+    const fileName = `pickup-${viaje.id}-${randomUUID()}.${file.extname}`
+    await file.move(StorageService.uploadsDir(), { name: fileName })
+
+    viaje.fotoRecogida = `/storage/uploads/${fileName}`
+    await viaje.save()
+
+    return serialize.withoutWrapping({ fotoRecogida: viaje.fotoRecogida })
   }
 }

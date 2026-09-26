@@ -5,6 +5,7 @@ import User from '#models/user'
 import db from '@adonisjs/lucid/services/db'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
+import { randomInt } from 'node:crypto'
 import { emitToClient, emitToDriver, emitTripStatusChanged } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
@@ -347,6 +348,9 @@ export default class OfferController {
         viaje.conductorId = oferta.conductorId
         viaje.estado = 'aceptado'
         viaje.precioFinal = oferta.monto
+        // PIN de entrega: el cliente se lo da a quien recibe y el conductor lo
+        // escribe al cerrar cerca del destino (trip_controller.complete).
+        viaje.pinEntrega = String(randomInt(0, 10000)).padStart(4, '0')
         viaje.aceptadoAt = DateTime.now()
         await viaje.useTransaction(trx).save()
 
@@ -381,6 +385,7 @@ export default class OfferController {
       viajeId: String(viaje.id),
       ofertaId: String(oferta.id),
       monto: oferta.monto,
+      pinEntrega: viaje.pinEntrega,
       conductor: {
         id: String(oferta.conductorId),
         nombre: `${oferta.conductor.usuario?.nombre || ''} ${oferta.conductor.usuario?.apellido || ''}`.trim() || 'Sin nombre',
@@ -453,6 +458,8 @@ export default class OfferController {
       ofertaId: String(oferta.id),
       conductorId: String(oferta.conductorId),
       precioFinal: viaje.precioFinal,
+      // Quien acepta es el cliente: es el único que debe conocer el PIN.
+      pinEntrega: viaje.pinEntrega,
     }
   }
 

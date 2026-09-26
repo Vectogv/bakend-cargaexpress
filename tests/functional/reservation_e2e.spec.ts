@@ -168,7 +168,7 @@ test.group('Reserva E2E (flujo real conductor -> cliente)', (group) => {
     const completo = await client
       .post(`/api/trips/${viajeId}/complete`)
       .header('Authorization', `Bearer ${driver.token}`)
-      .json({ montoFinal: 500000 })
+      .json({ montoFinal: 500000, pin: aceptar.body().pinEntrega })
     completo.assertStatus(200)
 
     let viaje = await db.from('viajes').where('id', viajeId).first()

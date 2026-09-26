@@ -269,7 +269,8 @@ test.group('Conductor suspendido por pago: qué puede y qué no', (group) => {
     const viajeId = await pedirViaje(client, tokenC)
     const oferta = await client.post(`/api/trips/${viajeId}/offers`).bearerToken(driver.token).json({ monto: 60000 })
     const ofertaId = (oferta.body() as { id: string }).id
-    ;(await client.post(`/api/trips/${viajeId}/offers/${ofertaId}/accept`).bearerToken(tokenC)).assertStatus(200)
+    const acepta = await client.post(`/api/trips/${viajeId}/offers/${ofertaId}/accept`).bearerToken(tokenC)
+    acepta.assertStatus(200)
     for (const ruta of ['confirm-arrival', 'confirm-pickup', 'start-trip']) {
       ;(await client.post(`/api/trips/${viajeId}/${ruta}`).bearerToken(driver.token)).assertStatus(200)
     }
@@ -285,7 +286,7 @@ test.group('Conductor suspendido por pago: qué puede y qué no', (group) => {
       ultima_ubicacion_lng: DESTINO.lng,
       ubicacion_actualizada_en: DateTime.now().toSQL(),
     })
-    const completa = await client.post(`/api/trips/${viajeId}/complete`).bearerToken(driver.token).json({ montoFinal: 60000 })
+    const completa = await client.post(`/api/trips/${viajeId}/complete`).bearerToken(driver.token).json({ montoFinal: 60000, pin: (acepta.body() as any).pinEntrega })
     completa.assertStatus(200)
     const cierre = await client.post(`/api/trips/${viajeId}/confirm-close`).bearerToken(tokenC).json({ confirmar: true })
     cierre.assertStatus(200)

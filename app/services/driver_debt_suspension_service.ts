@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import env from '#start/env'
 import logger from '@adonisjs/core/services/logger'
 import User from '#models/user'
 import Conductor from '#models/conductor'
@@ -13,6 +14,16 @@ export const CODIGO_SUSPENSION_PAGO = 'CUENTA_SUSPENDIDA_POR_PAGO'
 
 /** Días para pagar la deuda de comisión desde el primer viaje sin pagar. */
 export const DIAS_PLAZO_DEUDA_COMISION = 15
+
+export const CODIGO_DEUDA_SUPERA_TOPE = 'DEUDA_SUPERA_TOPE'
+
+/**
+ * Deuda de comisión (COP) a partir de la cual el conductor no puede ofertar ni
+ * conectarse aunque el plazo no haya vencido. 100.000 = comisión (10 %) de
+ * ~$1.000.000 en fletes: unos 10 viajes de $90.000 sin pagar; deja trabajar
+ * la semana pero limita lo que la empresa arriesga con un solo conductor.
+ */
+export const TOPE_DEUDA_CONDUCTOR = Number(env.get('DRIVER_DEBT_MAX_AMOUNT', 100000))
 
 /**
  * Suspensión por pago de conductores: la comisión de cada viaje se acumula en
@@ -68,8 +79,11 @@ export default class DriverDebtSuspensionService {
     return suspendidos
   }
 
-  /** Respuesta 403 si la cuenta está suspendida por pago; `null` si puede operar. */
-  static bloqueo(user: Pick<User, 'estadoCuenta'>) {
+  /**
+   * Respuesta 403 si la cuenta está suspendida por pago o la deuda pasa del
+   * tope; `null` si puede operar.
+   */
+  static bloqueo(user: Pick<User, 'estadoCuenta' | 'montoDeuda'>) {
     if (user.estadoCuenta === 'suspension_por_pago') {
       return {
         error:
@@ -84,6 +98,18 @@ export default class DriverDebtSuspensionService {
           'Tu comprobante de pago está en revisión. Podrás conectarte y ofertar cuando el administrador lo apruebe.',
         code: CODIGO_SUSPENSION_PAGO,
         estadoCuenta: user.estadoCuenta,
+      }
+    }
+    // Cuenta activa pero con demasiada comisión acumulada: puede subir el
+    // comprobante desde 'activa', así que el camino de salida es el mismo.
+    const deuda = Number(user.montoDeuda ?? 0)
+    if (user.estadoCuenta === 'activa' && deuda > TOPE_DEUDA_CONDUCTOR) {
+      return {
+        error: `Tu deuda de comisión ($${deuda}) supera el máximo permitido ($${TOPE_DEUDA_CONDUCTOR}). Paga y sube el comprobante para seguir ofertando.`,
+        code: CODIGO_DEUDA_SUPERA_TOPE,
+        estadoCuenta: user.estadoCuenta,
+        montoDeuda: deuda,
+        tope: TOPE_DEUDA_CONDUCTOR,
       }
     }
     return null

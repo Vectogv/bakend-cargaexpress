@@ -108,6 +108,8 @@ test.group('Flujo de viaje con ofertas', (group) => {
     const acepta = await client.post(`/api/trips/${viajeId}/offers/${ofertaId}/accept`).bearerToken(tokenC)
     acepta.assertStatus(200)
     assert.equal((acepta.body() as any).estado, 'aceptado')
+    const pin = (acepta.body() as any).pinEntrega as string
+    assert.match(pin, /^\d{4}$/)
 
     // Ya asignado, el conductor sí ve el teléfono para coordinar.
     const conAsignacion = await client.get(`/api/trips/${viajeId}`).bearerToken(driver.token)
@@ -129,7 +131,7 @@ test.group('Flujo de viaje con ofertas', (group) => {
     assert.isAbove(intentoCliente.status(), 399)
 
     await ubicar(driver.conductorId, DESTINO.lat, DESTINO.lng)
-    const completa = await client.post(`/api/trips/${viajeId}/complete`).bearerToken(driver.token).json({ montoFinal: 75000 })
+    const completa = await client.post(`/api/trips/${viajeId}/complete`).bearerToken(driver.token).json({ montoFinal: 75000, pin })
     completa.assertStatus(200)
     assert.equal((completa.body() as any).estado, 'pendiente_confirmacion')
 

@@ -149,6 +149,7 @@ router
     router.post(':id/request-cancellation', [controllers.Trip, 'requestCancellation'])
     router.post(':id/rate', [controllers.Trip, 'rate'])
     router.post(':id/delivery-photo', [controllers.Trip, 'deliveryPhoto'])
+    router.post(':id/pickup-photo', [controllers.Trip, 'pickupPhoto'])
     router.get(':id/chat', [controllers.Chat, 'index'])
     router.post(':id/chat', [controllers.Chat, 'store'])
     router.post(':id/dispute', [controllers.Dispute, 'store'])

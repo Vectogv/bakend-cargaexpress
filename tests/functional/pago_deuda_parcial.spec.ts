@@ -151,7 +151,8 @@ test.group('Aprobar pago: solo se descuenta lo que cubría el comprobante', (gro
     const oferta = await client.post(`/api/trips/${viajeId}/offers`).bearerToken(driver.token).json({ monto: 60000 })
     oferta.assertStatus(201)
     const ofertaId = (oferta.body() as { id: string }).id
-    ;(await client.post(`/api/trips/${viajeId}/offers/${ofertaId}/accept`).bearerToken(cliente.token)).assertStatus(200)
+    const acepta = await client.post(`/api/trips/${viajeId}/offers/${ofertaId}/accept`).bearerToken(cliente.token)
+    acepta.assertStatus(200)
     for (const ruta of ['confirm-arrival', 'confirm-pickup', 'start-trip']) {
       ;(await client.post(`/api/trips/${viajeId}/${ruta}`).bearerToken(driver.token)).assertStatus(200)
     }
@@ -172,7 +173,7 @@ test.group('Aprobar pago: solo se descuenta lo que cubría el comprobante', (gro
       ultima_ubicacion_lng: DESTINO.lng,
       ubicacion_actualizada_en: DateTime.now().toSQL(),
     })
-    ;(await client.post(`/api/trips/${viajeId}/complete`).bearerToken(driver.token).json({ montoFinal: 60000 })).assertStatus(200)
+    ;(await client.post(`/api/trips/${viajeId}/complete`).bearerToken(driver.token).json({ montoFinal: 60000, pin: (acepta.body() as any).pinEntrega })).assertStatus(200)
     ;(await client.post(`/api/trips/${viajeId}/confirm-close`).bearerToken(cliente.token).json({ confirmar: true })).assertStatus(200)
     assert.equal(Number((await User.findOrFail(driver.id)).montoDeuda), 18000)
 

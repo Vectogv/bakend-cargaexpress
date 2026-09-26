@@ -29,6 +29,10 @@ export default class Viaje extends BaseModel {
     'motivoCancelacion',
     'calificacionCliente',
     'fotoEntrega',
+    'fotoRecogida',
+    'pinEntrega',
+    'receptorNombre',
+    'receptorTelefono',
     'tiempoEstimadoMinutos',
     'createdAt',
     'aceptadoAt',
@@ -131,6 +135,22 @@ export default class Viaje extends BaseModel {
   @ApiProperty()
   @column()
   declare fotoEntrega: string | null
+
+  @ApiProperty()
+  @column()
+  declare fotoRecogida: string | null
+
+  /** 4 dígitos, se genera al aceptar la oferta. Solo lo ve el cliente. */
+  @column()
+  declare pinEntrega: string | null
+
+  @ApiProperty()
+  @column()
+  declare receptorNombre: string | null
+
+  @ApiProperty()
+  @column()
+  declare receptorTelefono: string | null
 
   @ApiProperty()
   @column()
