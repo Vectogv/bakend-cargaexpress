@@ -17,6 +17,9 @@ export const tripRequestValidator = vine.create({
   // coordinar la entrega.
   receptorNombre: vine.string().trim().maxLength(120).nullable().optional(),
   receptorTelefono: vine.string().trim().maxLength(30).nullable().optional(),
+  // Tipo de vehículo pedido (opcional, texto libre): solo informativo, no filtra
+  // conductores.
+  tipoVehiculoRequerido: vine.string().trim().maxLength(60).nullable().optional(),
 })
 
 export const tripReserveValidator = vine.create({
@@ -34,6 +37,7 @@ export const tripReserveValidator = vine.create({
   precioCliente: vine.number().min(0),
   receptorNombre: vine.string().trim().maxLength(120).nullable().optional(),
   receptorTelefono: vine.string().trim().maxLength(30).nullable().optional(),
+  tipoVehiculoRequerido: vine.string().trim().maxLength(60).nullable().optional(),
   // Fecha/hora programada. Se validan además contra la anticipación mínima
   // en el controlador (depende de la configuración de la plataforma).
   fechaProgramada: vine.string().regex(/^\d{4}-\d{2}-\d{2}$/),

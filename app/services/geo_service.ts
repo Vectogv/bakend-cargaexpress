@@ -87,6 +87,8 @@ export default class GeoService {
       tipoProgramacion: v.tipoProgramacion ?? 'inmediata',
       fechaProgramada: v.fechaProgramada,
       horaProgramada: v.horaProgramada,
+      // Informativo: todos los conductores ven la misma etiqueta, no filtra el viaje.
+      tipoVehiculoRequerido: v.tipoVehiculoRequerido,
       cliente: {
         id: String(v.cliente.id),
         _id: String(v.cliente.id),

@@ -33,6 +33,7 @@ export default class Viaje extends BaseModel {
     'pinEntrega',
     'receptorNombre',
     'receptorTelefono',
+    'tipoVehiculoRequerido',
     'tiempoEstimadoMinutos',
     'createdAt',
     'aceptadoAt',
@@ -151,6 +152,11 @@ export default class Viaje extends BaseModel {
   @ApiProperty()
   @column()
   declare receptorTelefono: string | null
+
+  /** Texto libre (ej. "Camioneta", "Furgón cerrado"), opcional e informativo. */
+  @ApiProperty()
+  @column()
+  declare tipoVehiculoRequerido: string | null
 
   @ApiProperty()
   @column()

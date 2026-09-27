@@ -889,6 +889,7 @@ export default class ModeratorController {
       fotoRecogida: viaje.fotoRecogida,
       receptorNombre: viaje.receptorNombre,
       receptorTelefono: viaje.receptorTelefono,
+      tipoVehiculoRequerido: viaje.tipoVehiculoRequerido,
       tiempoEstimadoMinutos: viaje.tiempoEstimadoMinutos !== null ? Number(viaje.tiempoEstimadoMinutos) : null,
       dinero: {
         precioCliente: viaje.precioCliente !== null ? Number(viaje.precioCliente) : null,

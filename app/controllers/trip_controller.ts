@@ -180,6 +180,7 @@ export default class TripController {
           precioEstimado: data.precioCliente,
           receptorNombre: data.receptorNombre || null,
           receptorTelefono: data.receptorTelefono || null,
+          tipoVehiculoRequerido: data.tipoVehiculoRequerido || null,
         },
         { client: trx }
       )
@@ -231,6 +232,7 @@ export default class TripController {
       precioEstimado: viaje.precioEstimado,
       receptorNombre: viaje.receptorNombre,
       receptorTelefono: viaje.receptorTelefono,
+      tipoVehiculoRequerido: viaje.tipoVehiculoRequerido,
       createdAt: viaje.createdAt.toISO(),
     })
   }
@@ -345,6 +347,7 @@ export default class TripController {
           precioEstimado: data.precioCliente,
           receptorNombre: data.receptorNombre || null,
           receptorTelefono: data.receptorTelefono || null,
+          tipoVehiculoRequerido: data.tipoVehiculoRequerido || null,
         },
         { client: trx }
       )
@@ -397,6 +400,7 @@ export default class TripController {
         precioEstimado: viaje.precioEstimado,
         receptorNombre: viaje.receptorNombre,
         receptorTelefono: viaje.receptorTelefono,
+        tipoVehiculoRequerido: viaje.tipoVehiculoRequerido,
         fechaProgramada: viaje.fechaProgramada,
         horaProgramada: viaje.horaProgramada,
       activacionAt: viaje.activacionAt?.toISO() ?? null,
@@ -1645,6 +1649,9 @@ export default class TripController {
       fotoRecogida: viaje.fotoRecogida,
       receptorNombre: viaje.receptorNombre,
       receptorTelefono: viaje.receptorTelefono,
+      // Informativo para todos los roles, a diferencia del PIN: no filtra ni
+      // oculta el viaje a ningún conductor.
+      tipoVehiculoRequerido: viaje.tipoVehiculoRequerido,
       // El PIN lo dicta quien recibe: el conductor nunca lo ve por la API.
       pinEntrega: rol === 'conductor' ? null : viaje.pinEntrega,
       tiempoEstimadoMinutos: viaje.tiempoEstimadoMinutos ?? null,
