@@ -142,6 +142,17 @@ test.group('Flujo de viaje con ofertas', (group) => {
     const califica = await client.post(`/api/trips/${viajeId}/rate`).bearerToken(tokenC).json({ puntaje: 5, comentario: 'Todo bien' })
     califica.assertStatus(200)
 
+    // El conductor también califica al cliente: el promedio queda en el usuario y se ve en su perfil.
+    const calificaConductor = await client
+      .post(`/api/trips/${viajeId}/rate`)
+      .bearerToken(driver.token)
+      .json({ puntaje: 4, comentario: 'Buen cliente' })
+    calificaConductor.assertStatus(200)
+
+    const perfilCliente = await client.get('/api/users/profile').bearerToken(tokenC)
+    perfilCliente.assertStatus(200)
+    assert.equal((perfilCliente.body() as any).calificacion, 4)
+
     const ganancias = await client.get('/api/drivers/earnings').bearerToken(driver.token)
     ganancias.assertStatus(200)
     assert.equal((ganancias.body() as any).hoy.viajesCompletados, 1)
