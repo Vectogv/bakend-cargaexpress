@@ -326,7 +326,10 @@ export default class DriverController {
           if (cliente?.fcmToken) {
             const { sendToToken } = await import('#services/push_notification_service')
             const destino = eta.fase === 'destino' ? 'a tu destino' : 'al punto de recogida'
-            await sendToToken(cliente.fcmToken, 'Tu conductor está cerca', `Llega ${destino} en unos 5 minutos`).catch(
+            await sendToToken(cliente.fcmToken, 'Tu conductor está cerca', `Llega ${destino} en unos 5 minutos`, {
+              tipo: 'viaje_estado',
+              viajeId: String(viajeActivo.id),
+            }).catch(
               () => {}
             )
           }
@@ -351,7 +354,8 @@ export default class DriverController {
             await sendToToken(
               cliente.fcmToken,
               'Conductor cerca',
-              'Tu conductor está llegando al punto de recogida'
+              'Tu conductor está llegando al punto de recogida',
+              { tipo: 'viaje_estado', viajeId: String(viajeActivo.id) }
             )
           }
         }

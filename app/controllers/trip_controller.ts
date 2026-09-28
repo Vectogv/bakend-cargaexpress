@@ -904,7 +904,8 @@ export default class TripController {
       await sendToToken(
         clienteInicio.fcmToken,
         'Tu viaje comenzó',
-        'El conductor recogió tu carga y va hacia el destino.'
+        'El conductor recogió tu carga y va hacia el destino.',
+        { tipo: 'viaje_estado', viajeId: String(viaje.id) }
       )
     }
 
@@ -1095,7 +1096,8 @@ export default class TripController {
       await sendToToken(
         clienteCierre.fcmToken,
         'Tu carga llegó al destino',
-        'El conductor terminó la entrega. Entra a la app para confirmarla.'
+        'El conductor terminó la entrega. Entra a la app para confirmarla.',
+        { tipo: 'viaje_estado', viajeId: String(viaje.id) }
       )
     }
 
@@ -1199,7 +1201,8 @@ export default class TripController {
             await sendToToken(
               cliente.fcmToken,
               'Envío entregado',
-              'Tu envío ha sido entregado exitosamente'
+              'Tu envío ha sido entregado exitosamente',
+              { tipo: 'viaje_estado', viajeId: String(viajeFinalizado.id) }
             )
           }
 

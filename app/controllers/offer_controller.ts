@@ -415,7 +415,8 @@ export default class OfferController {
       await sendToToken(
         oferta.conductor.usuario.fcmToken,
         'Oferta aceptada',
-        `Tu oferta de $${oferta.monto} fue aceptada. Dirígete al origen del viaje`
+        `Tu oferta de $${oferta.monto} fue aceptada. Dirígete al origen del viaje`,
+        { tipo: 'viaje_estado', viajeId: String(viaje.id) }
       )
     }
 
@@ -500,7 +501,8 @@ export default class OfferController {
       await sendToToken(
         clienteUser.fcmToken,
         'Conductor en camino',
-        'Tu conductor está en camino al punto de recogida'
+        'Tu conductor está en camino al punto de recogida',
+        { tipo: 'viaje_estado', viajeId: String(viaje.id) }
       ).catch(() => {})
     }
 
@@ -559,7 +561,8 @@ export default class OfferController {
       await sendToToken(
         clienteUser.fcmToken,
         'El conductor llegó',
-        'Tu conductor ha llegado al punto de recogida'
+        'Tu conductor ha llegado al punto de recogida',
+        { tipo: 'viaje_estado', viajeId: String(viaje.id) }
       ).catch(() => {})
     }
 
@@ -568,7 +571,8 @@ export default class OfferController {
       await sendToToken(
         user.fcmToken,
         'Llegaste',
-        'Contacta al cliente y confirma la recogida de la carga'
+        'Contacta al cliente y confirma la recogida de la carga',
+        { tipo: 'viaje_estado', viajeId: String(viaje.id) }
       ).catch(() => {})
     }
 
