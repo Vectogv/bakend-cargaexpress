@@ -962,6 +962,22 @@ export default class AdminController {
         estado: viaje.estado,
       })
       emitTripUpdateToModerators(viaje)
+
+      // Push: con la app cerrada el socket no llega.
+      const cuerpo =
+        viaje.estado === 'cancelado'
+          ? 'La disputa se resolvió a favor del cliente.'
+          : 'La disputa se resolvió a favor del conductor.'
+      const usuarios = await User.findMany(
+        [viaje.clienteId, conductor?.usuarioId].filter((id): id is number => !!id)
+      )
+      for (const u of usuarios) {
+        if (!u.fcmToken) continue
+        await sendToToken(u.fcmToken, `Disputa del viaje #${viaje.id} resuelta`, cuerpo, {
+          tipo: 'disputa_resuelta',
+          viajeId: String(viaje.id),
+        }).catch(() => {})
+      }
     }
     return { ok: true, viaje }
   }
@@ -1777,6 +1793,21 @@ export default class AdminController {
           canceladoPor: 'admin',
         })
       }
+    }
+
+    // Push: con la app cerrada el socket no llega.
+    const conductorUsuarioId = viaje.conductorId
+      ? (await Conductor.find(viaje.conductorId))?.usuarioId
+      : undefined
+    const usuarios = await User.findMany(
+      [viaje.clienteId, conductorUsuarioId].filter((id): id is number => !!id)
+    )
+    for (const u of usuarios) {
+      if (!u.fcmToken) continue
+      await sendToToken(u.fcmToken, 'Viaje cancelado', 'El administrador aprobó la cancelación del viaje.', {
+        tipo: 'viaje_cancelado',
+        viajeId: String(viaje.id),
+      }).catch(() => {})
     }
 
     return serialize.withoutWrapping({

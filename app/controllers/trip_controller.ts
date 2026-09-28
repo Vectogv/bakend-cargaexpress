@@ -1438,6 +1438,33 @@ export default class TripController {
 
     emitTripUpdateToModerators(viaje)
 
+    // Push a la otra parte: con la app cerrada el socket no llega.
+    const datosPush = { tipo: 'viaje_cancelado', viajeId: String(viaje.id) }
+    if (user.id !== viaje.clienteId) {
+      const clienteCancelado = await User.find(viaje.clienteId)
+      if (clienteCancelado?.fcmToken) {
+        await sendToToken(
+          clienteCancelado.fcmToken,
+          'Tu viaje fue cancelado',
+          user.rol === 'conductor'
+            ? 'El conductor canceló el viaje. Puedes publicar tu envío de nuevo.'
+            : 'El administrador canceló el viaje.',
+          datosPush
+        ).catch(() => {})
+      }
+    }
+    if (conductorStatusChanged && conductorStatusChanged.usuarioId !== user.id) {
+      const conductorCancelado = await User.find(conductorStatusChanged.usuarioId)
+      if (conductorCancelado?.fcmToken) {
+        await sendToToken(
+          conductorCancelado.fcmToken,
+          'Viaje cancelado',
+          user.rol === 'cliente' ? 'El cliente canceló el viaje.' : 'El administrador canceló el viaje.',
+          datosPush
+        ).catch(() => {})
+      }
+    }
+
     return serialize.withoutWrapping({
       id: String(viaje.id),
       estado: viaje.estado,

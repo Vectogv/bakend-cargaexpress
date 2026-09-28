@@ -104,6 +104,28 @@ function ensureInit() {
   }
 }
 
+/**
+ * Prioridad alta en Android: sin ella, con el celular en reposo (Doze) el
+ * aviso puede llegar minutos tarde y la app cerrada no se entera del cambio
+ * de estado del viaje.
+ */
+export function armarMensaje(
+  token: string,
+  title: string,
+  body: string,
+  data?: Record<string, string>,
+  sound?: string
+) {
+  const message: any = {
+    token,
+    notification: { title, body },
+    data,
+    android: { priority: 'high', ...(sound ? { notification: { sound } } : {}) },
+  }
+  if (sound) message.apns = { payload: { aps: { sound } } }
+  return message
+}
+
 export async function sendToToken(
   token: string,
   title: string,
@@ -114,11 +136,7 @@ export async function sendToToken(
   ensureInit()
   if (!messaging) return
 
-  const message: any = { token, notification: { title, body }, data }
-  if (sound) {
-    message.android = { notification: { sound } }
-    message.apns = { payload: { aps: { sound } } }
-  }
+  const message = armarMensaje(token, title, body, data, sound)
 
   // Sufijo del token: identifica el dispositivo en los logs sin exponerlo.
   const dispositivo = `…${token.slice(-8)}`
@@ -147,14 +165,7 @@ export async function sendToMultiple(
 
   try {
     await messaging.sendEach(
-      tokens.map((token) => {
-        const message: any = { token, notification: { title, body }, data }
-        if (sound) {
-          message.android = { notification: { sound } }
-          message.apns = { payload: { aps: { sound } } }
-        }
-        return message
-      })
+      tokens.map((token) => armarMensaje(token, title, body, data, sound))
     )
   } catch (err: any) {
     logger.error(`FCM sendEach error: ${err.message}`)

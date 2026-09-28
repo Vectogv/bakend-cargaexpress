@@ -1,5 +1,5 @@
 import { test } from '@japa/runner'
-import { leerCredenciales } from '#services/push_notification_service'
+import { armarMensaje, leerCredenciales } from '#services/push_notification_service'
 
 /**
  * Credenciales de Firebase para las notificaciones push.
@@ -101,5 +101,14 @@ test.group('Unit - credenciales de Firebase', () => {
     const r = leerCredenciales({ json: JSON.stringify(otra), path: '/ruta/cuenta.json' }, () => CUENTA)
     if (r && 'cuenta' in r) assert.equal(r.cuenta.project_id, 'desde-el-json')
     else assert.fail('debería preferir el JSON')
+  })
+})
+
+test.group('Unit - mensaje push', () => {
+  test('siempre va con prioridad alta en Android (llega con el celular en reposo)', ({ assert }) => {
+    assert.equal(armarMensaje('t', 'a', 'b').android.priority, 'high')
+    const conSonido = armarMensaje('t', 'a', 'b', undefined, 'sos')
+    assert.equal(conSonido.android.priority, 'high')
+    assert.equal(conSonido.android.notification.sound, 'sos')
   })
 })
