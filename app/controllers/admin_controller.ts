@@ -31,6 +31,7 @@ import TripFinalizationService from '#services/trip_finalization_service'
 import { DIAS_PLAZO_DEUDA_COMISION } from '#services/driver_debt_suspension_service'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
+import { getAlertaEstadoLabel } from '#services/emergency_status_labels'
 import { sendToMultiple, sendToToken } from '#services/push_notification_service'
 import SignedUploadService from '#services/signed_upload_service'
 import {
@@ -800,9 +801,22 @@ export default class AdminController {
   async emergencies({ request, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    // ?estado=pendiente,atendida (CSV) filtra por estado, como el endpoint del
+    // moderador. Sin él se mantiene atendida=false: resolveEmergency del admin
+    // solo marca `atendida` (no cambia `estado`), así que filtrar por estado
+    // por defecto volvería a mostrar alertas ya resueltas por el admin.
+    const estados = String(request.input('estado', '') || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
     const alertas = await AlertaEmergencia.query()
-      .where('atendida', false)
+      .if(
+        estados.length > 0,
+        (q) => q.whereIn('estado', estados),
+        (q) => q.where('atendida', false)
+      )
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
+      .preload('moderadorAtendio', (q) => q.select('id', 'nombre', 'apellido'))
       .preload('viaje', (q) =>
         q
           .select('id', 'origen_direccion', 'destino_direccion', 'estado', ...COLUMNAS_VIAJE_MAPA_SOS)
@@ -821,6 +835,13 @@ export default class AdminController {
           lat: a.lat,
           lng: a.lng,
           atendida: a.atendida,
+          motivo: a.motivo,
+          estado: a.estado,
+          estadoLabel: getAlertaEstadoLabel(a.estado),
+          atendidoPor: a.moderadorAtendio
+            ? `${a.moderadorAtendio.nombre || ''} ${a.moderadorAtendio.apellido || ''}`.trim()
+            : null,
+          atendidaAt: a.atendidaAt?.toISO() ?? null,
           usuario: a.usuario
             ? { nombre: a.usuario.nombre, apellido: a.usuario.apellido, telefono: a.usuario.telefono }
             : null,
