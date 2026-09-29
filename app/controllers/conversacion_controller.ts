@@ -352,6 +352,17 @@ export default class ConversacionController {
     const zona = user.zonaModerador
     const buscaClientes = q.length >= 3
 
+    // `conductores.ciudad` es texto libre ('Popayán', 'POPAYAN'): se compara
+    // normalizada con claveDe en memoria (portable entre SQLite y Postgres).
+    let conductoresZona: number[] = []
+    if (!esAdmin && zona) {
+      const clave = claveDe(zona)
+      const filas = await db.from('conductores').whereNotNull('ciudad').select('usuario_id', 'ciudad')
+      conductoresZona = filas
+        .filter((c: { ciudad: string | null }) => claveDe(c.ciudad || '') === clave)
+        .map((c: { usuario_id: number }) => Number(c.usuario_id))
+    }
+
     const query = User.query()
       .select('id', 'email', 'nombre', 'apellido', 'telefono', 'avatar', 'rol', 'es_moderador', 'zona_moderador')
       .where((w) => {
@@ -360,8 +371,8 @@ export default class ConversacionController {
           return
         }
         w.where('rol', 'admin').orWhere('es_moderador', true)
-        if (zona) {
-          w.orWhereIn('id', db.from('conductores').where('ciudad', zona).select('usuario_id'))
+        if (conductoresZona.length > 0) {
+          w.orWhereIn('id', conductoresZona)
         }
         if (buscaClientes) w.orWhere('rol', 'cliente')
       })

@@ -685,12 +685,15 @@ export default class ModeratorController {
         ? request.input('ciudad') || null
         : null
     const fechaLimite = DateTime.now().minus({ days: 7 }).toSQL()
+    // `conductores.ciudad` es texto libre: se compara normalizado (claveDe).
+    const clave = ciudad ? claveDe(ciudad) : null
+    const conductorIds = clave ? (await conductoresDeZona(clave)).conductorIds : null
 
     const [totalDrivers, inactiveDrivers, onlineDrivers, totalComunicados, totalAvisos, totalReports] =
       await Promise.all([
-        Conductor.query().if(ciudad, (q) => q.where('ciudad', ciudad!)).count('* as total').first(),
+        Conductor.query().if(conductorIds, (q) => q.whereIn('id', conductorIds!)).count('* as total').first(),
         Conductor.query()
-          .if(ciudad, (q) => q.where('ciudad', ciudad!))
+          .if(conductorIds, (q) => q.whereIn('id', conductorIds!))
           .where('online', false)
           .whereNotExists((q) => {
             q.from('viajes')
@@ -700,12 +703,12 @@ export default class ModeratorController {
           .count('* as total')
           .first(),
         Conductor.query()
-          .if(ciudad, (q) => q.where('ciudad', ciudad!))
+          .if(conductorIds, (q) => q.whereIn('id', conductorIds!))
           .where('online', true)
           .count('* as total')
           .first(),
         Comunicado.query().where('moderador_id', user.id).count('* as total').first(),
-        Aviso.query().where('zona', ciudad || 'general').count('* as total').first(),
+        Aviso.query().where('zona', clave || 'general').count('* as total').first(),
         ReporteModerador.query().where('moderador_id', user.id).count('* as total').first(),
       ])
 
@@ -722,12 +725,13 @@ export default class ModeratorController {
 
   async trips({ auth, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    const ciudad = user.zonaModerador
-    if (!ciudad) {
+    const zona = zonaDeConsulta(user, request.input('ciudad'))
+    if (zona === false) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
     }
+    const conductorIds = zona ? (await conductoresDeZona(zona)).conductorIds : null
 
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
@@ -736,11 +740,7 @@ export default class ModeratorController {
 
     const resultado = await Viaje.query()
       .whereNotNull('conductor_id')
-      .whereExists((q) => {
-        q.from('conductores')
-          .whereRaw('conductores.id = viajes.conductor_id')
-          .where('conductores.ciudad', ciudad)
-      })
+      .if(conductorIds, (q) => q.whereIn('conductor_id', conductorIds!))
       .if(estado, (q) => q.whereIn('estado', String(estado).split(',')))
       .if(tipoProgramacion, (q) => q.where('tipo_programacion', String(tipoProgramacion)))
       .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email'))
@@ -800,22 +800,19 @@ export default class ModeratorController {
     )
   }
 
-  async tripShow({ auth, params, serialize, response }: HttpContext) {
+  async tripShow({ auth, params, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    const ciudad = user.zonaModerador
-    if (!ciudad) {
+    const zona = zonaDeConsulta(user, request.input('ciudad'))
+    if (zona === false) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
     }
+    const conductorIds = zona ? (await conductoresDeZona(zona)).conductorIds : null
 
     const viaje = await Viaje.query()
       .where('id', params.id)
-      .whereExists((q) => {
-        q.from('conductores')
-          .whereRaw('conductores.id = viajes.conductor_id')
-          .where('conductores.ciudad', ciudad)
-      })
+      .if(conductorIds, (q) => q.whereIn('conductor_id', conductorIds!))
       .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email', 'avatar'))
       .preload('conductor', (q) =>
         q
@@ -1161,8 +1158,8 @@ export default class ModeratorController {
   @ApiResponse({ type: 'array' })
   async reservations({ auth, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    const ciudad = user.zonaModerador
-    if (!ciudad) {
+    const zona = zonaDeConsulta(user, request.input('ciudad'))
+    if (zona === false) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
@@ -1177,10 +1174,16 @@ export default class ModeratorController {
     const conductorId = request.input('conductorId')
     const proximas = request.input('proximas')
 
-    // Las reservas sin conductor no pueden filtrarse por ciudad en SQL, por lo
-    // que la zona se resuelve por origen sobre un conjunto acotado de candidatas.
+    // Con zona, las reservas con conductor se acotan en SQL a los conductores
+    // de la zona (ciudad normalizada); las que aún no tienen conductor se
+    // resuelven por origen en memoria. El filtro de zona se aplica completo
+    // antes de paginar, así `total` es exacto.
+    const conductorIds = zona ? (await conductoresDeZona(zona)).conductorIds : null
     const candidatas = await Viaje.query()
       .where('tipo_programacion', 'programada')
+      .if(conductorIds, (q) =>
+        q.where((w) => w.whereIn('conductor_id', conductorIds!).orWhereNull('conductor_id'))
+      )
       .if(estado, (q) => q.whereIn('estado', String(estado).split(',').map((s) => s.trim()).filter(Boolean)))
       .if(fecha, (q) => q.where('fecha_programada', String(fecha)))
       .if(conductorId, (q) => q.where('conductor_id', Number(conductorId)))
@@ -1209,15 +1212,11 @@ export default class ModeratorController {
       )
       .orderBy('fecha_programada', 'asc')
       .orderBy('hora_programada', 'asc')
-      .limit(200)
 
-    const zonas = await CoverageService.zonas()
-    const ciudadLower = String(ciudad).toLowerCase()
-
-    const enCiudad = candidatas.filter((v) => {
-      const zona = this.zonaDeReserva(v, zonas)
-      return zona !== null && zona === ciudadLower
-    })
+    const zonas = zona ? await CoverageService.zonas() : []
+    const enCiudad = zona
+      ? candidatas.filter((v) => this.zonaDeReserva(v, zonas) === zona)
+      : candidatas
 
     const total = enCiudad.length
     const inicio = (page - 1) * limit
@@ -1276,43 +1275,39 @@ export default class ModeratorController {
    * aún no tiene, la zona de cobertura más cercana a su origen.
    */
   private zonaDeReserva(viaje: Viaje, zonas: Zona[]): string | null {
-    if (viaje.conductor?.ciudad) return String(viaje.conductor.ciudad).toLowerCase()
+    if (viaje.conductor?.ciudad) return claveDe(viaje.conductor.ciudad)
     if (viaje.origenLat === null || viaje.origenLng === null) return null
     return CoverageService.zonaDeEn(zonas, Number(viaje.origenLat), Number(viaje.origenLng))?.clave ?? null
   }
 
-  private ciudadDeEmergencia(ciudad: string) {
+  /**
+   * Alertas de la zona: las de viajes cuyo conductor es de la zona o las
+   * lanzadas por un conductor de la zona. La ciudad del conductor se compara
+   * normalizada (ver conductoresDeZona).
+   */
+  private ciudadDeEmergencia({ conductorIds, usuarioIds }: { conductorIds: number[]; usuarioIds: number[] }) {
     return (q: any) => {
       q.whereExists((sub: any) => {
         sub
           .from('viajes')
           .whereRaw('viajes.id = alertas_emergencia.viaje_id')
-          .whereExists((sub2: any) => {
-            sub2
-              .from('conductores')
-              .whereRaw('conductores.id = viajes.conductor_id')
-              .where('conductores.ciudad', ciudad)
-          })
-      }).orWhereExists((sub: any) => {
-        sub
-          .from('conductores')
-          .whereRaw('conductores.usuario_id = alertas_emergencia.user_id')
-          .where('conductores.ciudad', ciudad)
-      })
+          .whereIn('viajes.conductor_id', conductorIds)
+      }).orWhereIn('alertas_emergencia.user_id', usuarioIds)
     }
   }
 
-  async emergencyCount({ auth, serialize, response }: HttpContext) {
+  async emergencyCount({ auth, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    const ciudad = user.zonaModerador
-    if (!ciudad) {
+    const zona = zonaDeConsulta(user, request.input('ciudad'))
+    if (zona === false) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
     }
+    const deZona = zona ? await conductoresDeZona(zona) : null
 
     const filas = await AlertaEmergencia.query()
-      .where(this.ciudadDeEmergencia(ciudad))
+      .if(deZona, (q) => q.where(this.ciudadDeEmergencia(deZona!)))
       .select('estado')
       .count('* as total')
       .groupBy('estado')
@@ -1332,19 +1327,20 @@ export default class ModeratorController {
 
   async emergencies({ auth, request, serialize, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    const ciudad = user.zonaModerador
-    if (!ciudad) {
+    const zona = zonaDeConsulta(user, request.input('ciudad'))
+    if (zona === false) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
     }
+    const deZona = zona ? await conductoresDeZona(zona) : null
 
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const estado = request.input('estado', '')
 
     const alertas = await AlertaEmergencia.query()
-      .where(this.ciudadDeEmergencia(ciudad))
+      .if(deZona, (q) => q.where(this.ciudadDeEmergencia(deZona!)))
       .if(estado, (q) => q.whereIn('estado', String(estado).split(',')))
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
       .preload('viaje', (vq) =>
@@ -1601,6 +1597,36 @@ export default class ModeratorController {
       resueltaAt: alerta.resueltaAt?.toISO() ?? null,
       observacion: alerta.observacion,
     })
+  }
+}
+
+/**
+ * Zona que aplica a una consulta del panel:
+ *  - moderador: siempre su `zonaModerador` (nunca la del query);
+ *  - admin: `?ciudad=` normalizada, o null (sin filtro) si falta o es 'general'.
+ * Devuelve `false` si un moderador no tiene zona (el llamador responde 403).
+ */
+function zonaDeConsulta(user: User, ciudadQuery: unknown): string | null | false {
+  if (user.rol === 'admin') {
+    const clave = claveDe(String(ciudadQuery ?? ''))
+    return clave && clave !== 'general' ? clave : null
+  }
+  const clave = claveDe(user.zonaModerador || '')
+  return clave || false
+}
+
+/**
+ * Conductores cuya ciudad (texto libre: 'Popayán', 'POPAYAN ') corresponde a la
+ * zona dada. Se normaliza con claveDe en memoria porque SQLite (tests) y
+ * Postgres (prod) no comparten una forma portable de quitar tildes en SQL.
+ * Solo trae id, usuario_id y ciudad.
+ */
+async function conductoresDeZona(zona: string) {
+  const filas = await Conductor.query().select('id', 'usuario_id', 'ciudad').whereNotNull('ciudad')
+  const enZona = filas.filter((c) => claveDe(c.ciudad || '') === zona)
+  return {
+    conductorIds: enZona.map((c) => c.id),
+    usuarioIds: enZona.map((c) => c.usuarioId),
   }
 }
 
