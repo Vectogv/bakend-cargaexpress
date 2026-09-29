@@ -66,6 +66,11 @@ export default class TicketController {
     return claveDe(ticket.zona) === claveDe(user.zonaModerador || '')
   }
 
+  /** El ticket lo tiene otro moderador (el admin puede intervenir siempre). */
+  private tomadoPorOtro(user: User, ticket: TicketSoporte) {
+    return !!ticket.moderadorId && ticket.moderadorId !== user.id && user.rol !== 'admin'
+  }
+
   private paginacion(request: HttpContext['request']) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
@@ -327,7 +332,7 @@ export default class TicketController {
     if (ticket.estado === 'cerrado') {
       return response.status(422).send(await serialize.withoutWrapping({ error: 'El ticket está cerrado' }))
     }
-    if (ticket.moderadorId && ticket.moderadorId !== user.id && user.rol !== 'admin') {
+    if (this.tomadoPorOtro(user, ticket)) {
       return response
         .status(409)
         .send(await serialize.withoutWrapping({ error: 'Otro moderador ya tiene este ticket' }))
@@ -354,6 +359,11 @@ export default class TicketController {
       return response
         .status(422)
         .send(await serialize.withoutWrapping({ error: 'El ticket está cerrado; reábrelo para responder' }))
+    }
+    if (this.tomadoPorOtro(user, ticket)) {
+      return response
+        .status(409)
+        .send(await serialize.withoutWrapping({ error: 'Otro moderador ya tiene este ticket' }))
     }
 
     const res = await this.crearMensaje(ticket, user, request)
@@ -383,6 +393,11 @@ export default class TicketController {
     }
     if (!this.staffPuedeVer(user, ticket)) {
       return response.status(403).send(await serialize.withoutWrapping({ error: 'Este ticket pertenece a otra zona' }))
+    }
+    if (this.tomadoPorOtro(user, ticket)) {
+      return response
+        .status(409)
+        .send(await serialize.withoutWrapping({ error: 'Otro moderador ya tiene este ticket' }))
     }
     const estado = texto(request.input('estado'))
     if (!(TICKET_ESTADOS as readonly string[]).includes(estado)) {
