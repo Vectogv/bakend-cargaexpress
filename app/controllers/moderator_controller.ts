@@ -15,6 +15,7 @@ import Notificacion from '#models/notificacion'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
+import db from '@adonisjs/lucid/services/db'
 import { sendToMultiple, sendToToken } from '#services/push_notification_service'
 import TripFinalizationService from '#services/trip_finalization_service'
 import {
@@ -1088,7 +1089,7 @@ export default class ModeratorController {
         viajeId,
         montoFinal,
         actorUserId: user.id,
-        actorRol: 'moderador',
+        actorRol: user.rol === 'admin' ? 'admin' : 'moderador',
       })
 
       if (!result.ok) {
@@ -1136,19 +1137,49 @@ export default class ModeratorController {
         .json({ error: 'El viaje no tiene conductor asignado para abrir disputa' })
     }
 
-    const disputa = await Disputa.create({
-      viajeId: viaje.id,
-      conductorId: conductor.id,
-      clienteId: viaje.clienteId,
-      estado: 'abierta',
-      problema: 'cierre_sin_confirmar',
-      descripcion: notaResolucion,
-      versionConductor: 'Conductor solicitó cierre del servicio',
-      versionCliente: 'Cliente no confirmó el cierre dentro del tiempo límite',
+    // Transacción con bloqueo del viaje: dos resoluciones simultáneas (o el
+    // cliente confirmando a la vez) no deben dejar dos disputas ni pisar un
+    // estado que ya cambió. Si ya hay una disputa abierta del viaje se reusa
+    // (como DisputeController, nunca se duplica).
+    const resultadoDisputa = await db.transaction(async (trx) => {
+      const bloqueado = await Viaje.query({ client: trx }).where('id', viajeId).forUpdate().first()
+      if (!bloqueado || bloqueado.estado !== 'pendiente_confirmacion') {
+        return {
+          error: `El viaje ya no está pendiente de confirmación (estado actual: ${bloqueado?.estado ?? 'desconocido'})`,
+        }
+      }
+
+      const existente = await Disputa.query({ client: trx }).where('viaje_id', viajeId).first()
+      if (existente && existente.estado === 'resuelta') {
+        return { error: 'Ya existe una disputa resuelta para este viaje' }
+      }
+      const nueva =
+        existente ??
+        (await Disputa.create(
+          {
+            viajeId: bloqueado.id,
+            conductorId: conductor.id,
+            clienteId: bloqueado.clienteId,
+            estado: 'abierta',
+            problema: 'cierre_sin_confirmar',
+            descripcion: notaResolucion,
+            versionConductor: 'Conductor solicitó cierre del servicio',
+            versionCliente: 'Cliente no confirmó el cierre dentro del tiempo límite',
+          },
+          { client: trx }
+        ))
+
+      bloqueado.estado = 'disputa'
+      await bloqueado.useTransaction(trx).save()
+      return { disputa: nueva }
     })
 
+    if ('error' in resultadoDisputa) {
+      return response.status(409).json({ error: resultadoDisputa.error })
+    }
+    const { disputa } = resultadoDisputa
+    // La instancia externa (sin transacción) se sincroniza para los emits.
     viaje.estado = 'disputa'
-    await viaje.save()
 
     try {
       await LogFraude.create({
