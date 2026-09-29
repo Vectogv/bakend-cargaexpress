@@ -100,26 +100,38 @@ export default class ModeratorController {
     )
   }
 
-  async driversList({ auth, request, serialize }: HttpContext) {
+  async driversList({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
+    const esAdmin = user.rol === 'admin'
+    if (!esAdmin && !user.zonaModerador) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ message: 'No tienes una zona asignada' }))
+    }
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const estado = request.input('estado') || null
-    const ciudad = user.esModerador
-      ? user.zonaModerador
-      : user.rol === 'admin'
-        ? request.input('ciudad') || null
-        : null
+    const ciudad = esAdmin ? request.input('ciudad') || null : user.zonaModerador
+    // La ciudad del conductor se guarda sin normalizar (puede traer tildes o
+    // mayúsculas distintas a la zona del moderador): se compara con claveDe en
+    // memoria en vez de en SQL. ponytail: trae todos los conductores que matchean
+    // estado antes de filtrar; a la escala de un piloto (una ciudad) es aceptable,
+    // si crece conviene una columna normalizada + índice.
+    const claveEsperada = ciudad ? claveDe(ciudad) : null
 
-    const conductores = await Conductor.query()
-      .if(ciudad, (q) => q.where('ciudad', ciudad!))
+    const candidatos = await Conductor.query()
       .if(estado, (q) => q.where('estado_verificacion', estado!))
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email'))
       .orderBy('created_at', 'desc')
-      .paginate(page, limit)
+
+    const filtrados = claveEsperada
+      ? candidatos.filter((c) => claveDe(c.ciudad || '') === claveEsperada)
+      : candidatos
+    const inicio = (page - 1) * limit
+    const pagina = filtrados.slice(inicio, inicio + limit)
 
     return serialize.withoutWrapping(
-      conductores.all().map((c) => ({
+      pagina.map((c) => ({
         id: c.id,
         usuarioId: c.usuarioId,
         cedula: c.cedula,
@@ -152,19 +164,21 @@ export default class ModeratorController {
     )
   }
 
-  async inactiveDrivers({ auth, request, serialize }: HttpContext) {
+  async inactiveDrivers({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const ciudad = user.esModerador
-      ? user.zonaModerador
-      : user.rol === 'admin'
-        ? request.input('ciudad') || null
-        : null
+    const esAdmin = user.rol === 'admin'
+    if (!esAdmin && !user.zonaModerador) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ message: 'No tienes una zona asignada' }))
+    }
+    const ciudad = esAdmin ? request.input('ciudad') || null : user.zonaModerador
+    const claveEsperada = ciudad ? claveDe(ciudad) : null
     const fechaLimite = DateTime.now().minus({ days: 7 }).toSQL()
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
 
-    const conductores = await Conductor.query()
-      .if(ciudad, (q) => q.where('ciudad', ciudad!))
+    const candidatos = await Conductor.query()
       .whereNotExists((qb) => {
         qb.from('viajes')
           .whereRaw('viajes.conductor_id = conductores.id')
@@ -173,10 +187,15 @@ export default class ModeratorController {
       .where('online', false)
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email'))
       .orderBy('created_at', 'desc')
-      .paginate(page, limit)
+
+    const filtrados = claveEsperada
+      ? candidatos.filter((c) => claveDe(c.ciudad || '') === claveEsperada)
+      : candidatos
+    const inicio = (page - 1) * limit
+    const pagina = filtrados.slice(inicio, inicio + limit)
 
     return serialize.withoutWrapping(
-      conductores.all().map((c) => ({
+      pagina.map((c) => ({
         id: c.id,
         usuarioId: c.usuarioId,
         cedula: c.cedula,
@@ -218,10 +237,17 @@ export default class ModeratorController {
         .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
-    if (user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
-      return response
-        .status(403)
-        .send(await serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
+    if (user.rol !== 'admin') {
+      if (!user.zonaModerador) {
+        return response
+          .status(403)
+          .send(await serialize.withoutWrapping({ message: 'No tienes una zona asignada' }))
+      }
+      if (claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
+        return response
+          .status(403)
+          .send(await serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
+      }
     }
 
     const usuario = await User.find(conductor.usuarioId)
@@ -249,10 +275,17 @@ export default class ModeratorController {
         .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
     }
 
-    if (user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
-      return response
-        .status(403)
-        .send(await serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
+    if (user.rol !== 'admin') {
+      if (!user.zonaModerador) {
+        return response
+          .status(403)
+          .send(await serialize.withoutWrapping({ message: 'No tienes una zona asignada' }))
+      }
+      if (claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
+        return response
+          .status(403)
+          .send(await serialize.withoutWrapping({ error: 'Este conductor no pertenece a tu ciudad' }))
+      }
     }
 
     const { descripcion } = request.only(['descripcion'])
@@ -293,10 +326,17 @@ export default class ModeratorController {
     }
 
     const esAdmin = user.rol === 'admin'
-    if (!esAdmin && user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
-      return response
-        .status(403)
-        .send(await serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
+    if (!esAdmin) {
+      if (!user.zonaModerador) {
+        return response
+          .status(403)
+          .send(await serialize.withoutWrapping({ message: 'No tienes una zona asignada' }))
+      }
+      if (claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
+        return response
+          .status(403)
+          .send(await serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
+      }
     }
 
     conductor.estadoVerificacion = 'aprobado'
@@ -335,10 +375,17 @@ export default class ModeratorController {
     }
 
     const esAdmin = user.rol === 'admin'
-    if (!esAdmin && user.zonaModerador && claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
-      return response
-        .status(403)
-        .send(await serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
+    if (!esAdmin) {
+      if (!user.zonaModerador) {
+        return response
+          .status(403)
+          .send(await serialize.withoutWrapping({ message: 'No tienes una zona asignada' }))
+      }
+      if (claveDe(conductor.ciudad || '') !== claveDe(user.zonaModerador)) {
+        return response
+          .status(403)
+          .send(await serialize.withoutWrapping({ error: 'No puedes verificar conductores de otra ciudad' }))
+      }
     }
 
     const { nota } = request.only(['nota'])
