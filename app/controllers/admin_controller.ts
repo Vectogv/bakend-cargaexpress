@@ -64,7 +64,8 @@ export default class AdminController {
       Conductor.query().where('online', true).count('* as total').first(),
       Viaje.query()
         .whereIn('estado', ['finalizado'])
-        .where('created_at', '>=', startOfDay)
+        // Envíos terminados hoy (no creados hoy).
+        .where('finalizado_at', '>=', startOfDay)
         .count('* as total')
         .first(),
       Ganancia.query().sum('monto as total').first(),
@@ -162,7 +163,7 @@ export default class AdminController {
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const result = await Conductor.query()
       .preload('usuario', (q) =>
-        q.select('id', 'nombre', 'apellido', 'email', 'telefono', 'suspendido')
+        q.select('id', 'nombre', 'apellido', 'email', 'telefono', 'suspendido', 'es_lider')
       )
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
@@ -196,6 +197,7 @@ export default class AdminController {
               email: d.usuario.email,
               telefono: d.usuario.telefono,
               suspendido: d.usuario.suspendido,
+              esLider: d.usuario.esLider,
             }
           : null,
         createdAt: d.createdAt.toISO(),
@@ -532,15 +534,47 @@ export default class AdminController {
     }
 
     const now = DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss')
-    await Ganancia.query()
-      .where('conductor_id', conductor.id)
-      .where('comision_pagada', false)
-      .update({ comision_pagada: true, comision_pagada_at: now })
+    // La deuda del conductor (users.monto_deuda) es la suma de las comisiones
+    // no pagadas (TripFinalizationService la acumula por viaje): al marcarlas
+    // pagadas se descuenta lo mismo, como hace confirmPayment. Usuario
+    // bloqueado primero, igual que la finalización, para no pisarla.
+    const usuario = await db.transaction(async (trx) => {
+      const u = await User.query({ client: trx }).where('id', conductor.usuarioId).forUpdate().first()
+      const pendientes = await Ganancia.query({ client: trx })
+        .where('conductor_id', conductor.id)
+        .where('comision_pagada', false)
+        .select('id', 'comision')
+      if (pendientes.length === 0) return u
+
+      await Ganancia.query({ client: trx })
+        .whereIn('id', pendientes.map((g) => g.id))
+        .update({ comision_pagada: true, comision_pagada_at: now })
+
+      const cubierto = pendientes.reduce((s, g) => s + (Number(g.comision) || 0), 0)
+      if (u && cubierto > 0) {
+        const restante = Math.max(0, Math.round(((Number(u.montoDeuda) || 0) - cubierto) * 100) / 100)
+        if (restante > 0) {
+          u.montoDeuda = restante
+          u.tieneDeudaActiva = true
+        } else {
+          u.montoDeuda = null
+          u.tieneDeudaActiva = false
+          u.deudaFechaLimite = null
+          // Suspendido solo por la deuda vencida: queda saldada. Un comprobante
+          // en revisión (esperando_confirmacion) lo sigue cerrando confirmPayment.
+          if (u.estadoCuenta === 'suspension_por_pago') u.estadoCuenta = 'activa'
+        }
+        await u.useTransaction(trx).save()
+      }
+      return u
+    })
 
     return serialize.withoutWrapping({
       success: true,
       conductorId: conductor.id,
       marcadasPagadas: now,
+      montoDeuda: Number(usuario?.montoDeuda) || 0,
+      estadoCuenta: usuario?.estadoCuenta ?? null,
     })
   }
 
