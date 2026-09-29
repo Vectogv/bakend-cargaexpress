@@ -12,6 +12,7 @@ export const TRIP_STATUS_LABELS: Record<string, string> = {
   [TRIP_STATUS.EN_CURSO]: 'Carga recogida, en ruta al destino',
   [TRIP_STATUS.ENTREGADO]: 'Carga entregada al cliente',
   [TRIP_STATUS.ESPERA_CONFIRMACION]: 'Esperando confirmación del cliente',
+  [TRIP_STATUS.PENDIENTE_CONFIRMACION]: 'Cierre pendiente: el cliente no confirmó a tiempo',
   [TRIP_STATUS.FINALIZADO]: 'Viaje finalizado',
   [TRIP_STATUS.CANCELADO]: 'Viaje cancelado',
   [TRIP_STATUS.RECHAZADO]: 'Viaje rechazado',

@@ -16,7 +16,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import RedisService from '#services/redis_service'
 import SessionService from '#services/session_service'
-import CoverageService, { validarZonasEntrada } from '#services/coverage_service'
+import CoverageService, { claveDe, validarZonasEntrada } from '#services/coverage_service'
 import { DateTime } from 'luxon'
 import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
@@ -25,12 +25,14 @@ import {
   emitToClient,
   emitToUser,
   emitToAdmin,
+  emitToModerators,
   emitTripStatusChanged,
 } from '#start/socket'
 import TripFinalizationService from '#services/trip_finalization_service'
 import { DIAS_PLAZO_DEUDA_COMISION } from '#services/driver_debt_suspension_service'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
+import { emitTripUpdateToModerators, resolverZonaAlerta } from '#services/moderator_trip_events'
+import { getAlertaEstadoLabel } from '#services/emergency_status_labels'
 import { sendToMultiple, sendToToken } from '#services/push_notification_service'
 import SignedUploadService from '#services/signed_upload_service'
 import { TELEFONO_REGEX } from '#validators/profile'
@@ -65,7 +67,8 @@ export default class AdminController {
       Conductor.query().where('online', true).count('* as total').first(),
       Viaje.query()
         .whereIn('estado', ['finalizado'])
-        .where('created_at', '>=', startOfDay)
+        // Envíos terminados hoy (no creados hoy).
+        .where('finalizado_at', '>=', startOfDay)
         .count('* as total')
         .first(),
       Ganancia.query().sum('monto as total').first(),
@@ -163,7 +166,7 @@ export default class AdminController {
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const result = await Conductor.query()
       .preload('usuario', (q) =>
-        q.select('id', 'nombre', 'apellido', 'email', 'telefono', 'suspendido')
+        q.select('id', 'nombre', 'apellido', 'email', 'telefono', 'suspendido', 'es_lider')
       )
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
@@ -197,6 +200,7 @@ export default class AdminController {
               email: d.usuario.email,
               telefono: d.usuario.telefono,
               suspendido: d.usuario.suspendido,
+              esLider: d.usuario.esLider,
             }
           : null,
         createdAt: d.createdAt.toISO(),
@@ -533,15 +537,47 @@ export default class AdminController {
     }
 
     const now = DateTime.now().toFormat('yyyy-MM-dd HH:mm:ss')
-    await Ganancia.query()
-      .where('conductor_id', conductor.id)
-      .where('comision_pagada', false)
-      .update({ comision_pagada: true, comision_pagada_at: now })
+    // La deuda del conductor (users.monto_deuda) es la suma de las comisiones
+    // no pagadas (TripFinalizationService la acumula por viaje): al marcarlas
+    // pagadas se descuenta lo mismo, como hace confirmPayment. Usuario
+    // bloqueado primero, igual que la finalización, para no pisarla.
+    const usuario = await db.transaction(async (trx) => {
+      const u = await User.query({ client: trx }).where('id', conductor.usuarioId).forUpdate().first()
+      const pendientes = await Ganancia.query({ client: trx })
+        .where('conductor_id', conductor.id)
+        .where('comision_pagada', false)
+        .select('id', 'comision')
+      if (pendientes.length === 0) return u
+
+      await Ganancia.query({ client: trx })
+        .whereIn('id', pendientes.map((g) => g.id))
+        .update({ comision_pagada: true, comision_pagada_at: now })
+
+      const cubierto = pendientes.reduce((s, g) => s + (Number(g.comision) || 0), 0)
+      if (u && cubierto > 0) {
+        const restante = Math.max(0, Math.round(((Number(u.montoDeuda) || 0) - cubierto) * 100) / 100)
+        if (restante > 0) {
+          u.montoDeuda = restante
+          u.tieneDeudaActiva = true
+        } else {
+          u.montoDeuda = null
+          u.tieneDeudaActiva = false
+          u.deudaFechaLimite = null
+          // Suspendido solo por la deuda vencida: queda saldada. Un comprobante
+          // en revisión (esperando_confirmacion) lo sigue cerrando confirmPayment.
+          if (u.estadoCuenta === 'suspension_por_pago') u.estadoCuenta = 'activa'
+        }
+        await u.useTransaction(trx).save()
+      }
+      return u
+    })
 
     return serialize.withoutWrapping({
       success: true,
       conductorId: conductor.id,
       marcadasPagadas: now,
+      montoDeuda: Number(usuario?.montoDeuda) || 0,
+      estadoCuenta: usuario?.estadoCuenta ?? null,
     })
   }
 
@@ -747,8 +783,12 @@ export default class AdminController {
         .status(422)
         .send(await serialize.withoutWrapping({ error: 'ciudad es requerida' }))
     }
-    const ciudadNormalizada = ciudad.trim().toLowerCase()
-    const validas = ['cali', 'popayan', 'pasto', 'medellin', 'bogota', 'cartagena']
+    // Debe ser una zona configurada en Cobertura (igual que assignModerator). Antes
+    // era una lista fija, así que una ciudad nueva no se podía asignar.
+    const ciudadNormalizada = claveDe(ciudad)
+    const configuradas = (await CoverageService.zonas()).map((z) => z.clave)
+    const validas =
+      configuradas.length > 0 ? configuradas : ['cali', 'popayan', 'pasto', 'medellin', 'bogota', 'cartagena']
     if (!validas.includes(ciudadNormalizada)) {
       return response
         .status(422)
@@ -767,9 +807,26 @@ export default class AdminController {
   async emergencies({ request, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    // ?estado=pendiente,atendida (CSV) filtra por estado, como el endpoint del
+    // moderador. Sin él se listan las abiertas: las atendidas por un moderador y
+    // las pendientes sin atender. (Las que el admin resolvía antes de que
+    // resolveEmergency cambiara `estado` quedaron en pendiente + atendida=true:
+    // por eso las pendientes se filtran también por atendida=false.)
+    const estados = String(request.input('estado', '') || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
     const alertas = await AlertaEmergencia.query()
-      .where('atendida', false)
+      .if(
+        estados.length > 0,
+        (q) => q.whereIn('estado', estados),
+        (q) =>
+          q.where((w) =>
+            w.where('estado', 'atendida').orWhere((p) => p.where('estado', 'pendiente').where('atendida', false))
+          )
+      )
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
+      .preload('moderadorAtendio', (q) => q.select('id', 'nombre', 'apellido'))
       .preload('viaje', (q) =>
         q
           .select('id', 'origen_direccion', 'destino_direccion', 'estado', ...COLUMNAS_VIAJE_MAPA_SOS)
@@ -788,6 +845,13 @@ export default class AdminController {
           lat: a.lat,
           lng: a.lng,
           atendida: a.atendida,
+          motivo: a.motivo,
+          estado: a.estado,
+          estadoLabel: getAlertaEstadoLabel(a.estado),
+          atendidoPor: a.moderadorAtendio
+            ? `${a.moderadorAtendio.nombre || ''} ${a.moderadorAtendio.apellido || ''}`.trim()
+            : null,
+          atendidaAt: a.atendidaAt?.toISO() ?? null,
           usuario: a.usuario
             ? { nombre: a.usuario.nombre, apellido: a.usuario.apellido, telefono: a.usuario.telefono }
             : null,
@@ -851,20 +915,55 @@ export default class AdminController {
     )
   }
 
-  async resolveEmergency({ params, response, serialize }: HttpContext) {
+  async resolveEmergency({ auth, params, request, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
     const alerta = await AlertaEmergencia.find(params.id)
     if (!alerta) {
       return response.status(404).send(await serialize.withoutWrapping({ error: 'Alerta no encontrada' }))
     }
 
+    // Igual que moderator_controller.emergencyResolve: antes solo se marcaba
+    // `atendida`, así que el moderador y /api/sos la seguían viendo abierta.
+    if (alerta.estado !== 'resuelta') {
+      const ahora = DateTime.now()
+      alerta.estado = 'resuelta'
+      alerta.resueltaAt = ahora
+      alerta.moderadorResolvioId = user.id
+      if (!alerta.moderadorAtendioId) {
+        alerta.moderadorAtendioId = user.id
+        alerta.atendidaAt = ahora
+      }
+      const observacion = request.input('observacion', null)
+      if (observacion && String(observacion).trim()) {
+        alerta.observacion = String(observacion).trim()
+      }
+    }
     alerta.atendida = true
     await alerta.save()
     // El viaje sale de 'sos' (antes quedaba atascado sin poder completarse).
     const estadoViaje = await restaurarViajeTrasSos(alerta)
 
+    const lat = alerta.lat !== null ? Number(alerta.lat) : null
+    const lng = alerta.lng !== null ? Number(alerta.lng) : null
+    const zona = await resolverZonaAlerta(alerta.viajeId, lat, lng)
+    if (zona) {
+      emitToModerators(zona, 'moderator:emergency:update', {
+        id: alerta.id,
+        estado: alerta.estado,
+        estadoLabel: getAlertaEstadoLabel(alerta.estado),
+        resueltoPor: `${user.nombre || ''} ${user.apellido || ''}`.trim(),
+        resueltaAt: alerta.resueltaAt?.toISO() ?? null,
+        observacion: alerta.observacion,
+      })
+    }
+
     return serialize.withoutWrapping({
       id: alerta.id,
       atendida: alerta.atendida,
+      estado: alerta.estado,
+      estadoLabel: getAlertaEstadoLabel(alerta.estado),
+      resueltaAt: alerta.resueltaAt?.toISO() ?? null,
+      observacion: alerta.observacion,
       estadoViaje,
     })
   }

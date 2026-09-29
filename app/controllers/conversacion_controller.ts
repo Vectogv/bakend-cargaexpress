@@ -23,9 +23,13 @@ export default class ConversacionController {
       )
       .orderBy('updated_at', 'desc')
 
-    if (user.esModerador) {
+    if (this.isAdmin(user)) {
       if (filtroCiudad) query.where('ciudad', filtroCiudad)
-    } else if (!this.isAdmin(user)) {
+    } else if (user.esModerador) {
+      // Solo hilos donde participa (de cualquier lado): messages() responde
+      // 403 a quien no participa, así que listar toda la ciudad no servía.
+      query.where((w) => w.where('moderador_id', user.id).orWhere('usuario_id', user.id))
+    } else {
       query.where('usuario_id', user.id)
     }
 
@@ -49,15 +53,12 @@ export default class ConversacionController {
       .select('conversacion_id')
       .count('* as total')
       .groupBy('conversacion_id')
-    if (this.isAdmin(user)) {
-      // admin ve todo global, sin filtro de pertenencia
-    } else if (user.esModerador) {
+    if (!this.isAdmin(user)) {
+      // Admin ve todo global; el resto solo cuenta hilos donde participa.
       filtroNoLeido.whereIn('conversacion_id', [
-        ...conversaciones.filter((c) => c.moderadorId === user.id).map((c) => c.id),
-      ])
-    } else {
-      filtroNoLeido.whereIn('conversacion_id', [
-        ...conversaciones.filter((c) => c.usuarioId === user.id).map((c) => c.id),
+        ...conversaciones
+          .filter((c) => c.moderadorId === user.id || c.usuarioId === user.id)
+          .map((c) => c.id),
       ])
     }
     const noLeidos = await filtroNoLeido
@@ -107,13 +108,12 @@ export default class ConversacionController {
     const usuarioId = request.input('usuarioId')
     const ciudad = request.input('ciudad')
 
-    // Admin puede elegir ciudad; un moderador solo ve la suya (nunca todas).
+    // Admin puede elegir ciudad; un moderador ve solo los hilos donde participa.
     let filtroCiudad: string | null = null
     if (this.isAdmin(user)) {
       filtroCiudad = ciudad || null
-    } else if (user.esModerador) {
-      if (!user.zonaModerador) return serialize.withoutWrapping([])
-      filtroCiudad = user.zonaModerador
+    } else if (user.esModerador && !user.zonaModerador) {
+      return serialize.withoutWrapping([])
     }
 
     const lista = await this.listarConversaciones({ user, filtroCiudad })
@@ -135,7 +135,10 @@ export default class ConversacionController {
 
     const usuarioId = Number(request.input('usuarioId'))
     const viajeId = request.input('viajeId') ? Number(request.input('viajeId')) : null
-    const ciudad = request.input('ciudad') || user.zonaModerador || null
+    // El moderador no elige ciudad: la conversación queda en su zona. El admin sí.
+    const ciudad = this.isAdmin(user)
+      ? request.input('ciudad') || user.zonaModerador || null
+      : user.zonaModerador || null
 
     if (!usuarioId) {
       return response.status(422).send(await serialize.withoutWrapping({ error: 'usuarioId es requerido' }))
@@ -322,8 +325,12 @@ export default class ConversacionController {
   async unreadCount({ auth, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     const esAdmin = this.isAdmin(user)
+    // Igual que index: el moderador cuenta los hilos donde participa de
+    // cualquier lado (también cuando el admin le escribe a él).
     const conversaciones = await Conversacion.query()
-      .if(!esAdmin && user.esModerador, (q) => q.where('moderador_id', user.id))
+      .if(!esAdmin && user.esModerador, (q) =>
+        q.where((w) => w.where('moderador_id', user.id).orWhere('usuario_id', user.id))
+      )
       .if(!esAdmin && !user.esModerador, (q) => q.where('usuario_id', user.id))
 
     const ids = conversaciones.map((c) => c.id)
@@ -352,6 +359,17 @@ export default class ConversacionController {
     const zona = user.zonaModerador
     const buscaClientes = q.length >= 3
 
+    // `conductores.ciudad` es texto libre ('Popayán', 'POPAYAN'): se compara
+    // normalizada con claveDe en memoria (portable entre SQLite y Postgres).
+    let conductoresZona: number[] = []
+    if (!esAdmin && zona) {
+      const clave = claveDe(zona)
+      const filas = await db.from('conductores').whereNotNull('ciudad').select('usuario_id', 'ciudad')
+      conductoresZona = filas
+        .filter((c: { ciudad: string | null }) => claveDe(c.ciudad || '') === clave)
+        .map((c: { usuario_id: number }) => Number(c.usuario_id))
+    }
+
     const query = User.query()
       .select('id', 'email', 'nombre', 'apellido', 'telefono', 'avatar', 'rol', 'es_moderador', 'zona_moderador')
       .where((w) => {
@@ -360,8 +378,8 @@ export default class ConversacionController {
           return
         }
         w.where('rol', 'admin').orWhere('es_moderador', true)
-        if (zona) {
-          w.orWhereIn('id', db.from('conductores').where('ciudad', zona).select('usuario_id'))
+        if (conductoresZona.length > 0) {
+          w.orWhereIn('id', conductoresZona)
         }
         if (buscaClientes) w.orWhere('rol', 'cliente')
       })
