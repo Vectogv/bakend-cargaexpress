@@ -1403,6 +1403,10 @@ export default class ModeratorController {
           administrador: a.moderadorAtendio
             ? `${a.moderadorAtendio.nombre || ''} ${a.moderadorAtendio.apellido || ''}`.trim()
             : null,
+          // Mismo valor que `administrador` (se mantiene por compatibilidad).
+          atendidoPor: a.moderadorAtendio
+            ? `${a.moderadorAtendio.nombre || ''} ${a.moderadorAtendio.apellido || ''}`.trim()
+            : null,
           atendidaAt: a.atendidaAt?.toISO() ?? null,
           resueltaAt: a.resueltaAt?.toISO() ?? null,
           resueltoPor: a.moderadorResolvio
@@ -1430,7 +1434,7 @@ export default class ModeratorController {
     }
 
     const zona = await resolverZonaAlerta(alerta.viajeId, numeroLatLng(alerta.lat), numeroLatLng(alerta.lng))
-    if (zona && user.zonaModerador && zona !== user.zonaModerador) {
+    if (!puedeActuarEnZona(user, zona)) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'La emergencia pertenece a otra ciudad' }))
@@ -1444,11 +1448,17 @@ export default class ModeratorController {
     }
     await alerta.save()
 
-    emitToModerators(user.zonaModerador || zona || '', 'moderator:emergency:update', {
+    // Si ya estaba atendida, quien la atiende es el moderador original.
+    await alerta.load('moderadorAtendio', (q) => q.select('id', 'nombre', 'apellido'))
+    const atendidoPor = alerta.moderadorAtendio
+      ? `${alerta.moderadorAtendio.nombre || ''} ${alerta.moderadorAtendio.apellido || ''}`.trim()
+      : null
+
+    emitToModerators(zona || user.zonaModerador || '', 'moderator:emergency:update', {
       id: alerta.id,
       estado: alerta.estado,
       estadoLabel: getAlertaEstadoLabel(alerta.estado),
-      atendidoPor: `${user.nombre} ${user.apellido}`.trim(),
+      atendidoPor,
       atendidaAt: alerta.atendidaAt?.toISO() ?? null,
     })
 
@@ -1456,7 +1466,7 @@ export default class ModeratorController {
       id: alerta.id,
       estado: alerta.estado,
       estadoLabel: getAlertaEstadoLabel(alerta.estado),
-      atendidoPor: `${user.nombre} ${user.apellido}`.trim(),
+      atendidoPor,
       atendidaAt: alerta.atendidaAt?.toISO() ?? null,
     })
   }
@@ -1477,7 +1487,7 @@ export default class ModeratorController {
     }
 
     const zona = await resolverZonaAlerta(alerta.viajeId, numeroLatLng(alerta.lat), numeroLatLng(alerta.lng))
-    if (zona && user.zonaModerador && zona !== user.zonaModerador) {
+    if (!puedeActuarEnZona(user, zona)) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'La emergencia pertenece a otra ciudad' }))
@@ -1499,7 +1509,7 @@ export default class ModeratorController {
     // El viaje sale de 'sos' (antes quedaba atascado sin poder completarse).
     await restaurarViajeTrasSos(alerta)
 
-    await alerta.load('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email'))
+    await alerta.load('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email', 'rol'))
     await alerta.load('viaje', (vq) =>
       vq
         .select('id', 'estado', 'origen_direccion', 'destino_direccion', 'cliente_id', 'precio_final', 'carga', ...COLUMNAS_VIAJE_MAPA_SOS)
@@ -1574,7 +1584,7 @@ export default class ModeratorController {
       createdAt: alerta.createdAt?.toISO() ?? null,
     }
 
-    emitToModerators(user.zonaModerador || zona || '', 'moderator:emergency:update', {
+    emitToModerators(zona || user.zonaModerador || '', 'moderator:emergency:update', {
       id: alerta.id,
       estado: alerta.estado,
       estadoLabel: getAlertaEstadoLabel(alerta.estado),
@@ -1589,9 +1599,8 @@ export default class ModeratorController {
       id: alerta.id,
       estado: alerta.estado,
       estadoLabel: getAlertaEstadoLabel(alerta.estado),
-      atendidoPor: alerta.moderadorAtendioId
-        ? `${user.nombre} ${user.apellido}`.trim()
-        : null,
+      // Quien atendió (puede ser otro moderador), no quien resuelve.
+      atendidoPor: caso.atendidoPor,
       atendidaAt: alerta.atendidaAt?.toISO() ?? null,
       resueltoPor: `${user.nombre} ${user.apellido}`.trim(),
       resueltaAt: alerta.resueltaAt?.toISO() ?? null,
@@ -1628,6 +1637,16 @@ async function conductoresDeZona(zona: string) {
     conductorIds: enZona.map((c) => c.id),
     usuarioIds: enZona.map((c) => c.usuarioId),
   }
+}
+
+/**
+ * Atender/resolver una emergencia: el admin siempre; el moderador solo si la
+ * zona de la alerta se pudo resolver y coincide (normalizada) con la suya.
+ */
+function puedeActuarEnZona(user: User, zona: string | null): boolean {
+  if (user.rol === 'admin') return true
+  if (!zona || !user.zonaModerador) return false
+  return claveDe(zona) === claveDe(user.zonaModerador)
 }
 
 function numeroLatLng(val: unknown): number | null {
