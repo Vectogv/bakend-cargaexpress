@@ -503,11 +503,52 @@ export default class ModeratorController {
     })
   }
 
-  async avisosIndex({ request, serialize }: HttpContext) {
+  /**
+   * Zonas de avisos visibles para el usuario: la suya (normalizada) más las
+   * generales. Admin: todas, o ?ciudad + generales. Moderador: su zona.
+   * Conductor: la de su ciudad. Resto (clientes): solo generales.
+   * `''` cuenta como general (avisos antiguos sin zona).
+   */
+  private async zonasDeAvisos(user: User, ciudadQuery: unknown): Promise<string[] | null> {
+    const generales = ['general', '']
+    if (user.rol === 'admin') {
+      const clave = claveDe(String(ciudadQuery ?? ''))
+      return clave && clave !== 'general' ? [clave, ...generales] : null
+    }
+    if (user.esModerador && user.zonaModerador) {
+      return [claveDe(user.zonaModerador), ...generales]
+    }
+    const conductor = await Conductor.query().where('usuario_id', user.id).select('id', 'ciudad').first()
+    const clave = conductor?.ciudad ? claveDe(conductor.ciudad) : ''
+    return clave ? [clave, ...generales] : generales
+  }
+
+  /**
+   * Un moderador (no admin) solo fija/elimina avisos de su zona. Los avisos
+   * que publican los conductores quedan en 'general'; esos los puede moderar
+   * el moderador de la ciudad del conductor autor.
+   */
+  private async puedeModerarAviso(user: User, aviso: Aviso): Promise<boolean> {
+    if (user.rol === 'admin') return true
+    const zona = claveDe(user.zonaModerador || '')
+    if (!zona) return false
+    if (claveDe(aviso.zona || '') === zona) return true
+    const conductorAutor = await Conductor.query().where('usuario_id', aviso.autorId).select('id', 'ciudad').first()
+    return (
+      ['general', ''].includes(aviso.zona || '') &&
+      !!conductorAutor?.ciudad &&
+      claveDe(conductorAutor.ciudad) === zona
+    )
+  }
+
+  async avisosIndex({ auth, request, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    const zonas = await this.zonasDeAvisos(user, request.input('ciudad'))
     const mensajes = await Aviso.query()
       .where('eliminado', false)
+      .if(zonas, (q) => q.whereIn('zona', zonas!))
       .preload('autor', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('fijado', 'desc')
       .orderBy('created_at', 'desc')
@@ -543,9 +584,18 @@ export default class ModeratorController {
         .send(await serialize.withoutWrapping({ error: 'El contenido no puede estar vacío' }))
     }
 
+    // Moderador: siempre su zona. Admin: ?ciudad (normalizada) o general.
+    // Conductor: general, como antes.
+    let zona = 'general'
+    if (user.rol === 'admin') {
+      zona = claveDe(String(request.input('ciudad') ?? '')) || 'general'
+    } else if (user.esModerador && user.zonaModerador) {
+      zona = claveDe(user.zonaModerador)
+    }
+
     const msg = await Aviso.create({
       autorId: user.id,
-      zona: 'general',
+      zona,
       contenido: contenido.trim(),
     })
 
@@ -595,6 +645,11 @@ export default class ModeratorController {
         .status(404)
         .send(await serialize.withoutWrapping({ error: 'Mensaje no encontrado' }))
     }
+    if (!(await this.puedeModerarAviso(user, msg))) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ error: 'El aviso pertenece a otra zona' }))
+    }
 
     msg.fijado = !msg.fijado
     await msg.save()
@@ -618,6 +673,11 @@ export default class ModeratorController {
       return response
         .status(404)
         .send(await serialize.withoutWrapping({ error: 'Mensaje no encontrado' }))
+    }
+    if (!(await this.puedeModerarAviso(user, msg))) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ error: 'El aviso pertenece a otra zona' }))
     }
 
     msg.eliminado = true
