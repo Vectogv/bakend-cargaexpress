@@ -458,7 +458,14 @@ export default class ModeratorController {
 
   async answerEncuesta({ auth, params, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
-    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    // Ruta de moderador: sin perfil de conductor no hay nada que responder
+    // (antes lanzaba E_ROW_NOT_FOUND).
+    const conductor = await Conductor.findBy('usuario_id', user.id)
+    if (!conductor) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ error: 'Solo conductores pueden responder encuestas' }))
+    }
 
     const encuesta = await Encuesta.find(params.id)
     if (!encuesta) {
