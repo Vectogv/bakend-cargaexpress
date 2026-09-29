@@ -54,7 +54,32 @@ const ESTADOS_VIAJE_ACTIVO_CLIENTE = [
 /** Estados que GET /api/trips/active devuelve al cliente como su viaje actual. */
 const ESTADOS_VIAJE_ACTUAL_CLIENTE = ['creado', ...ESTADOS_VIAJE_ACTIVO_CLIENTE]
 
-function viajeActivoDelCliente(clienteId: number, trx?: TransactionClientContract) {
+/**
+ * Prioridad de `GET /api/trips/active` cuando el cliente tiene más de un viaje
+ * "activo" a la vez (bug conocido: una reserva se activaba sola mientras había
+ * otro viaje en curso, ver reservation_activation_service.ts). Sin esto, el
+ * `.first()` sin orden podía devolver cualquiera de los dos.
+ *
+ * 0: espera algo del cliente (confirmar entrega o resolver una disputa) — máxima prioridad.
+ * 1: en curso con un conductor asignado.
+ * 2: todavía buscando conductor (incluye 'creado' y 'pendiente', un intermedio
+ *    entre buscando_conductor y aceptado mientras hay una oferta sin decidir).
+ * Empate: el viaje más reciente (id desc).
+ */
+const ORDEN_VIAJE_ACTUAL_CLIENTE_SQL = `CASE estado
+  WHEN 'pendiente_confirmacion' THEN 0
+  WHEN 'esperando_confirmacion' THEN 0
+  WHEN 'entregado' THEN 0
+  WHEN 'disputa' THEN 0
+  WHEN 'sos' THEN 1
+  WHEN 'en_curso' THEN 1
+  WHEN 'conductor_llegada' THEN 1
+  WHEN 'conductor_en_camino' THEN 1
+  WHEN 'aceptado' THEN 1
+  ELSE 2
+END ASC, id DESC`
+
+export function viajeActivoDelCliente(clienteId: number, trx?: TransactionClientContract) {
   return Viaje.query(trx ? { client: trx } : {})
     .where('cliente_id', clienteId)
     .whereIn('estado', ESTADOS_VIAJE_ACTIVO_CLIENTE)
@@ -611,6 +636,7 @@ export default class TripController {
       viaje = await Viaje.query()
         .where('cliente_id', user.id)
         .whereIn('estado', ESTADOS_VIAJE_ACTUAL_CLIENTE)
+        .orderByRaw(ORDEN_VIAJE_ACTUAL_CLIENTE_SQL)
         .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'avatar'))
         .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'total_viajes', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
         .first()

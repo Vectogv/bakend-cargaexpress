@@ -23,6 +23,7 @@ export default class Viaje extends BaseModel {
     'horaProgramada',
     'activacionAt',
     'recordatorioEnviado',
+    'avisoPospuestoEnviado',
     'precioCliente',
     'precioEstimado',
     'precioFinal',
@@ -112,6 +113,10 @@ export default class Viaje extends BaseModel {
 
   @column()
   declare recordatorioEnviado: boolean
+
+  /** Evita repetir el aviso "tu reserva espera" en cada pasada del scheduler (cada 60s). */
+  @column()
+  declare avisoPospuestoEnviado: boolean
 
   @ApiProperty()
   @column({ consume: (v) => (v === null || v === undefined ? v : Number(v)) })

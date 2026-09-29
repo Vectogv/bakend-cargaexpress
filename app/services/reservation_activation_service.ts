@@ -8,6 +8,7 @@ import reservationConfig from '#config/reservations'
 import { emitToClient } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
+import { viajeActivoDelCliente } from '#controllers/trip_controller'
 
 /**
  * Activación de reservas programadas.
@@ -87,7 +88,8 @@ export default class ReservationActivationService {
 
   /**
    * Activa una reserva. Devuelve `activada` solo si esta invocación realizó la
-   * transición; `omitida` si ya estaba activada o no correspondía.
+   * transición; `omitida` si ya estaba activada, no correspondía, o el cliente
+   * ya tiene otro viaje activo (se reintenta en la siguiente pasada).
    */
   static async activar(viajeId: number): Promise<'activada' | 'omitida'> {
     const lockKey = `reservation:activate:${viajeId}`
@@ -95,6 +97,9 @@ export default class ReservationActivationService {
     if (!acquired) return 'omitida'
 
     try {
+      let pospuesta = false
+      let clienteIdPospuesta: number | null = null
+
       const viaje = await db.transaction(async (trx) => {
         const row = await Viaje.query({ client: trx })
           .where('id', viajeId)
@@ -111,6 +116,19 @@ export default class ReservationActivationService {
           return null
         }
 
+        // El cliente ya tiene otro viaje en curso: no se activa todavía, se
+        // reintenta en la siguiente pasada del scheduler (cada 60s).
+        const otroViajeActivo = await viajeActivoDelCliente(row.clienteId, trx)
+        if (otroViajeActivo) {
+          if (!row.avisoPospuestoEnviado) {
+            row.avisoPospuestoEnviado = true
+            await row.useTransaction(trx).save()
+            pospuesta = true
+            clienteIdPospuesta = row.clienteId
+          }
+          return null
+        }
+
         row.estado = 'buscando_conductor'
         // activacion_at pasa a ser el momento real en que inició la búsqueda
         // (el scheduler pudo activarla tarde); el vencimiento de la búsqueda
@@ -120,7 +138,19 @@ export default class ReservationActivationService {
         return row
       })
 
-      if (!viaje) return 'omitida'
+      if (!viaje) {
+        if (pospuesta && clienteIdPospuesta) {
+          const cliente = await User.find(clienteIdPospuesta)
+          if (cliente?.fcmToken) {
+            await sendToToken(
+              cliente.fcmToken,
+              'Reserva pospuesta',
+              'Tu reserva empieza cuando termine tu envío actual.'
+            )
+          }
+        }
+        return 'omitida'
+      }
 
       emitToClient(viaje.clienteId, 'trip:status_changed', {
         id: String(viaje.id),
