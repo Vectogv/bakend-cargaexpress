@@ -33,6 +33,7 @@ import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
 import { sendToMultiple, sendToToken } from '#services/push_notification_service'
 import SignedUploadService from '#services/signed_upload_service'
+import { TELEFONO_REGEX } from '#validators/profile'
 import {
   COLUMNAS_CONDUCTOR_MAPA_SOS,
   COLUMNAS_VIAJE_MAPA_SOS,
@@ -1335,21 +1336,53 @@ export default class AdminController {
     })
   }
 
-  async updateConfig({ request, serialize }: HttpContext) {
+  /** Config general (Nequi y contacto de soporte) tal como la edita el admin. */
+  async config({ serialize }: HttpContext) {
+    const config = await ConfiguracionPlataforma.unicaOCrear()
+    return serialize.withoutWrapping({
+      nequiNumero: config.nequiNumero,
+      nequiNombre: config.nequiNombre,
+      soporteTelefono: config.soporteTelefono,
+      soporteEmail: config.soporteEmail,
+    })
+  }
+
+  async updateConfig({ request, response, serialize }: HttpContext) {
     let config = await ConfiguracionPlataforma.unica()
     if (!config) {
       config = await ConfiguracionPlataforma.create({})
     }
 
-    const { nequiNumero, nequiNombre } = request.only(['nequiNumero', 'nequiNombre'])
+    const { nequiNumero, nequiNombre, soporteTelefono, soporteEmail } = request.only([
+      'nequiNumero',
+      'nequiNombre',
+      'soporteTelefono',
+      'soporteEmail',
+    ])
+
+    // Validación blanda: solo se rechaza si viene un valor con formato inválido;
+    // vacío/null limpia el campo (queda el fallback fijo de support_controller).
+    if (soporteTelefono && !TELEFONO_REGEX.test(String(soporteTelefono).trim())) {
+      return response
+        .status(422)
+        .send({ error: 'El teléfono de soporte no tiene un formato válido' })
+    }
+    if (soporteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(soporteEmail).trim())) {
+      return response.status(422).send({ error: 'El email de soporte no tiene un formato válido' })
+    }
+
     if (nequiNumero !== undefined) config.nequiNumero = nequiNumero
     if (nequiNombre !== undefined) config.nequiNombre = nequiNombre
+    if (soporteTelefono !== undefined) config.soporteTelefono = soporteTelefono || null
+    if (soporteEmail !== undefined) config.soporteEmail = soporteEmail || null
     await config.save()
     RedisService.cacheDel('config:plataforma')
 
     return serialize.withoutWrapping({
       nequiNumero: config.nequiNumero,
       nequiNombre: config.nequiNombre,
+      soporteTelefono: config.soporteTelefono,
+      soporteEmail: config.soporteEmail,
     })
   }
 

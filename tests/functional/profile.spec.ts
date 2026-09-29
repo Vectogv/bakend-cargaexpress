@@ -108,35 +108,51 @@ test.group('Profile - Update', (group) => {
     recortado.assertBodyContains({ nombre: 'Ana', apellido: 'Pérez' })
   })
 
-  test('update email successfully', async ({ client }) => {
+  test('el email no se puede cambiar desde el perfil (se ignora)', async ({ client, assert }) => {
     const token = await registerAndGetToken(client)
+    const antes = (await client.get('/api/users/profile').bearerToken(token)).body().email
 
     const response = await client
       .put('/api/users/profile')
       .bearerToken(token)
-      .json({ email: 'newemail@test.com' })
+      .json({ email: 'newemail@test.com', nombre: 'Otro' })
 
     response.assertStatus(200)
-    response.assertBodyContains({ email: 'newemail@test.com' })
+    response.assertBodyContains({ nombre: 'Otro' })
+    const despues = (await client.get('/api/users/profile').bearerToken(token)).body().email
+    assert.equal(despues, antes)
   })
 
-  test('fail to update with duplicate email', async ({ client }) => {
-    await client.post('/api/auth/register').json({
-      nombre: 'Existing',
-      apellido: 'User',
-      email: 'existing@test.com',
-      password: '123456',
-      rol: 'cliente', edad: 30,
-    })
+  test('cambiar contraseña: exige la actual y la nueva sirve para entrar', async ({ client, assert }) => {
+    const email = `pass-${Date.now()}@test.com`
+    const token = (
+      await client.post('/api/auth/register').json({
+        nombre: 'Pass',
+        apellido: 'User',
+        email,
+        password: '123456',
+        rol: 'cliente',
+        edad: 30,
+      })
+    ).body().token
 
-    const token = await registerAndGetToken(client)
-
-    const response = await client
-      .put('/api/users/profile')
+    const mala = await client
+      .put('/api/users/password')
       .bearerToken(token)
-      .json({ email: 'existing@test.com' })
+      .json({ actual: 'incorrecta', nueva: 'Nueva12345' })
+    mala.assertStatus(422)
 
-    response.assertStatus(409)
+    const ok = await client
+      .put('/api/users/password')
+      .bearerToken(token)
+      .json({ actual: '123456', nueva: 'Nueva12345' })
+    ok.assertStatus(200)
+
+    // La sesión actual sigue viva.
+    ;(await client.get('/api/users/profile').bearerToken(token)).assertStatus(200)
+    ;(await client.post('/api/auth/login').json({ email, password: 'Nueva12345' })).assertStatus(200)
+    const vieja = await client.post('/api/auth/login').json({ email, password: '123456' })
+    assert.notEqual(vieja.status(), 200)
   })
 
   test('update emergency contact', async ({ client }) => {

@@ -1,10 +1,11 @@
-import { updateProfileValidator } from '#validators/profile'
+import { updateProfileValidator, changePasswordValidator } from '#validators/profile'
 import type { HttpContext } from '@adonisjs/core/http'
 import StorageService from '#services/storage_service'
-import db from '@adonisjs/lucid/services/db'
 import { randomUUID } from 'node:crypto'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import SignedUploadService from '#services/signed_upload_service'
+import SessionService from '#services/session_service'
+import hash from '@adonisjs/core/services/hash'
 import logger from '@adonisjs/core/services/logger'
 
 export default class ProfileController {
@@ -66,10 +67,13 @@ export default class ProfileController {
   })
   @ApiBody({ type: () => updateProfileValidator })
   @ApiResponse({ type: 'object' })
-  async update({ auth, request, serialize, response }: HttpContext) {
+  async update({ auth, request, serialize }: HttpContext) {
     const data = await request.validateUsing(updateProfileValidator)
     const user = auth.getUserOrFail()
 
+    // El email es el usuario de inicio de sesión: nunca se cambia desde acá
+    // (decisión del negocio, ver CLAUDE.local.md §7.4.1). Si llega en el body
+    // (la app ya no lo manda) se ignora en silencio, sin romper el resto del update.
     if (data.nombre !== undefined) user.nombre = data.nombre
     if (data.apellido !== undefined) user.apellido = data.apellido
     if (data.telefono !== undefined) user.telefono = data.telefono
@@ -78,18 +82,6 @@ export default class ProfileController {
       user.contactoEmergenciaNombre = data.contactoEmergenciaNombre
     if (data.contactoEmergenciaTelefono !== undefined)
       user.contactoEmergenciaTelefono = data.contactoEmergenciaTelefono
-
-    if (data.email !== undefined && data.email !== user.email) {
-      const exists = await db
-        .from('users')
-        .where('email', data.email)
-        .whereNot('id', user.id)
-        .first()
-      if (exists) {
-        return response.status(409).send({ error: 'El email ya está registrado' })
-      }
-      user.email = data.email
-    }
 
     await user.save()
 
@@ -149,5 +141,31 @@ export default class ProfileController {
       `Token FCM ${fcmToken ? `registrado (…${String(fcmToken).slice(-8)})` : 'borrado'} para usuario ${user.id}`
     )
     return serialize.withoutWrapping({ fcmToken: user.fcmToken })
+  }
+
+  @ApiOperation({
+    summary: 'Cambiar contraseña',
+    description: 'Cambia la contraseña del usuario autenticado verificando la actual',
+  })
+  @ApiBody({ type: () => changePasswordValidator })
+  @ApiResponse({ type: 'object' })
+  async changePassword({ auth, request, response, serialize }: HttpContext) {
+    const { actual, nueva } = await request.validateUsing(changePasswordValidator)
+    const user = auth.getUserOrFail()
+
+    const actualOk = await hash.verify(user.password, actual)
+    if (!actualOk) {
+      return response.status(422).send({ message: 'La contraseña actual no es correcta' })
+    }
+
+    user.password = nueva
+    await user.save()
+
+    // Cierra las otras sesiones (mismo patrón que el reseteo del admin), pero
+    // deja viva la sesión actual: quien cambia la contraseña no se desloguea a sí mismo.
+    const tokenActual = user.currentAccessToken?.identifier
+    await SessionService.revokeAll(user, tokenActual === undefined ? undefined : String(tokenActual))
+
+    return serialize.withoutWrapping({ message: 'Contraseña actualizada' })
   }
 }

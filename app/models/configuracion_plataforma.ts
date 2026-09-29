@@ -29,6 +29,13 @@ export default class ConfiguracionPlataforma extends BaseModel {
   @column()
   declare bannerTexto: string | null
 
+  /** Contacto de soporte que ve el cliente (support_controller). Editable por el gerente. */
+  @column()
+  declare soporteTelefono: string | null
+
+  @column()
+  declare soporteEmail: string | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

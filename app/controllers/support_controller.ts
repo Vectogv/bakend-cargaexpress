@@ -1,10 +1,24 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { ApiOperation, ApiResponse } from '@foadonis/openapi/decorators'
+import ConfiguracionPlataforma from '#models/configuracion_plataforma'
+
+// Usados solo si el gerente no configuró nada en configuracion_plataforma.
+const TELEFONO_SOPORTE_POR_DEFECTO = '+58 800-CARGA'
+const EMAIL_SOPORTE_POR_DEFECTO = 'soporte@cargaexpress.com'
+
+async function contactoSoporte() {
+  const config = await ConfiguracionPlataforma.unica()
+  return {
+    telefono: config?.soporteTelefono || TELEFONO_SOPORTE_POR_DEFECTO,
+    email: config?.soporteEmail || EMAIL_SOPORTE_POR_DEFECTO,
+  }
+}
 
 export default class SupportController {
   @ApiOperation({ summary: 'Obtener información de ayuda', description: 'Devuelve las preguntas frecuentes (FAQ) y la información de contacto' })
   @ApiResponse({ type: 'object' })
   async help({ serialize }: HttpContext) {
+    const contacto = await contactoSoporte()
     return serialize.withoutWrapping({
       faq: [
         {
@@ -19,8 +33,8 @@ export default class SupportController {
         },
       ],
       contacto: {
-        email: 'soporte@cargaexpress.com',
-        telefono: '+58 800-CARGA',
+        email: contacto.email,
+        telefono: contacto.telefono,
       },
     })
   }
@@ -31,12 +45,13 @@ export default class SupportController {
   })
   @ApiResponse({ type: 'object' })
   async emergency({ serialize }: HttpContext) {
+    const contacto = await contactoSoporte()
     return serialize.withoutWrapping({
       numeros: [
         { nombre: 'Emergencias', numero: '911' },
         { nombre: 'Tránsito terrestre', numero: '0800-TRANSITO' },
         { nombre: 'Asistencia vial', numero: '0500-ASISTENCIA' },
-        { nombre: 'Soporte CargaExpress', numero: '+58 800-CARGA' },
+        { nombre: 'Soporte CargaExpress', numero: contacto.telefono },
       ],
     })
   }

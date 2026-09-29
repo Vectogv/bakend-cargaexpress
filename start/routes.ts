@@ -98,6 +98,7 @@ router
   .group(() => {
     router.get('profile', [controllers.Profile, 'show'])
     router.put('profile', [controllers.Profile, 'update'])
+    router.put('password', [controllers.Profile, 'changePassword'])
     router.post('avatar', [controllers.Profile, 'avatar'])
     router.put('fcm-token', [controllers.Profile, 'updateFcmToken'])
   })
@@ -212,6 +213,7 @@ router
     router.get('payments/pending', [controllers.Admin, 'pendingPayments'])
     router.put('payments/:userId/confirm', [controllers.Admin, 'confirmPayment'])
     router.put('payments/:userId/reject', [controllers.Admin, 'rejectPayment'])
+    router.get('config', [controllers.Admin, 'config'])
     router.put('config', [controllers.Admin, 'updateConfig'])
     router.get('config/coverage', [controllers.Admin, 'coverage'])
     router.put('config/coverage', [controllers.Admin, 'updateCoverage'])

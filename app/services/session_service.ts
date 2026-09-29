@@ -8,8 +8,16 @@ import type User from '#models/user'
  * sockets abiertos. Usar al suspender, cambiar contraseña o eliminar la cuenta.
  */
 export default class SessionService {
-  static async revokeAll(user: User): Promise<void> {
-    await db.from('auth_access_tokens').where('tokenable_id', user.id).delete()
+  /**
+   * @param exceptAccessTokenId Si se pasa (p. ej. al cambiar la contraseña desde
+   * la propia sesión), esa access token no se borra: la sesión actual sigue activa.
+   */
+  static async revokeAll(user: User, exceptAccessTokenId?: number | string): Promise<void> {
+    await db
+      .from('auth_access_tokens')
+      .where('tokenable_id', user.id)
+      .if(exceptAccessTokenId !== undefined, (q) => q.whereNot('id', exceptAccessTokenId!))
+      .delete()
     await db.from('refresh_tokens').where('user_id', user.id).delete()
 
     try {
