@@ -137,4 +137,74 @@ test.group('Admin: ajustes del panel', (group) => {
     assert.equal(item.atendidoPor, 'Ana Atiende')
     assert.isString(item.atendidaAt)
   })
+  test('resolver desde admin deja la alerta resuelta y la saca de la lista', async ({ client, assert }) => {
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const cliente = await crearUsuario(client, { rol: 'cliente' })
+    const alerta = await AlertaEmergencia.create({
+      userId: cliente.user.id,
+      motivo: 'Accidente',
+      estado: 'pendiente',
+      atendida: false,
+    } as any)
+
+    const res = await client
+      .put(`/api/admin/emergencies/${alerta.id}/resolve`)
+      .bearerToken(admin.token)
+      .json({ observacion: 'Se llamó al usuario, todo en orden' })
+    res.assertStatus(200)
+    assert.equal(res.body().estado, 'resuelta')
+
+    await alerta.refresh()
+    assert.equal(alerta.estado, 'resuelta')
+    assert.isTrue(Boolean(alerta.atendida))
+    assert.isNotNull(alerta.resueltaAt)
+    assert.equal(alerta.observacion, 'Se llamó al usuario, todo en orden')
+    assert.equal(alerta.moderadorResolvioId, admin.user.id)
+
+    const lista = await client.get('/api/admin/emergencies?limit=100').bearerToken(admin.token)
+    lista.assertStatus(200)
+    assert.isUndefined((lista.body() as any[]).find((a) => Number(a.id) === Number(alerta.id)))
+  })
+
+  test('la lista por defecto incluye las atendidas por un moderador', async ({ client, assert }) => {
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const cliente = await crearUsuario(client, { rol: 'cliente' })
+    const atendida = await AlertaEmergencia.create({
+      userId: cliente.user.id,
+      estado: 'atendida',
+      atendida: true,
+      atendidaAt: DateTime.now(),
+    } as any)
+    // Resuelta por el admin antes del arreglo: quedó pendiente + atendida=true.
+    const vieja = await AlertaEmergencia.create({ userId: cliente.user.id, estado: 'pendiente', atendida: true } as any)
+
+    const res = await client.get('/api/admin/emergencies?limit=100').bearerToken(admin.token)
+    res.assertStatus(200)
+    const ids = (res.body() as any[]).map((a) => Number(a.id))
+    assert.include(ids, Number(atendida.id))
+    assert.notInclude(ids, Number(vieja.id))
+  })
+
+  test('la ciudad del conductor se valida contra las zonas de Cobertura', async ({ client, assert }) => {
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const driver = await crearConductor(client)
+    const guardar = await client
+      .put('/api/admin/config/coverage')
+      .bearerToken(admin.token)
+      .json({ zonasCobertura: [{ nombre: 'Tumaco', tipo: 'circulo', lat: 1.7986, lng: -78.7656, radio: 12 }] })
+    guardar.assertStatus(200)
+
+    const ok = await client
+      .put(`/api/admin/drivers/${driver.conductor.id}/city`)
+      .bearerToken(admin.token)
+      .json({ ciudad: 'Tumaco' })
+    ok.assertStatus(200)
+    assert.equal(ok.body().ciudad, 'tumaco')
+
+    const mala = await client
+      .put(`/api/admin/drivers/${driver.conductor.id}/city`)
+      .bearerToken(admin.token)
+      .json({ ciudad: 'medellin' })
+    mala.assertStatus(422)
+  })
 })

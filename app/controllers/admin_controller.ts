@@ -16,7 +16,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import RedisService from '#services/redis_service'
 import SessionService from '#services/session_service'
-import CoverageService, { validarZonasEntrada } from '#services/coverage_service'
+import CoverageService, { claveDe, validarZonasEntrada } from '#services/coverage_service'
 import { DateTime } from 'luxon'
 import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
@@ -25,12 +25,13 @@ import {
   emitToClient,
   emitToUser,
   emitToAdmin,
+  emitToModerators,
   emitTripStatusChanged,
 } from '#start/socket'
 import TripFinalizationService from '#services/trip_finalization_service'
 import { DIAS_PLAZO_DEUDA_COMISION } from '#services/driver_debt_suspension_service'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
+import { emitTripUpdateToModerators, resolverZonaAlerta } from '#services/moderator_trip_events'
 import { getAlertaEstadoLabel } from '#services/emergency_status_labels'
 import { sendToMultiple, sendToToken } from '#services/push_notification_service'
 import SignedUploadService from '#services/signed_upload_service'
@@ -781,8 +782,12 @@ export default class AdminController {
         .status(422)
         .send(await serialize.withoutWrapping({ error: 'ciudad es requerida' }))
     }
-    const ciudadNormalizada = ciudad.trim().toLowerCase()
-    const validas = ['cali', 'popayan', 'pasto', 'medellin', 'bogota', 'cartagena']
+    // Debe ser una zona configurada en Cobertura (igual que assignModerator). Antes
+    // era una lista fija, así que una ciudad nueva no se podía asignar.
+    const ciudadNormalizada = claveDe(ciudad)
+    const configuradas = (await CoverageService.zonas()).map((z) => z.clave)
+    const validas =
+      configuradas.length > 0 ? configuradas : ['cali', 'popayan', 'pasto', 'medellin', 'bogota', 'cartagena']
     if (!validas.includes(ciudadNormalizada)) {
       return response
         .status(422)
@@ -802,9 +807,10 @@ export default class AdminController {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     // ?estado=pendiente,atendida (CSV) filtra por estado, como el endpoint del
-    // moderador. Sin él se mantiene atendida=false: resolveEmergency del admin
-    // solo marca `atendida` (no cambia `estado`), así que filtrar por estado
-    // por defecto volvería a mostrar alertas ya resueltas por el admin.
+    // moderador. Sin él se listan las abiertas: las atendidas por un moderador y
+    // las pendientes sin atender. (Las que el admin resolvía antes de que
+    // resolveEmergency cambiara `estado` quedaron en pendiente + atendida=true:
+    // por eso las pendientes se filtran también por atendida=false.)
     const estados = String(request.input('estado', '') || '')
       .split(',')
       .map((s) => s.trim())
@@ -813,7 +819,10 @@ export default class AdminController {
       .if(
         estados.length > 0,
         (q) => q.whereIn('estado', estados),
-        (q) => q.where('atendida', false)
+        (q) =>
+          q.where((w) =>
+            w.where('estado', 'atendida').orWhere((p) => p.where('estado', 'pendiente').where('atendida', false))
+          )
       )
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
       .preload('moderadorAtendio', (q) => q.select('id', 'nombre', 'apellido'))
@@ -905,20 +914,55 @@ export default class AdminController {
     )
   }
 
-  async resolveEmergency({ params, response, serialize }: HttpContext) {
+  async resolveEmergency({ auth, params, request, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
     const alerta = await AlertaEmergencia.find(params.id)
     if (!alerta) {
       return response.status(404).send(await serialize.withoutWrapping({ error: 'Alerta no encontrada' }))
     }
 
+    // Igual que moderator_controller.emergencyResolve: antes solo se marcaba
+    // `atendida`, así que el moderador y /api/sos la seguían viendo abierta.
+    if (alerta.estado !== 'resuelta') {
+      const ahora = DateTime.now()
+      alerta.estado = 'resuelta'
+      alerta.resueltaAt = ahora
+      alerta.moderadorResolvioId = user.id
+      if (!alerta.moderadorAtendioId) {
+        alerta.moderadorAtendioId = user.id
+        alerta.atendidaAt = ahora
+      }
+      const observacion = request.input('observacion', null)
+      if (observacion && String(observacion).trim()) {
+        alerta.observacion = String(observacion).trim()
+      }
+    }
     alerta.atendida = true
     await alerta.save()
     // El viaje sale de 'sos' (antes quedaba atascado sin poder completarse).
     const estadoViaje = await restaurarViajeTrasSos(alerta)
 
+    const lat = alerta.lat !== null ? Number(alerta.lat) : null
+    const lng = alerta.lng !== null ? Number(alerta.lng) : null
+    const zona = await resolverZonaAlerta(alerta.viajeId, lat, lng)
+    if (zona) {
+      emitToModerators(zona, 'moderator:emergency:update', {
+        id: alerta.id,
+        estado: alerta.estado,
+        estadoLabel: getAlertaEstadoLabel(alerta.estado),
+        resueltoPor: `${user.nombre || ''} ${user.apellido || ''}`.trim(),
+        resueltaAt: alerta.resueltaAt?.toISO() ?? null,
+        observacion: alerta.observacion,
+      })
+    }
+
     return serialize.withoutWrapping({
       id: alerta.id,
       atendida: alerta.atendida,
+      estado: alerta.estado,
+      estadoLabel: getAlertaEstadoLabel(alerta.estado),
+      resueltaAt: alerta.resueltaAt?.toISO() ?? null,
+      observacion: alerta.observacion,
       estadoViaje,
     })
   }
