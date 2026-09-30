@@ -89,6 +89,9 @@ router
     router.post('refresh-token', [controllers.Auth, 'refreshToken'])
     // Cierra sesión: revoca el access token actual
     router.post('logout', [controllers.Auth, 'logout'])
+    // Recuperar contraseña con código de 6 dígitos por correo (Brevo)
+    router.post('forgot-password', [controllers.Auth, 'forgotPassword'])
+    router.post('reset-password', [controllers.Auth, 'resetPassword'])
   })
   .prefix('/api/auth')
   .as('auth')
@@ -113,6 +116,7 @@ router
     router.get('offers', [controllers.Driver, 'offers'])
     router.get('stats', [controllers.Driver, 'stats'])
     router.get('today-stats', [controllers.Driver, 'todayStats'])
+    router.get('grupo', [controllers.Driver, 'grupo']) // zona, líder, avisos y comunicados
     router.get('earnings/history', [controllers.Driver, 'earningsHistory'])
     router.get('earnings/pdf', [controllers.Driver, 'earningsPDF'])
     router.post('vehicle-photo', [controllers.Driver, 'vehiclePhoto'])

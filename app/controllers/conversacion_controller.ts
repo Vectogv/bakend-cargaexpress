@@ -7,6 +7,19 @@ import { getIO } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 import { claveDe } from '#services/coverage_service'
 
+/** Antirrebote de push por conversación y destinatario. */
+export const PUSH_CONVERSACION_ANTIRREBOTE_MS = 20_000
+// ponytail: Map en memoria, vale para una sola instancia; con varias réplicas cada una
+// tiene su propio antirrebote (pasar a Redis si se escala horizontalmente).
+const ultimoPushConversacion = new Map<string, number>()
+export function debeEnviarPushConversacion(conversacionId: number, destinatarioId: number, ahora = Date.now()) {
+  const clave = `${conversacionId}:${destinatarioId}`
+  const previo = ultimoPushConversacion.get(clave) ?? 0
+  if (ahora - previo < PUSH_CONVERSACION_ANTIRREBOTE_MS) return false
+  ultimoPushConversacion.set(clave, ahora)
+  return true
+}
+
 export default class ConversacionController {
   private isAdmin(user: User) {
     return user.rol === 'admin'
@@ -312,9 +325,16 @@ export default class ConversacionController {
     }
 
     for (const o of otros) {
-      if (o.fcmToken) {
+      if (o.fcmToken && debeEnviarPushConversacion(conversacion.id, o.id)) {
         try {
-          await sendToToken(o.fcmToken, `Soporte · ${payload.remitente.nombre}`, payload.mensaje)
+          await sendToToken(
+            o.fcmToken,
+            'Moderación CargaExpress',
+            payload.mensaje,
+            { tipo: 'conversacion_mensaje', conversacionId: String(conversacion.id) },
+            undefined,
+            `conversacion_${conversacion.id}`
+          )
         } catch { /* push no crítico */ }
       }
     }

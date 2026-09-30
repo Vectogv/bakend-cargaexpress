@@ -32,3 +32,13 @@ export const loginValidator = vine.create({
 export const refreshTokenValidator = vine.create({
   refreshToken: vine.string().minLength(1),
 })
+
+export const forgotPasswordValidator = vine.create({
+  email: email(),
+})
+
+export const resetPasswordValidator = vine.create({
+  email: email(),
+  codigo: vine.string().trim().minLength(1).maxLength(10),
+  password: vine.string().minLength(8).maxLength(72),
+})

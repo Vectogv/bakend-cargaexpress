@@ -3,6 +3,7 @@ import testUtils from '@adonisjs/core/services/test_utils'
 import Conductor from '#models/conductor'
 import Viaje from '#models/viaje'
 import User from '#models/user'
+import Reporte from '#models/reporte'
 
 /**
  * Listados de reportes que consume el panel web:
@@ -96,6 +97,20 @@ async function crearViaje(clienteId: number, conductorId: number) {
   } as any)
 }
 
+/** Reporte cliente → conductor: ya no se crea por API (solo reporta el conductor),
+ * pero el listado del admin sigue mostrando los históricos. */
+async function reporteDelCliente(viaje: Viaje, motivo: string, descripcion: string | null = null) {
+  return Reporte.create({
+    viajeId: viaje.id,
+    conductorId: viaje.conductorId!,
+    clienteId: viaje.clienteId,
+    motivo,
+    descripcion,
+    estado: 'pendiente',
+    reportadoPor: 'cliente',
+  })
+}
+
 /** Los listados paginados devuelven el arreglo directo o envuelto en `data`. */
 function items(body: any): any[] {
   if (Array.isArray(body)) return body
@@ -115,12 +130,8 @@ test.group('Admin: listado de reportes', (group) => {
     const conductor = await registrarConductor(client)
     const viaje = await crearViaje(cliente.id, conductor.conductorId)
 
-    // cliente → conductor
-    const delCliente = await client
-      .post(`/api/trips/${viaje.id}/report`)
-      .bearerToken(cliente.token)
-      .json({ motivo: 'comportamiento', descripcion: 'fue grosero' })
-    delCliente.assertStatus(201)
+    // cliente → conductor (histórico, directo en BD)
+    const delCliente = await reporteDelCliente(viaje, 'comportamiento', 'fue grosero')
 
     // conductor → cliente
     const delConductor = await client
@@ -133,7 +144,7 @@ test.group('Admin: listado de reportes', (group) => {
     res.assertStatus(200)
 
     const lista = items(res.body())
-    const porCliente = lista.find((r) => Number(r.id) === Number(delCliente.body().id))
+    const porCliente = lista.find((r) => Number(r.id) === delCliente.id)
     const porConductor = lista.find((r) => Number(r.id) === Number(delConductor.body().id))
     assert.exists(porCliente, 'el reporte del cliente debe estar en el listado')
     assert.exists(porConductor, 'el reporte del conductor debe estar en el listado')
@@ -179,12 +190,7 @@ test.group('Admin: listado de reportes', (group) => {
     const conductor = await registrarConductor(client)
     const viaje = await crearViaje(cliente.id, conductor.conductorId)
 
-    const creado = await client
-      .post(`/api/trips/${viaje.id}/report`)
-      .bearerToken(cliente.token)
-      .json({ motivo: 'otro' })
-    creado.assertStatus(201)
-    const id = Number(creado.body().id)
+    const id = (await reporteDelCliente(viaje, 'otro')).id
 
     const resuelto = await client.put(`/api/admin/reports/${id}/resolve`).bearerToken(admin)
     resuelto.assertStatus(200)

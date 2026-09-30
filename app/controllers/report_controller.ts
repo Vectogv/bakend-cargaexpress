@@ -4,28 +4,25 @@ import Conductor from '#models/conductor'
 import User from '#models/user'
 import type { HttpContext } from '@adonisjs/core/http'
 import { emitToAdmin } from '#start/socket'
+import { DateTime } from 'luxon'
 
-/** Motivos válidos según quién reporta. */
-const MOTIVOS = {
-  conductor: ['no_pago', 'comportamiento', 'otro'],
-  cliente: ['no_se_presento', 'cobro_incorrecto', 'comportamiento', 'otro'],
-} as const
+/** Motivos válidos para el conductor. */
+const MOTIVOS = ['no_pago', 'comportamiento', 'otro'] as const
 
-type Reportante = keyof typeof MOTIVOS
+/** Plazo para reportar un viaje, contado desde su cierre. */
+export const REPORTE_PLAZO_MIN = 30
 
 /**
- * POST /api/trips/:id/report. El rol del usuario autenticado decide la
- * dirección: el conductor asignado reporta al cliente del viaje y el cliente
- * dueño del viaje reporta al conductor asignado. Las reglas son las mismas en
- * ambos sentidos.
+ * POST /api/trips/:id/report. Solo el conductor asignado reporta al cliente
+ * del viaje, y solo con el viaje finalizado y dentro de REPORTE_PLAZO_MIN
+ * minutos desde el cierre (el cliente ya no reporta desde la app).
  */
 export default class ReportController {
-  async store(ctx: HttpContext) {
-    const { auth, params, response } = ctx
+  async store({ auth, params, request, response }: HttpContext) {
     const user = auth.getUserOrFail()
 
-    if (user.rol !== 'conductor' && user.rol !== 'cliente') {
-      return response.status(403).send({ error: 'Solo conductores y clientes pueden reportar' })
+    if (user.rol !== 'conductor') {
+      return response.status(403).send({ message: 'Solo el conductor puede reportar el viaje' })
     }
 
     const viaje = await Viaje.find(params.id)
@@ -33,16 +30,20 @@ export default class ReportController {
       return response.status(404).send({ error: 'Viaje no encontrado' })
     }
 
-    return user.rol === 'conductor'
-      ? this.reportarCliente(ctx, user, viaje)
-      : this.reportarConductor(ctx, user, viaje)
-  }
-
-  /** Conductor asignado → cliente del viaje. */
-  private async reportarCliente({ request, response }: HttpContext, user: User, viaje: Viaje) {
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
     if (viaje.conductorId !== conductor.id) {
       return response.status(403).send({ error: 'No participaste en este viaje' })
+    }
+
+    if (viaje.estado !== 'finalizado') {
+      return response.status(422).send({ message: 'Solo puedes reportar viajes finalizados' })
+    }
+
+    const cierre = viaje.finalizadoAt ?? viaje.completadoAt ?? viaje.createdAt
+    if (DateTime.now() > cierre.plus({ minutes: REPORTE_PLAZO_MIN })) {
+      return response.status(422).send({
+        message: `El plazo para reportar este viaje ya venció (${REPORTE_PLAZO_MIN} minutos)`,
+      })
     }
 
     const reporteExistente = await Reporte.query()
@@ -55,17 +56,17 @@ export default class ReportController {
       return response.status(400).send({ error: 'Ya has reportado este viaje' })
     }
 
-    const datos = this.validarDatos(request, 'conductor')
-    if ('error' in datos) {
-      return response.status(422).send({ error: datos.error })
+    const { motivo, descripcion } = request.only(['motivo', 'descripcion'])
+    if (!motivo || !(MOTIVOS as readonly string[]).includes(motivo)) {
+      return response.status(422).send({ error: `Motivo inválido (${MOTIVOS.join(', ')})` })
     }
 
     const reporte = await Reporte.create({
       viajeId: viaje.id,
       conductorId: conductor.id,
       clienteId: viaje.clienteId,
-      motivo: datos.motivo,
-      descripcion: datos.descripcion,
+      motivo,
+      descripcion: descripcion || null,
       estado: 'pendiente',
       reportadoPor: 'conductor',
     })
@@ -74,63 +75,12 @@ export default class ReportController {
     const requiereRevision = await this.penalizar(cliente)
     this.avisarAdmin(reporte, requiereRevision)
 
-    return response.status(201).send(this.respuesta(reporte))
-  }
-
-  /** Cliente dueño del viaje → conductor asignado. */
-  private async reportarConductor({ request, response }: HttpContext, user: User, viaje: Viaje) {
-    if (viaje.clienteId !== user.id) {
-      return response.status(403).send({ error: 'Este viaje no es tuyo' })
-    }
-
-    if (!viaje.conductorId) {
-      return response.status(422).send({ error: 'El viaje no tuvo conductor asignado' })
-    }
-
-    const reporteExistente = await Reporte.query()
-      .where('viaje_id', viaje.id)
-      .where('cliente_id', user.id)
-      .where('reportado_por', 'cliente')
-      .first()
-
-    if (reporteExistente) {
-      return response.status(409).send({ error: 'Ya reportaste al conductor de este viaje' })
-    }
-
-    const datos = this.validarDatos(request, 'cliente')
-    if ('error' in datos) {
-      return response.status(422).send({ error: datos.error })
-    }
-
-    const reporte = await Reporte.create({
-      viajeId: viaje.id,
-      conductorId: viaje.conductorId,
-      clienteId: user.id,
-      motivo: datos.motivo,
-      descripcion: datos.descripcion,
-      estado: 'pendiente',
-      reportadoPor: 'cliente',
+    return response.status(201).send({
+      id: String(reporte.id),
+      estado: reporte.estado,
+      motivo: reporte.motivo,
+      reportadoPor: reporte.reportadoPor,
     })
-
-    // La reputación y la visibilidad del conductor viven en su User.
-    const conductor = await Conductor.find(viaje.conductorId)
-    const usuarioConductor = conductor ? await User.find(conductor.usuarioId) : null
-    const requiereRevision = await this.penalizar(usuarioConductor)
-    this.avisarAdmin(reporte, requiereRevision)
-
-    return response.status(201).send(this.respuesta(reporte))
-  }
-
-  private validarDatos(
-    request: HttpContext['request'],
-    reportante: Reportante
-  ): { motivo: string; descripcion: string | null } | { error: string } {
-    const { motivo, descripcion } = request.only(['motivo', 'descripcion'])
-    const validos: readonly string[] = MOTIVOS[reportante]
-    if (!motivo || !validos.includes(motivo)) {
-      return { error: `Motivo inválido (${validos.join(', ')})` }
-    }
-    return { motivo, descripcion: descripcion || null }
   }
 
   /**
@@ -167,14 +117,5 @@ export default class ReportController {
       createdAt: reporte.createdAt.toISO(),
       requiereRevision,
     })
-  }
-
-  private respuesta(reporte: Reporte) {
-    return {
-      id: String(reporte.id),
-      estado: reporte.estado,
-      motivo: reporte.motivo,
-      reportadoPor: reporte.reportadoPor,
-    }
   }
 }

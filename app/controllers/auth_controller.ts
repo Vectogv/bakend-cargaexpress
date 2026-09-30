@@ -1,10 +1,22 @@
 import User from '#models/user'
 import Conductor from '#models/conductor'
-import { registerValidator, registerValidatorMessages, loginValidator, refreshTokenValidator } from '#validators/auth'
+import {
+  registerValidator,
+  registerValidatorMessages,
+  loginValidator,
+  refreshTokenValidator,
+  forgotPasswordValidator,
+  resetPasswordValidator,
+} from '#validators/auth'
+import CodigoRecuperacion from '#models/codigo_recuperacion'
+import SessionService from '#services/session_service'
+import { enviarCorreo } from '#services/mail_service'
+import env from '#start/env'
+import logger from '@adonisjs/core/services/logger'
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import hash from '@adonisjs/core/services/hash'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, createHmac, randomInt, randomUUID } from 'node:crypto'
 import { DateTime } from 'luxon'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import { emitToAdmin } from '#start/socket'
@@ -32,6 +44,13 @@ const DUPLICADO = {
   cedula: { error: 'Esa cédula ya está registrada por otro conductor.', code: 'CEDULA_DUPLICADA' },
   email: { error: 'Ese correo ya está registrado.', code: 'EMAIL_DUPLICADO' },
 }
+
+// ── Recuperación de contraseña ────────────────────────────────
+const CODIGO_VIGENCIA_MIN = 10
+const CODIGO_MAX_INTENTOS = 5
+const hashCodigo = (codigo: string) =>
+  createHmac('sha256', env.get('APP_KEY').release()).update(codigo).digest('hex')
+const CODIGO_INVALIDO = { message: 'Código inválido o vencido' }
 
 let dummyHash: string | null = null
 async function getDummyHash() {
@@ -247,5 +266,62 @@ export default class AuthController {
       token: token.value!.release(),
       refreshToken: newRefreshTokenValue,
     })
+  }
+
+  /** Siempre 200: no revela si el correo está registrado. */
+  async forgotPassword({ request, response }: HttpContext) {
+    const { email } = await request.validateUsing(forgotPasswordValidator)
+    const user = await User.findBy('email', email)
+    if (user) {
+      const codigo = String(randomInt(0, 1_000_000)).padStart(6, '0')
+      await CodigoRecuperacion.query().where('user_id', user.id).whereNull('usado_at').delete()
+      await CodigoRecuperacion.create({
+        userId: user.id,
+        codigoHash: hashCodigo(codigo),
+        expiraAt: DateTime.now().plus({ minutes: CODIGO_VIGENCIA_MIN }),
+        intentos: 0,
+      })
+      const enviado = await enviarCorreo(
+        user.email,
+        'Tu código de CargaExpress',
+        `<div style="font-family:Arial,sans-serif;max-width:420px;margin:auto;padding:24px;color:#1a1a2e">
+          <h2 style="margin:0 0 12px">Recupera tu contraseña</h2>
+          <p>Hola ${user.nombre}, tu código de CargaExpress es:</p>
+          <p style="font-size:32px;letter-spacing:8px;font-weight:bold;margin:16px 0">${codigo}</p>
+          <p>Vence en ${CODIGO_VIGENCIA_MIN} minutos. Si no lo pediste, ignora este correo.</p>
+        </div>`
+      )
+      if (!enviado) logger.error({ userId: user.id }, 'No se pudo enviar el código de recuperación')
+    }
+    return response.json({ message: 'Si el correo está registrado, te enviamos un código' })
+  }
+
+  async resetPassword({ request, response }: HttpContext) {
+    const { email, codigo, password } = await request.validateUsing(resetPasswordValidator)
+    const user = await User.findBy('email', email)
+    if (!user) return response.status(400).send(CODIGO_INVALIDO)
+
+    const registro = await CodigoRecuperacion.query()
+      .where('user_id', user.id)
+      .whereNull('usado_at')
+      .where('expira_at', '>', DateTime.now().toSQL()!)
+      .orderBy('id', 'desc')
+      .first()
+    if (!registro) return response.status(400).send(CODIGO_INVALIDO)
+
+    if (registro.codigoHash !== hashCodigo(codigo)) {
+      registro.intentos += 1
+      // Al agotar los intentos el código se invalida: hay que pedir otro.
+      if (registro.intentos >= CODIGO_MAX_INTENTOS) registro.usadoAt = DateTime.now()
+      await registro.save()
+      return response.status(400).send(CODIGO_INVALIDO)
+    }
+
+    user.password = password
+    await user.save()
+    registro.usadoAt = DateTime.now()
+    await registro.save()
+    await SessionService.revokeAll(user)
+    return response.json({ message: 'Contraseña actualizada. Inicia sesión con la nueva.' })
   }
 }

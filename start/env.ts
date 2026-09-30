@@ -46,6 +46,11 @@ export default await Env.create(new URL('../', import.meta.url), {
 
   SENTRY_DSN: Env.schema.string.optional(),
 
+  // ── Correo (Brevo, API HTTP) para el código de recuperación de contraseña ──
+  BREVO_API_KEY: Env.schema.string.optional(),
+  MAIL_FROM: Env.schema.string.optional(),
+  MAIL_FROM_NAME: Env.schema.string.optional(),
+
   // ── Reservas programadas ──────────────────────────────────────
   RESERVATION_MIN_LEAD_TIME_MINUTES: Env.schema.number.optional(),
   RESERVATION_DISPATCH_LEAD_MINUTES: Env.schema.number.optional(),

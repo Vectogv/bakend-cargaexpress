@@ -1654,7 +1654,13 @@ export default class TripController {
 
     const data = this.formatViajeResponse(viaje, user.rol)
     if (soloVistaPrevia) data.cliente.telefono = null
-    return serialize.withoutWrapping(data)
+    // Si quien consulta ya calificó este viaje (la app oculta el botón de calificar).
+    const yaCalificado = !!(await Calificacion.query()
+      .where('viaje_id', viaje.id)
+      .where('calificador_id', user.id)
+      .select('id')
+      .first())
+    return serialize.withoutWrapping({ ...data, yaCalificado })
   }
 
   private formatViajeResponse(viaje: Viaje, rol: string | null) {

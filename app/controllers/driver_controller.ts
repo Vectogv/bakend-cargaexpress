@@ -1,4 +1,7 @@
 import Conductor from '#models/conductor'
+import Aviso from '#models/aviso'
+import Comunicado from '#models/comunicado'
+import { claveDe } from '#services/coverage_service'
 import Ganancia from '#models/ganancia'
 import Oferta from '#models/oferta'
 import UbicacionDriver from '#models/ubicacion_driver'
@@ -607,5 +610,64 @@ export default class DriverController {
     response.type('application/pdf')
     response.header('Content-Disposition', 'attachment; filename=ganancias.pdf')
     return response.stream(doc)
+  }
+
+  /**
+   * GET /api/drivers/grupo: zona del conductor, su líder, avisos y comunicados
+   * aprobados de la zona. Las zonas se comparan normalizadas (claveDe); los
+   * avisos incluyen los 'general' (los que publican los propios conductores).
+   */
+  async grupo({ auth, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    if (user.rol !== 'conductor') {
+      return response.status(403).send({ error: 'Solo para conductores' })
+    }
+    const esLider = Boolean(user.esLider)
+    const conductor = await Conductor.query().where('usuario_id', user.id).select('id', 'ciudad').first()
+    const clave = conductor?.ciudad ? claveDe(conductor.ciudad) : ''
+    if (!clave) {
+      return serialize.withoutWrapping({ zona: null, esLider, lider: null, avisos: [], comunicados: [] })
+    }
+
+    const lideres = await Conductor.query()
+      .whereNotNull('ciudad')
+      .whereHas('usuario', (q) => q.where('es_lider', true))
+      .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
+    const lider = lideres.find((c) => claveDe(c.ciudad || '') === clave)?.usuario
+
+    const avisos = await Aviso.query()
+      .where('eliminado', false)
+      .whereIn('zona', [clave, 'general'])
+      .preload('autor', (q) => q.select('id', 'nombre', 'apellido', 'rol'))
+      .orderBy('fijado', 'desc')
+      .orderBy('created_at', 'desc')
+      .limit(50)
+
+    const comunicados = await Comunicado.query()
+      .where('estado', 'aprobado')
+      .where('zona', clave)
+      .orderBy('created_at', 'desc')
+      .limit(20)
+
+    return serialize.withoutWrapping({
+      zona: conductor!.ciudad,
+      esLider,
+      lider: lider
+        ? { id: lider.id, nombre: `${lider.nombre} ${lider.apellido}`.trim(), telefono: lider.telefono }
+        : null,
+      avisos: avisos.map((a) => ({
+        id: a.id,
+        contenido: a.contenido,
+        fijado: Boolean(a.fijado),
+        createdAt: a.createdAt.toISO(),
+        autor: { nombre: a.autor.nombre, apellido: a.autor.apellido, rol: a.autor.rol },
+      })),
+      comunicados: comunicados.map((c) => ({
+        id: c.id,
+        titulo: c.titulo,
+        contenido: c.contenido,
+        createdAt: c.createdAt.toISO(),
+      })),
+    })
   }
 }

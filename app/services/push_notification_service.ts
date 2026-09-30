@@ -114,13 +114,16 @@ export function armarMensaje(
   title: string,
   body: string,
   data?: Record<string, string>,
-  sound?: string
+  sound?: string,
+  // Android: dos avisos con el mismo tag se reemplazan en vez de apilarse.
+  tag?: string
 ) {
+  const notification = { ...(sound ? { sound } : {}), ...(tag ? { tag } : {}) }
   const message: any = {
     token,
     notification: { title, body },
     data,
-    android: { priority: 'high', ...(sound ? { notification: { sound } } : {}) },
+    android: { priority: 'high', ...(Object.keys(notification).length ? { notification } : {}) },
   }
   if (sound) message.apns = { payload: { aps: { sound } } }
   return message
@@ -131,12 +134,13 @@ export async function sendToToken(
   title: string,
   body: string,
   data?: Record<string, string>,
-  sound?: string
+  sound?: string,
+  tag?: string
 ) {
   ensureInit()
   if (!messaging) return
 
-  const message = armarMensaje(token, title, body, data, sound)
+  const message = armarMensaje(token, title, body, data, sound, tag)
 
   // Sufijo del token: identifica el dispositivo en los logs sin exponerlo.
   const dispositivo = `…${token.slice(-8)}`

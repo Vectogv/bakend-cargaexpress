@@ -4,6 +4,17 @@ import Aviso from '#models/aviso'
 import ReporteModerador from '#models/reporte_moderador'
 import type { HttpContext } from '@adonisjs/core/http'
 import { emitToAdmin } from '#start/socket'
+import { claveDe } from '#services/coverage_service'
+
+/**
+ * Zona del líder = ciudad de su perfil de conductor, normalizada con claveDe
+ * (un líder es conductor, no moderador: zonaModerador le queda vacía).
+ */
+async function zonaDelLider(userId: number): Promise<string | null> {
+  const conductor = await Conductor.query().where('usuario_id', userId).select('id', 'ciudad').first()
+  return conductor?.ciudad ? claveDe(conductor.ciudad) || null : null
+}
+const SIN_CIUDAD = { error: 'Tu perfil de conductor no tiene ciudad asignada' }
 
 export default class LeaderController {
   // ──────────────────────── AVISOS ────────────────────────
@@ -35,9 +46,12 @@ export default class LeaderController {
       return response.status(422).send(await serialize.withoutWrapping({ error: 'contenido es requerido' }))
     }
 
+    const zona = await zonaDelLider(user.id)
+    if (!zona) return response.status(403).send(await serialize.withoutWrapping(SIN_CIUDAD))
+
     const post = await Aviso.create({
       autorId: user.id,
-      zona: user.zonaModerador || '',
+      zona,
       contenido,
       fijado: false,
     })
@@ -88,9 +102,12 @@ export default class LeaderController {
       return response.status(422).send(await serialize.withoutWrapping({ error: 'titulo y contenido son requeridos' }))
     }
 
+    const zona = await zonaDelLider(user.id)
+    if (!zona) return response.status(403).send(await serialize.withoutWrapping(SIN_CIUDAD))
+
     const comunicado = await Comunicado.create({
       moderadorId: user.id,
-      zona: user.zonaModerador || '',
+      zona,
       titulo,
       contenido,
       estado: 'pendiente',
