@@ -54,6 +54,7 @@ export default class ProfileController {
             fotoCedula: SignedUploadService.sign(user.conductor.fotoCedula),
             fotoLicencia: SignedUploadService.sign(user.conductor.fotoLicencia),
             notaRechazo: user.conductor.notaRechazo,
+            ...user.conductor.documentosExtra(SignedUploadService.sign),
           }
         : undefined,
     }

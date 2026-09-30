@@ -707,6 +707,7 @@ export default class AdminController {
         fotoCedula: SignedUploadService.sign(c.fotoCedula),
         fotoLicencia: SignedUploadService.sign(c.fotoLicencia),
         fotoVehiculo: c.fotoVehiculo,
+        ...c.documentosExtra(SignedUploadService.sign),
         usuario: c.usuario
           ? {
               nombre: c.usuario.nombre,
@@ -726,6 +727,15 @@ export default class AdminController {
       return response
         .status(404)
         .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+    }
+
+    // Solo al aprobar: un conductor ya aprobado no se ve afectado.
+    if (!conductor.soatValido) {
+      return response.status(422).send(
+        await serialize.withoutWrapping({
+          error: 'El conductor necesita un SOAT vigente o una excepción de SOAT aprobada',
+        })
+      )
     }
 
     conductor.estadoVerificacion = 'aprobado'
@@ -766,6 +776,38 @@ export default class AdminController {
       conductorId: conductor.id,
       estadoVerificacion: conductor.estadoVerificacion,
       nota: conductor.notaRechazo,
+    })
+  }
+
+  /** PUT { aprobar: boolean, nota? }: resuelve la excepción de SOAT pedida por el conductor. */
+  async resolveSoatException({ params, request, response, serialize }: HttpContext) {
+    const conductor = await Conductor.find(params.conductorId)
+    if (!conductor) {
+      return response
+        .status(404)
+        .send(await serialize.withoutWrapping({ error: 'Conductor no encontrado' }))
+    }
+    if (conductor.excepcionSoatEstado !== 'pendiente') {
+      return response
+        .status(409)
+        .send(await serialize.withoutWrapping({ error: 'No hay una excepción de SOAT pendiente' }))
+    }
+
+    const { aprobar, nota } = request.only(['aprobar', 'nota'])
+    conductor.excepcionSoatEstado = aprobar === true || aprobar === 'true' ? 'aprobada' : 'rechazada'
+    if (nota) conductor.excepcionSoatNota = String(nota).slice(0, 500)
+    await conductor.save()
+
+    emitToDriver(conductor.usuarioId, 'driver:soat_exception', {
+      conductorId: conductor.id,
+      estado: conductor.excepcionSoatEstado,
+      nota: conductor.excepcionSoatNota,
+    })
+
+    return serialize.withoutWrapping({
+      conductorId: conductor.id,
+      excepcionSoatEstado: conductor.excepcionSoatEstado,
+      excepcionSoatNota: conductor.excepcionSoatNota,
     })
   }
 

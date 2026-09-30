@@ -4,6 +4,13 @@ import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 import { ApiProperty } from '@foadonis/openapi/decorators'
 
+/** pg devuelve `date` como Date JS; lo normalizamos a 'YYYY-MM-DD'. */
+function fechaTexto(v: unknown): string | null {
+  if (v === null || v === undefined || v === '') return null
+  if (v instanceof Date) return DateTime.fromJSDate(v).toISODate()
+  return String(v).slice(0, 10)
+}
+
 export default class Conductor extends BaseModel {
   static table = 'conductores'
   static $columns = [
@@ -26,6 +33,14 @@ export default class Conductor extends BaseModel {
     'fotoCedula',
     'fotoLicencia',
     'notaRechazo',
+    'fotoCedulaReverso',
+    'fotoTarjetaPropiedad',
+    'fotoTecnomecanica',
+    'tecnomecanicaVence',
+    'fotoSoat',
+    'soatVence',
+    'excepcionSoatEstado',
+    'excepcionSoatNota',
     'createdAt',
     'updatedAt',
     'ubicacionActualizadaEn',
@@ -111,6 +126,52 @@ export default class Conductor extends BaseModel {
   @ApiProperty()
   @column()
   declare notaRechazo: string | null
+
+  @column()
+  declare fotoCedulaReverso: string | null
+
+  @column()
+  declare fotoTarjetaPropiedad: string | null
+
+  @column()
+  declare fotoTecnomecanica: string | null
+
+  /** Fecha (YYYY-MM-DD) sin hora: se guarda y se lee como texto. */
+  @column({ consume: fechaTexto, prepare: fechaTexto })
+  declare tecnomecanicaVence: string | null
+
+  @column()
+  declare fotoSoat: string | null
+
+  @column({ consume: fechaTexto, prepare: fechaTexto })
+  declare soatVence: string | null
+
+  /** null | pendiente | aprobada | rechazada */
+  @column()
+  declare excepcionSoatEstado: string | null
+
+  @column()
+  declare excepcionSoatNota: string | null
+
+  /** SOAT vigente (vence hoy o después) o excepción aprobada por el admin. */
+  get soatValido(): boolean {
+    if (this.excepcionSoatEstado === 'aprobada') return true
+    return !!this.fotoSoat && !!this.soatVence && this.soatVence >= DateTime.now().toISODate()!
+  }
+
+  /** Campos de los documentos nuevos, con las fotos firmadas, para perfil/admin. */
+  documentosExtra(sign: (p: string | null) => string | null) {
+    return {
+      fotoCedulaReverso: sign(this.fotoCedulaReverso),
+      fotoTarjetaPropiedad: sign(this.fotoTarjetaPropiedad),
+      fotoTecnomecanica: sign(this.fotoTecnomecanica),
+      tecnomecanicaVence: this.tecnomecanicaVence,
+      fotoSoat: sign(this.fotoSoat),
+      soatVence: this.soatVence,
+      excepcionSoatEstado: this.excepcionSoatEstado,
+      excepcionSoatNota: this.excepcionSoatNota,
+    }
+  }
 
   @ApiProperty()
   @column.dateTime({ autoCreate: true })

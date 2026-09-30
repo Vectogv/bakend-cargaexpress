@@ -494,6 +494,82 @@ export default class DriverController {
     return serialize.withoutWrapping({ fotoVehiculo: conductor.fotoVehiculo })
   }
 
+  /**
+   * Documentos nuevos de verificación (cédula reverso, tarjeta de propiedad,
+   * tecnomecánica y SOAT). Los dos últimos llevan `vence` (YYYY-MM-DD) como
+   * campo del multipart y se rechazan si ya vencieron.
+   */
+  async uploadDocumento({ auth, params, request, serialize, response }: HttpContext) {
+    const docs: Record<string, { foto: 'fotoCedulaReverso' | 'fotoTarjetaPropiedad' | 'fotoTecnomecanica' | 'fotoSoat'; vence?: 'tecnomecanicaVence' | 'soatVence' }> = {
+      'cedula-reverso': { foto: 'fotoCedulaReverso' },
+      'tarjeta-propiedad': { foto: 'fotoTarjetaPropiedad' },
+      'tecnomecanica': { foto: 'fotoTecnomecanica', vence: 'tecnomecanicaVence' },
+      'soat': { foto: 'fotoSoat', vence: 'soatVence' },
+    }
+    const doc = docs[params.tipo]
+    if (!doc) return response.status(404).send({ error: 'Documento no reconocido' })
+
+    const user = auth.getUserOrFail()
+    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+
+    const file = request.file('file', {
+      size: '5mb',
+      extnames: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+    })
+    if (!file) return response.status(400).send({ error: 'No file uploaded' })
+    if (!file.isValid) {
+      return response.status(422).send({ error: file.errors[0]?.message || 'Archivo inválido' })
+    }
+
+    let vence: string | null = null
+    if (doc.vence) {
+      vence = String(request.input('vence', '')).slice(0, 10)
+      const fecha = DateTime.fromISO(vence)
+      if (!fecha.isValid) {
+        return response.status(422).send({ error: 'Falta la fecha de vencimiento (YYYY-MM-DD)' })
+      }
+      if (fecha.toISODate()! < DateTime.now().toISODate()!) {
+        return response.status(422).send({ error: 'El documento ya está vencido' })
+      }
+    }
+
+    const fileName = `${params.tipo}-${user.id}-${randomUUID()}.${file.extname}`
+    await file.move(StorageService.uploadsDir(), { name: fileName })
+
+    conductor[doc.foto] = `/storage/uploads/${fileName}`
+    if (doc.vence) conductor[doc.vence] = vence
+    await conductor.save()
+
+    return serialize.withoutWrapping({
+      [doc.foto]: SignedUploadService.sign(conductor[doc.foto]),
+      ...(doc.vence ? { [doc.vence]: conductor[doc.vence] } : {}),
+    })
+  }
+
+  /** "¿No tienes SOAT?": pide que CargaExpress valore el vehículo. Queda pendiente para el admin. */
+  async solicitarExcepcionSoat({ auth, request, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conductor = await Conductor.findByOrFail('usuario_id', user.id)
+    if (conductor.excepcionSoatEstado === 'aprobada') {
+      return response.status(409).send({ error: 'Ya tienes una excepción de SOAT aprobada' })
+    }
+    const comentario = String(request.input('comentario', '') ?? '').trim().slice(0, 500)
+    conductor.excepcionSoatEstado = 'pendiente'
+    conductor.excepcionSoatNota = comentario || null
+    await conductor.save()
+
+    try {
+      emitToAdmin('admin:excepcion_soat', { conductorId: conductor.id, usuarioId: user.id })
+    } catch {
+      // socket no disponible
+    }
+
+    return serialize.withoutWrapping({
+      excepcionSoatEstado: conductor.excepcionSoatEstado,
+      excepcionSoatNota: conductor.excepcionSoatNota,
+    })
+  }
+
   async earningsHistory({ auth, request, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     const conductor = await Conductor.findByOrFail('usuario_id', user.id)
