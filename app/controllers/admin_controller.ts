@@ -44,6 +44,18 @@ import {
 import { adminUpdateUserValidator } from '#validators/user'
 import { restaurarViajeTrasSos } from '#services/sos_trip_service'
 
+/** Tokens push de los conductores cuya ciudad cae en la zona (ya normalizada con claveDe). */
+export async function tokensConductoresDeZona(zona: string): Promise<string[]> {
+  const filas = await db
+    .from('conductores')
+    .join('users', 'users.id', 'conductores.usuario_id')
+    .whereNotNull('users.fcm_token')
+    .select('conductores.ciudad', 'users.fcm_token')
+  return filas
+    .filter((f: any) => f.ciudad && claveDe(f.ciudad) === zona)
+    .map((f: any) => f.fcm_token as string)
+}
+
 export default class AdminController {
   async dashboard({ serialize }: HttpContext) {
     const cached = await RedisService.cacheGet<any>('admin:dashboard')
@@ -1739,9 +1751,8 @@ export default class AdminController {
     comunicado.publicadoAt = DateTime.now()
     await comunicado.save()
 
-    const tokenRows = await db.from('users').whereNotNull('fcm_token').select('fcm_token')
-    const tokens = tokenRows.map((r: any) => r.fcm_token).filter(Boolean) as string[]
-
+    // Solo a los conductores de la zona: es donde la app lo muestra (Grupo de conductores).
+    const tokens = await tokensConductoresDeZona(comunicado.zona)
     if (tokens.length > 0) {
       await sendToMultiple(tokens, comunicado.titulo, comunicado.contenido)
     }

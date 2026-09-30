@@ -3,6 +3,7 @@ import testUtils from '@adonisjs/core/services/test_utils'
 import User from '#models/user'
 import Comunicado from '#models/comunicado'
 import Encuesta from '#models/encuesta'
+import { tokensConductoresDeZona } from '#controllers/admin_controller'
 
 test.group('Admin - listar comunicados y encuestas', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
@@ -125,6 +126,40 @@ test.group('Admin - listar comunicados y encuestas', (group) => {
 
     const activa = body.find((e: any) => e.title === 'Evaluacion de conductores')
     assert.equal(activa.status, 'aprobada')
+  })
+
+  test('el push de un comunicado aprobado va solo a los conductores de su zona', async ({
+    client,
+    assert,
+  }) => {
+    const u = `${Date.now()}${Math.floor(Math.random() * 1e6)}`
+    const conductor = (ciudad: string, placa: string) =>
+      client.post('/api/auth/register').json({
+        nombre: 'Zona',
+        apellido: 'Prueba',
+        email: `zona_${placa}_${u}@test.com`,
+        password: 'Password123',
+        rol: 'conductor',
+        edad: 30,
+        cedula: `10${Math.floor(Math.random() * 1e8)}`,
+        placa,
+        tipoVehiculo: 'Turbo',
+        capacidad: '1 tonelada',
+        ciudad,
+      })
+    const pop = await conductor('Popayán', `ZPA${Math.floor(Math.random() * 900) + 100}`)
+    const cali = await conductor('cali', `ZCA${Math.floor(Math.random() * 900) + 100}`)
+    const cliente = await client.post('/api/auth/register').json({
+      nombre: 'Cli', apellido: 'Ente', email: `zona_cli_${u}@test.com`, password: 'Password123', rol: 'cliente', edad: 30,
+    })
+    await User.query().where('id', Number(pop.body().id)).update({ fcm_token: `tok_pop_${u}` })
+    await User.query().where('id', Number(cali.body().id)).update({ fcm_token: `tok_cali_${u}` })
+    await User.query().where('id', Number(cliente.body().id)).update({ fcm_token: `tok_cli_${u}` })
+
+    const tokens = await tokensConductoresDeZona('popayan')
+    assert.include(tokens, `tok_pop_${u}`)
+    assert.notInclude(tokens, `tok_cali_${u}`)
+    assert.notInclude(tokens, `tok_cli_${u}`)
   })
 
   test('un usuario sin rol admin recibe 403', async ({ client }) => {
