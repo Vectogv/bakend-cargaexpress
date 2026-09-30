@@ -78,6 +78,36 @@ test.group('GET /api/drivers/grupo', (group) => {
     assert.equal(comoLider.body().zona, 'Popayán')
   })
 
+  test('comentarios en los anuncios: comentar, verlos y borrar (autor o líder)', async ({ client, assert }) => {
+    const lider = await registrarConductor(client, 'Popayán')
+    await User.query().where('id', lider.id).update({ es_lider: true })
+    const a = await registrarConductor(client, 'popayan')
+    const b = await registrarConductor(client, 'popayan')
+    const deCali = await registrarConductor(client, 'Cali')
+    const aviso = await Aviso.create({ autorId: lider.id, zona: 'popayan', contenido: 'Retén en la 5', fijado: false })
+
+    const url = `/api/drivers/grupo/avisos/${aviso.id}/comentarios`
+    ;(await client.post(url).bearerToken(a.token).json({ contenido: '   ' })).assertStatus(422)
+    ;(await client.post(url).bearerToken(deCali.token).json({ contenido: 'hola' })).assertStatus(404)
+    const creado = await client.post(url).bearerToken(a.token).json({ contenido: 'Gracias por avisar' })
+    creado.assertStatus(201)
+    const idA = creado.body().id
+    const idB = (await client.post(url).bearerToken(b.token).json({ contenido: 'Ya pasó' })).body().id
+
+    const vista = await client.get('/api/drivers/grupo').bearerToken(a.token)
+    const comentarios = vista.body().avisos[0].comentarios
+    assert.deepEqual(comentarios.map((c: any) => c.contenido), ['Gracias por avisar', 'Ya pasó'])
+    assert.isTrue(comentarios[0].propio)
+    assert.isTrue(comentarios[0].puedeBorrar)
+    assert.isFalse(comentarios[1].puedeBorrar)
+
+    ;(await client.delete(`/api/drivers/grupo/comentarios/${idB}`).bearerToken(a.token)).assertStatus(403)
+    ;(await client.delete(`/api/drivers/grupo/comentarios/${idB}`).bearerToken(lider.token)).assertStatus(200)
+    ;(await client.delete(`/api/drivers/grupo/comentarios/${idA}`).bearerToken(a.token)).assertStatus(200)
+    const final = await client.get('/api/drivers/grupo').bearerToken(a.token)
+    assert.deepEqual(final.body().avisos[0].comentarios, [])
+  })
+
   test('sin ciudad: zona null y listas vacías; cliente: 403', async ({ client, assert }) => {
     const sinCiudad = await registrarConductor(client, null)
     const res = await client.get('/api/drivers/grupo').bearerToken(sinCiudad.token)

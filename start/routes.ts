@@ -117,6 +117,8 @@ router
     router.get('stats', [controllers.Driver, 'stats'])
     router.get('today-stats', [controllers.Driver, 'todayStats'])
     router.get('grupo', [controllers.Driver, 'grupo']) // zona, líder, avisos y comunicados
+    router.post('grupo/avisos/:id/comentarios', [controllers.Driver, 'comentarAviso'])
+    router.delete('grupo/comentarios/:id', [controllers.Driver, 'borrarComentario'])
     router.get('earnings/history', [controllers.Driver, 'earningsHistory'])
     router.get('earnings/pdf', [controllers.Driver, 'earningsPDF'])
     router.post('vehicle-photo', [controllers.Driver, 'vehiclePhoto'])

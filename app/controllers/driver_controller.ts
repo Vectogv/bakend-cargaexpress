@@ -1,5 +1,6 @@
 import Conductor from '#models/conductor'
 import Aviso from '#models/aviso'
+import AvisoComentario from '#models/aviso_comentario'
 import Comunicado from '#models/comunicado'
 import { claveDe } from '#services/coverage_service'
 import Ganancia from '#models/ganancia'
@@ -719,6 +720,26 @@ export default class DriverController {
       .orderBy('created_at', 'desc')
       .limit(50)
 
+    const comentarios = avisos.length
+      ? await AvisoComentario.query()
+          .whereIn('aviso_id', avisos.map((a) => a.id))
+          .preload('autor', (q) => q.select('id', 'nombre', 'apellido'))
+          .orderBy('created_at', 'asc')
+      : []
+    const comentariosDe = new Map<number, any[]>()
+    for (const c of comentarios) {
+      const lista = comentariosDe.get(c.avisoId) ?? []
+      lista.push({
+        id: c.id,
+        contenido: c.contenido,
+        createdAt: c.createdAt.toISO(),
+        autor: { nombre: c.autor.nombre, apellido: c.autor.apellido },
+        propio: c.autorId === user.id,
+        puedeBorrar: c.autorId === user.id || esLider,
+      })
+      comentariosDe.set(c.avisoId, lista)
+    }
+
     const comunicados = await Comunicado.query()
       .where('estado', 'aprobado')
       .where('zona', clave)
@@ -737,6 +758,7 @@ export default class DriverController {
         fijado: Boolean(a.fijado),
         createdAt: a.createdAt.toISO(),
         autor: { nombre: a.autor.nombre, apellido: a.autor.apellido, rol: a.autor.rol },
+        comentarios: comentariosDe.get(a.id) ?? [],
       })),
       comunicados: comunicados.map((c) => ({
         id: c.id,
@@ -746,4 +768,44 @@ export default class DriverController {
       })),
     })
   }
+
+  /** POST /api/drivers/grupo/avisos/:id/comentarios {contenido}: comentar un anuncio de mi zona. */
+  async comentarAviso({ auth, params, request, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const zona = await zonaDeConductor(user.id, user.rol)
+    if (!zona) return response.status(403).send({ error: 'Solo para conductores con zona' })
+    const contenido = String(request.input('contenido') ?? '').trim()
+    if (!contenido || contenido.length > 500) {
+      return response.status(422).send({ error: 'El comentario debe tener entre 1 y 500 caracteres' })
+    }
+    const aviso = await Aviso.query().where('id', params.id).where('eliminado', false).first()
+    if (!aviso || ![zona, 'general'].includes(aviso.zona)) {
+      return response.status(404).send({ error: 'Anuncio no encontrado' })
+    }
+    const c = await AvisoComentario.create({ avisoId: aviso.id, autorId: user.id, contenido })
+    return response.status(201).send({ id: c.id, contenido: c.contenido, createdAt: c.createdAt.toISO() })
+  }
+
+  /** DELETE /api/drivers/grupo/comentarios/:id: lo borra su autor o el líder de la zona. */
+  async borrarComentario({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const zona = await zonaDeConductor(user.id, user.rol)
+    const c = await AvisoComentario.find(params.id)
+    const aviso = c ? await Aviso.find(c.avisoId) : null
+    if (!c || !aviso || !zona || ![zona, 'general'].includes(aviso.zona)) {
+      return response.status(404).send({ error: 'Comentario no encontrado' })
+    }
+    if (c.autorId !== user.id && !user.esLider) {
+      return response.status(403).send({ error: 'Solo el autor o el líder pueden borrarlo' })
+    }
+    await c.delete()
+    return { message: 'Comentario eliminado' }
+  }
+}
+
+/** Zona normalizada (claveDe) del conductor, o null si no es conductor o no tiene ciudad. */
+async function zonaDeConductor(userId: number, rol: string | null):Promise<string | null> {
+  if (rol !== 'conductor') return null
+  const conductor = await Conductor.query().where('usuario_id', userId).select('ciudad').first()
+  return conductor?.ciudad ? claveDe(conductor.ciudad) : null
 }
