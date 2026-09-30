@@ -147,6 +147,29 @@ test.group('Admin - alta y edición de usuarios', (group) => {
     rechazado.assertStatus(422)
   })
 
+  test('el listado de usuarios trae la ciudad del conductor (zona del líder)', async ({
+    client,
+    assert,
+  }) => {
+    const admin = await adminToken(client)
+    const email = `lider_${uniq()}@test.com`
+    const res = await crear(client, {
+      email,
+      rol: 'conductor',
+      cedula: '1061234568',
+      placa: `LDR${Math.floor(Math.random() * 900) + 100}`,
+      tipoVehiculo: 'Turbo',
+      capacidad: '1 tonelada',
+      ciudad: 'popayan',
+    })
+    res.assertStatus(200)
+
+    const lista = await client.get('/api/admin/users').bearerToken(admin).qs({ search: email })
+    lista.assertStatus(200)
+    const usuario = (lista.body() as any[]).find((u) => u.email === email)
+    assert.equal(usuario.ciudad, 'popayan')
+  })
+
   test('el listado de usuarios trae estadoCuenta, tieneDeudaActiva y montoDeuda', async ({
     client,
     assert,

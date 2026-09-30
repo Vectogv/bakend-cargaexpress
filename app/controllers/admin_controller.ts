@@ -139,6 +139,13 @@ export default class AdminController {
     response.header('X-Total-Count', String(result.total))
     response.header('X-Last-Page', String(result.lastPage))
 
+    // Ciudad del perfil de conductor: es la zona del líder (zonaModerador le queda vacía).
+    const ids = result.all().map((u) => u.id)
+    const conductores = ids.length
+      ? await Conductor.query().whereIn('usuario_id', ids).select('usuario_id', 'ciudad')
+      : []
+    const ciudadDe = new Map(conductores.map((c) => [c.usuarioId, c.ciudad]))
+
     return serialize.withoutWrapping(
       result.all().map((u) => ({
         id: u.id,
@@ -153,6 +160,7 @@ export default class AdminController {
         esModerador: u.esModerador,
         zonaModerador: u.zonaModerador,
         esLider: u.esLider,
+        ciudad: ciudadDe.get(u.id) ?? null,
         estadoCuenta: u.estadoCuenta,
         tieneDeudaActiva: u.tieneDeudaActiva,
         montoDeuda: u.montoDeuda,
@@ -1815,6 +1823,7 @@ export default class AdminController {
         author: c.moderador
           ? `${c.moderador.nombre || ''} ${c.moderador.apellido || ''}`.trim()
           : 'Admin',
+        zona: c.zona,
         status:
           c.estado === 'aprobado'
             ? 'approved'

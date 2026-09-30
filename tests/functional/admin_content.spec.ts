@@ -76,6 +76,7 @@ test.group('Admin - listar comunicados y encuestas', (group) => {
     assert.equal(pendiente.status, 'pending')
     assert.equal(pendiente.body, 'Las tarifas cambian el proximo mes')
     assert.equal(pendiente.author, 'Admin Principal')
+    assert.equal(pendiente.zona, 'Norte')
     assert.isDefined(pendiente.createdAt)
 
     const aprobado = body.find((c: any) => c.title === 'Nueva zona de cobertura')
