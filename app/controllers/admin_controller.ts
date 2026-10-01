@@ -1411,7 +1411,7 @@ export default class AdminController {
       deudaFechaLimite,
       message:
         restante > 0
-          ? `Pago confirmado. Cuenta reactivada con deuda pendiente de $${restante}.`
+          ? `Pago confirmado. Cuenta reactivada con deuda pendiente de $${restante.toLocaleString('es-CO')}.`
           : 'Pago confirmado. Cuenta reactivada.',
     })
   }

@@ -105,7 +105,7 @@ export default class DriverDebtSuspensionService {
     const deuda = Number(user.montoDeuda ?? 0)
     if (user.estadoCuenta === 'activa' && deuda > TOPE_DEUDA_CONDUCTOR) {
       return {
-        error: `Tu deuda de comisión ($${deuda}) supera el máximo permitido ($${TOPE_DEUDA_CONDUCTOR}). Paga y sube el comprobante para seguir ofertando.`,
+        error: `Tu deuda de comisión ($${deuda.toLocaleString('es-CO')}) supera el máximo permitido ($${TOPE_DEUDA_CONDUCTOR.toLocaleString('es-CO')}). Paga y sube el comprobante para seguir ofertando.`,
         code: CODIGO_DEUDA_SUPERA_TOPE,
         estadoCuenta: user.estadoCuenta,
         montoDeuda: deuda,
@@ -124,7 +124,7 @@ export default class DriverDebtSuspensionService {
 
     const monto = Number(user.montoDeuda) || 0
     const titulo = 'Cuenta suspendida por pago'
-    const mensaje = `Tu deuda de comisión de $${monto} venció. No puedes conectarte ni ofertar hasta que subas el comprobante de pago y el administrador lo apruebe.`
+    const mensaje = `Tu deuda de comisión de $${monto.toLocaleString('es-CO')} venció. No puedes conectarte ni ofertar hasta que subas el comprobante de pago y el administrador lo apruebe.`
 
     await Notificacion.create({
       usuarioId: user.id,
