@@ -1614,11 +1614,20 @@ export default class AdminController {
       config.bannerImagenUrl = `/storage/uploads/${fileName}`
     }
 
-    const { bannerActivo, bannerLink, bannerTexto } = request.only([
+    const { bannerActivo, bannerLink, bannerTexto, bannerDias } = request.only([
       'bannerActivo',
       'bannerLink',
       'bannerTexto',
+      'bannerDias',
     ])
+    // Días que se muestra, contados desde que se guarda. Vacío o 0 = sin límite.
+    if (bannerDias !== undefined) {
+      const dias = bannerDias === '' || bannerDias === null ? 0 : Number(bannerDias)
+      if (!Number.isInteger(dias) || dias < 0 || dias > 365) {
+        return response.status(422).send({ error: 'Los días deben ser un número entero entre 0 y 365' })
+      }
+      config.bannerHasta = dias ? DateTime.now().plus({ days: dias }).startOf('second') : null
+    }
     if (bannerActivo !== undefined)
       config.bannerActivo = bannerActivo === true || bannerActivo === 'true'
     if (bannerLink !== undefined) config.bannerLink = bannerLink
@@ -1630,6 +1639,7 @@ export default class AdminController {
       bannerImagenUrl: config.bannerImagenUrl,
       bannerLink: config.bannerLink,
       bannerTexto: config.bannerTexto,
+      bannerHasta: config.bannerHasta?.toISO() ?? null,
     })
   }
 

@@ -328,15 +328,23 @@ router.get('/api/config/banner', async ({ serialize }) => {
   const ConfiguracionPlataforma = await import('#models/configuracion_plataforma').then(
     (m) => m.default
   )
-  const config = await ConfiguracionPlataforma.first()
+  const config = await ConfiguracionPlataforma.unica()
   if (!config) {
-    return serialize.withoutWrapping({ activo: false, imagenUrl: null, link: null, texto: null })
+    return serialize.withoutWrapping({
+      activo: false,
+      imagenUrl: null,
+      link: null,
+      texto: null,
+      hasta: null,
+    })
   }
+  // `activo` ya descuenta el vencimiento: pasado `hasta`, el anuncio se baja solo.
   return serialize.withoutWrapping({
-    activo: config.bannerActivo || false,
+    activo: config.bannerVisible,
     imagenUrl: config.bannerImagenUrl || null,
     link: config.bannerLink || null,
     texto: config.bannerTexto || null,
+    hasta: config.bannerHasta?.toISO() ?? null,
   })
 })
 

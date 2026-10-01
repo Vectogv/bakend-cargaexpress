@@ -29,6 +29,15 @@ export default class ConfiguracionPlataforma extends BaseModel {
   @column()
   declare bannerTexto: string | null
 
+  /** Fecha en que el anuncio deja de mostrarse solo (null = sin límite). */
+  @column.dateTime()
+  declare bannerHasta: DateTime | null
+
+  /** Visible si está activo y su límite de días no ha vencido. */
+  get bannerVisible() {
+    return Boolean(this.bannerActivo) && (!this.bannerHasta || this.bannerHasta > DateTime.now())
+  }
+
   /** Contacto de soporte que ve el cliente (support_controller). Editable por el gerente. */
   @column()
   declare soporteTelefono: string | null
