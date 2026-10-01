@@ -7,6 +7,7 @@ import {
   refreshTokenValidator,
   forgotPasswordValidator,
   resetPasswordValidator,
+  googleLoginValidator,
 } from '#validators/auth'
 import CodigoRecuperacion from '#models/codigo_recuperacion'
 import SessionService from '#services/session_service'
@@ -38,6 +39,10 @@ async function issueRefreshToken(userId: number): Promise<string> {
   })
   return value
 }
+
+// ID de cliente web de Firebase (app-cargaexpress); no es un secreto.
+const GOOGLE_WEB_CLIENT_ID_DEFECTO =
+  '848686850284-bi6477mo5t1ok3tgrha0vvnfmqcdcfma.apps.googleusercontent.com'
 
 const DUPLICADO = {
   placa: { error: 'Esa placa ya está registrada por otro conductor.', code: 'PLACA_DUPLICADA' },
@@ -210,6 +215,81 @@ export default class AuthController {
       zonaModerador: user.zonaModerador,
       token: token.value!.release(),
       refreshToken: refreshTokenValue,
+    })
+  }
+
+  /**
+   * Entrar con Google. La app manda el idToken; Google lo valida (tokeninfo) y
+   * aquí se comprueba que sea para nuestra app y con el correo verificado.
+   * Si el correo ya existe se entra a esa cuenta; si no, se crea un cliente
+   * (teléfono y edad los completa la app después, en Editar perfil).
+   */
+  async google({ request, serialize, response }: HttpContext) {
+    const { idToken } = await request.validateUsing(googleLoginValidator)
+    const invalido = () => response.status(401).send({ message: 'No se pudo validar tu cuenta de Google' })
+
+    let info: any
+    try {
+      const res = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+      )
+      if (!res.ok) return invalido()
+      info = await res.json()
+    } catch (err: any) {
+      logger.error({ err: err?.message }, 'No se pudo consultar tokeninfo de Google')
+      return response.status(503).send({ message: 'No pudimos contactar a Google, intenta de nuevo' })
+    }
+
+    const audEsperada = env.get('GOOGLE_WEB_CLIENT_ID', GOOGLE_WEB_CLIENT_ID_DEFECTO)
+    const correo = String(info?.email || '').toLowerCase()
+    if (info?.aud !== audEsperada || String(info?.email_verified) !== 'true' || !correo) {
+      return invalido()
+    }
+
+    let user = await User.findBy('email', correo)
+    if (user?.suspendido) {
+      return response.status(403).send({
+        code: 'CUENTA_SUSPENDIDA',
+        errors: [{ message: 'Tu cuenta ha sido suspendida. Contacta al administrador.' }],
+      })
+    }
+    const nueva = !user
+    if (!user) {
+      user = await User.create({
+        nombre: String(info.given_name || info.name || correo.split('@')[0]).slice(0, 100),
+        apellido: String(info.family_name || '-').slice(0, 100),
+        email: correo,
+        // Sin contraseña propia: se pone una aleatoria (puede usar "olvidé mi contraseña").
+        password: randomUUID(),
+        rol: 'cliente',
+      })
+      try {
+        emitToAdmin('admin:new_user', {
+          id: String(user.id),
+          nombre: user.nombre,
+          apellido: user.apellido,
+          email: user.email,
+        })
+      } catch {
+        // Socket.io may not be initialized in test environment
+      }
+    }
+
+    const token = await User.accessTokens.create(user, [], { expiresIn: '7 days' })
+    const refreshTokenValue = await issueRefreshToken(user.id)
+    return serialize.withoutWrapping({
+      id: String(user.id),
+      nombre: user.nombre,
+      apellido: user.apellido,
+      email: user.email,
+      rol: user.rol,
+      esModerador: Boolean(user.esModerador),
+      zonaModerador: user.zonaModerador,
+      token: token.value!.release(),
+      refreshToken: refreshTokenValue,
+      cuentaNueva: nueva,
+      // La app pide estos datos si faltan (teléfono y edad mínima 18).
+      perfilCompleto: Boolean(user.telefono && user.edad),
     })
   }
 

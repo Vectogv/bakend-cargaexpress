@@ -92,6 +92,8 @@ router
     // Recuperar contraseña con código de 6 dígitos por correo (Brevo)
     router.post('forgot-password', [controllers.Auth, 'forgotPassword'])
     router.post('reset-password', [controllers.Auth, 'resetPassword'])
+    // Entrar o registrarse con Google (cuenta nueva = cliente)
+    router.post('google', [controllers.Auth, 'google'])
   })
   .prefix('/api/auth')
   .as('auth')

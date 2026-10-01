@@ -42,3 +42,7 @@ export const resetPasswordValidator = vine.create({
   codigo: vine.string().trim().minLength(1).maxLength(10),
   password: vine.string().minLength(8).maxLength(72),
 })
+
+export const googleLoginValidator = vine.create({
+  idToken: vine.string().minLength(20).maxLength(4096),
+})
