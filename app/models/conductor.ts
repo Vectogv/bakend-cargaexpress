@@ -44,6 +44,7 @@ export default class Conductor extends BaseModel {
     'createdAt',
     'updatedAt',
     'ubicacionActualizadaEn',
+    'penalizacionCancelacion',
   ] as const
   $columns = Conductor.$columns
 
@@ -92,6 +93,10 @@ export default class Conductor extends BaseModel {
     consume: (v: unknown) => (v === null || v === undefined ? null : Number(v)),
   })
   declare calificacion: number | null
+
+  /** Suma de penalizaciones por cancelar viajes asignados; se resta a `calificacion`. */
+  @column({ consume: (v: unknown) => (v === null || v === undefined ? 0 : Number(v)) })
+  declare penalizacionCancelacion: number
 
   @ApiProperty()
   @column()

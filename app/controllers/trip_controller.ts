@@ -34,6 +34,7 @@ import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
 import antifraudeConfig from '#config/antifraude'
 import logger from '@adonisjs/core/services/logger'
 import AntifraudeService from '#services/antifraude_service'
+import { calificacionVisible, recalcularCalificacionConductor } from '#services/calificacion_conductor'
 
 /** Estados en los que un viaje del cliente le impide pedir o reservar otro. */
 const ESTADOS_VIAJE_ACTIVO_CLIENTE = [
@@ -1428,6 +1429,11 @@ export default class TripController {
           )
           await conductorUser.save()
         }
+        // ponytail: la penalizacion se acumula para siempre; si hace falta perdon,
+        // bajar 0,1 por viaje finalizado en trip_finalization_service.ts.
+        conductorPenalizado.penalizacionCancelacion =
+          Number(conductorPenalizado.penalizacionCancelacion || 0) + antifraudeConfig.penalizacionCancelacion
+        await recalcularCalificacionConductor(conductorPenalizado)
       }
     }
 
@@ -1814,7 +1820,7 @@ export default class TripController {
 
     if (tipo === 'cliente_a_conductor') {
       const conductor = await Conductor.findByOrFail('usuario_id', calificadoId)
-      conductor.calificacion = Math.round(promedio * 100) / 100
+      conductor.calificacion = calificacionVisible(promedio, Number(conductor.penalizacionCancelacion || 0))
       await conductor.save()
     } else {
       const calificado = await User.findOrFail(calificadoId)
