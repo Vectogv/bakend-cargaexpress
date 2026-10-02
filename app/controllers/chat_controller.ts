@@ -5,6 +5,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { emitToClient, emitToDriver } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 import logger from '@adonisjs/core/services/logger'
+import { contieneContacto, MENSAJE_CONTACTO_BLOQUEADO } from '#services/filtro_contacto'
 
 export default class ChatController {
   async index({ auth, params, response, serialize }: HttpContext) {
@@ -93,6 +94,15 @@ export default class ChatController {
       return response
         .status(422)
         .send(await serialize.withoutWrapping({ error: 'El mensaje no puede estar vacío' }))
+    }
+    if (contieneContacto(texto)) {
+      return response.status(422).send(
+        await serialize.withoutWrapping({
+          error: MENSAJE_CONTACTO_BLOQUEADO,
+          message: MENSAJE_CONTACTO_BLOQUEADO,
+          code: 'CONTACTO_BLOQUEADO',
+        })
+      )
     }
 
     const msg = await MensajeChat.create({
