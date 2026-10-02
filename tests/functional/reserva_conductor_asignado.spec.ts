@@ -198,6 +198,41 @@ test.group('Reserva con conductor asignado al reservar', (group) => {
     ruta.assertBodyContains({ code: 'SIN_RUTA' })
   })
 
+  test('los teléfonos de la otra parte no se exponen mientras la reserva no se active', async ({
+    client,
+    assert,
+  }) => {
+    const { cliente, driver, viajeId } = await reservaAsignada(client)
+    const viaje = await Viaje.findOrFail(viajeId)
+    const conductorRow = await db.from('conductores').where('id', viaje.conductorId!).first()
+    await db.from('users').whereIn('id', [viaje.clienteId, conductorRow.usuario_id]).update({ telefono: '3001234567' })
+
+    const comoConductor = await client
+      .get(`/api/trips/${viajeId}`)
+      .header('Authorization', `Bearer ${driver.token}`)
+    comoConductor.assertStatus(200)
+    assert.isNull(comoConductor.body().cliente.telefono)
+
+    const lista = await client
+      .get('/api/trips/reservations?estado=reservado')
+      .header('Authorization', `Bearer ${driver.token}`)
+    assert.isNull(lista.body().data.find((v: any) => v.id === String(viajeId)).cliente.telefono)
+
+    const comoCliente = await client
+      .get(`/api/trips/${viajeId}`)
+      .header('Authorization', `Bearer ${cliente.token}`)
+    assert.isNull(comoCliente.body().conductor.telefono)
+
+    // Al activarse vuelven a verse.
+    await activacionVencida(viajeId)
+    assert.equal(await ReservationActivationService.activar(viajeId), 'activada')
+    const activo = await client
+      .get(`/api/trips/${viajeId}`)
+      .header('Authorization', `Bearer ${cliente.token}`)
+    assert.equal(activo.body().estado, 'aceptado')
+    assert.equal(activo.body().conductor.telefono, '3001234567')
+  })
+
   test('activación: pasa a aceptado con el mismo conductor', async ({ client, assert }) => {
     const { driver, viajeId } = await reservaAsignada(client)
     await activacionVencida(viajeId)

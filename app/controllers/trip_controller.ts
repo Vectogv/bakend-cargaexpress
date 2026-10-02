@@ -1759,6 +1759,8 @@ export default class TripController {
   }
 
   private formatViajeResponse(viaje: Viaje, rol: string | null) {
+    // Reserva asignada: solo chat (filtrado) hasta la activación, sin teléfonos de la otra parte.
+    const reservado = viaje.estado === 'reservado'
     return {
       id: String(viaje.id),
       _id: String(viaje.id),
@@ -1767,7 +1769,7 @@ export default class TripController {
         id: String(viaje.cliente.id),
         _id: String(viaje.cliente.id),
         nombre: `${viaje.cliente.nombre || ''} ${viaje.cliente.apellido || ''}`.trim(),
-        telefono: viaje.cliente.telefono,
+        telefono: reservado && rol === 'conductor' ? null : viaje.cliente.telefono,
         avatar: viaje.cliente.avatar,
       },
       conductor: viaje.conductor
@@ -1776,7 +1778,7 @@ export default class TripController {
             _id: String(viaje.conductor.id),
             nombre:
               `${viaje.conductor.usuario.nombre || ''} ${viaje.conductor.usuario.apellido || ''}`.trim(),
-            telefono: viaje.conductor.usuario.telefono,
+            telefono: reservado && rol === 'cliente' ? null : viaje.conductor.usuario.telefono,
             placa: viaje.conductor.placa,
             tipoVehiculo: viaje.conductor.tipoVehiculo,
             // F lib/contracts/calificacion.dart lee `calificacion`/`totalViajes`
