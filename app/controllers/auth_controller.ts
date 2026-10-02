@@ -47,7 +47,7 @@ const GOOGLE_WEB_CLIENT_ID_DEFECTO =
 const DUPLICADO = {
   placa: { error: 'Esa placa ya está registrada por otro conductor.', code: 'PLACA_DUPLICADA' },
   cedula: { error: 'Esa cédula ya está registrada por otro conductor.', code: 'CEDULA_DUPLICADA' },
-  email: { error: 'Ese correo ya está registrado.', code: 'EMAIL_DUPLICADO' },
+  email: { error: 'Ese correo ya está registrado.', message: 'Ese correo ya está registrado.', code: 'EMAIL_DUPLICADO' },
 }
 
 // ── Recuperación de contraseña ────────────────────────────────
@@ -81,6 +81,10 @@ export default class AuthController {
         error: 'Cédula, placa, tipo de vehículo y capacidad son requeridas para conductores',
       })
     }
+
+    // ponytail: usuarios viejos con mayúsculas pueden duplicarse; se busca con lower(email), sin migrar datos.
+    const correoUsado = await User.query().whereRaw('lower(email) = ?', [data.email]).first()
+    if (correoUsado) return response.status(409).send(DUPLICADO.email)
 
     // Placa y cédula son únicas: se responde 409 con un mensaje claro en vez
     // del error de base de datos.
@@ -187,7 +191,7 @@ export default class AuthController {
   @ApiResponse({ type: 'object' })
   async login({ request, serialize, response }: HttpContext) {
     const { email, password } = await request.validateUsing(loginValidator)
-    const user = await User.findBy('email', email)
+    const user = await User.query().whereRaw('lower(email) = ?', [email]).first()
     // Se verifica un hash también cuando el email no existe, para que el tiempo de
     // respuesta no revele qué correos están registrados.
     const passwordOk = await hash.verify(user?.password || (await getDummyHash()), password)
@@ -246,7 +250,7 @@ export default class AuthController {
       return invalido()
     }
 
-    let user = await User.findBy('email', correo)
+    let user = await User.query().whereRaw('lower(email) = ?', [correo]).first()
     if (user?.suspendido) {
       return response.status(403).send({
         code: 'CUENTA_SUSPENDIDA',
@@ -305,6 +309,8 @@ export default class AuthController {
       if (user.currentAccessToken) {
         await User.accessTokens.delete(user, user.currentAccessToken.identifier)
       }
+      user.fcmToken = null
+      await user.save()
     } catch {
       // El access token puede estar expirado o no enviarse.
     }
@@ -351,7 +357,7 @@ export default class AuthController {
   /** Siempre 200: no revela si el correo está registrado. */
   async forgotPassword({ request, response }: HttpContext) {
     const { email } = await request.validateUsing(forgotPasswordValidator)
-    const user = await User.findBy('email', email)
+    const user = await User.query().whereRaw('lower(email) = ?', [email]).first()
     if (user) {
       const codigo = String(randomInt(0, 1_000_000)).padStart(6, '0')
       await CodigoRecuperacion.query().where('user_id', user.id).whereNull('usado_at').delete()
@@ -378,7 +384,7 @@ export default class AuthController {
 
   async resetPassword({ request, response }: HttpContext) {
     const { email, codigo, password } = await request.validateUsing(resetPasswordValidator)
-    const user = await User.findBy('email', email)
+    const user = await User.query().whereRaw('lower(email) = ?', [email]).first()
     if (!user) return response.status(400).send(CODIGO_INVALIDO)
 
     const registro = await CodigoRecuperacion.query()

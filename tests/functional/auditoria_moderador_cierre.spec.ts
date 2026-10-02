@@ -142,4 +142,21 @@ test.group('Auditoría #4/#8 - moderador resuelve cierres pendientes', (group) =
     res.assertStatus(200)
     res.assertBodyContains({ estado: 'finalizado' })
   })
+  test('con fcm_token en cliente y conductor, finalizar y disputa responden 200 (push con data viaje_estado)', async ({
+    client,
+  }) => {
+    const moderador = await crearModerador(client, 'popayan')
+    for (const resolucion of ['finalizar', 'disputa']) {
+      const tripId = await viajePendienteConfirmacion(client, 'popayan')
+      const v = await db.from('viajes').where('id', tripId).first()
+      const c = await db.from('conductores').where('id', v.conductor_id).first()
+      await db.from('users').whereIn('id', [v.cliente_id, c.usuario_id]).update({ fcm_token: `tok_${uniq()}` })
+      await vencerPlazo(tripId)
+      const res = await client
+        .post(`/api/moderator/trips/${tripId}/resolve-close`)
+        .bearerToken(moderador)
+        .json({ resolucion, nota: NOTA })
+      res.assertStatus(200)
+    }
+  })
 })

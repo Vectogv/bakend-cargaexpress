@@ -1181,6 +1181,25 @@ export default class ModeratorController {
           notificadoPor: 'moderador',
         })
         emitTripUpdateToModerators(viajeFinalizado)
+
+        try {
+          const usuarios = await User.query().whereIn(
+            'id',
+            [viajeFinalizado.clienteId, conductor?.usuarioId].filter((x): x is number => !!x)
+          )
+          for (const u of usuarios) {
+            if (u.fcmToken) {
+              await sendToToken(
+                u.fcmToken,
+                'Envío entregado',
+                `El viaje #${viajeFinalizado.id} fue cerrado por un moderador.`,
+                { tipo: 'viaje_estado', viajeId: String(viajeFinalizado.id) }
+              )
+            }
+          }
+        } catch (e) {
+          logger.error({ err: e, viajeId }, 'Error enviando push de cierre por moderador')
+        }
       }
 
       return serialize.withoutWrapping({
@@ -1269,7 +1288,8 @@ export default class ModeratorController {
       await sendToToken(
         clienteUsuario.fcmToken,
         'Tu cierre fue revisado',
-        `El viaje #${viaje.id} fue abierto como disputa. Un moderador lo está revisando.`
+        `El viaje #${viaje.id} fue abierto como disputa. Un moderador lo está revisando.`,
+        { tipo: 'viaje_estado', viajeId: String(viaje.id) }
       )
     }
 

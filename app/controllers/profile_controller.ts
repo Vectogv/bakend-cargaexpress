@@ -7,6 +7,7 @@ import SignedUploadService from '#services/signed_upload_service'
 import SessionService from '#services/session_service'
 import hash from '@adonisjs/core/services/hash'
 import logger from '@adonisjs/core/services/logger'
+import User from '#models/user'
 
 export default class ProfileController {
   @ApiOperation({
@@ -135,6 +136,10 @@ export default class ProfileController {
     if (!fcmToken && error) {
       logger.warn(`Usuario ${user.id} sin token FCM: ${String(error).slice(0, 300)}`)
       return serialize.withoutWrapping({ fcmToken: user.fcmToken ? 'registrado' : null })
+    }
+    // Un token pertenece a un solo usuario (el celular cambió de cuenta).
+    if (fcmToken) {
+      await User.query().where('fcm_token', fcmToken).whereNot('id', user.id).update({ fcm_token: null })
     }
     user.fcmToken = fcmToken || null
     await user.save()

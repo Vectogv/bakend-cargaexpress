@@ -57,7 +57,7 @@ test.group('Auth - Register', (group) => {
       rol: 'cliente', edad: 30,
     })
 
-    response.assertStatus(422)
+    response.assertStatus(409)
   })
 
   test('fail registration with invalid email', async ({ client }) => {
