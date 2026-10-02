@@ -66,7 +66,12 @@ export default class GeoService {
         'viajes.*',
         db.raw(`${distanciaSql('viajes.origen_lat', 'viajes.origen_lng', lat, lng)} as distancia`)
       )
-      .whereIn('estado', ['buscando_conductor', 'pendiente'])
+      .where((q) =>
+        q
+          .whereIn('estado', ['buscando_conductor', 'pendiente'])
+          // Reserva sin conductor: se oferta desde que se crea.
+          .orWhere((r) => r.where('estado', 'reservado').whereNull('conductor_id'))
+      )
       .whereNotIn('id', idsConOfertaAceptada)
       .whereRaw(haversineSql('viajes.origen_lat', 'viajes.origen_lng', lat, lng, radioKm))
       .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'calificacion'))

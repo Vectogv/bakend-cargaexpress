@@ -31,7 +31,7 @@ import db from '@adonisjs/lucid/services/db'
 import reservationConfig from '#config/reservations'
 import SignedUploadService from '#services/signed_upload_service'
 import DriverDebtSuspensionService from '#services/driver_debt_suspension_service'
-import { ESTADOS_CONDUCTOR_OCUPADO } from '#services/trip_conflict_service'
+import { ESTADOS_CONDUCTOR_OCUPADO, ORDEN_CONDUCTOR_OCUPADO_SQL } from '#services/trip_conflict_service'
 
 /**
  * Totales de ganancias de UN conductor (opcionalmente desde una fecha). Las subconsultas
@@ -274,6 +274,7 @@ export default class DriverController {
     const viajeActivo = await Viaje.query()
       .where('conductor_id', conductor.id)
       .whereIn('estado', ESTADOS_CONDUCTOR_OCUPADO)
+      .orderByRaw(ORDEN_CONDUCTOR_OCUPADO_SQL)
       .first()
 
     if (viajeActivo) {

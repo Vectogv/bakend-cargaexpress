@@ -57,6 +57,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   // ── Reservas programadas ──────────────────────────────────────
   RESERVATION_MIN_LEAD_TIME_MINUTES: Env.schema.number.optional(),
   RESERVATION_DISPATCH_LEAD_MINUTES: Env.schema.number.optional(),
+  RESERVATION_ASSIGNED_LEAD_MINUTES: Env.schema.number.optional(),
   RESERVATION_CONFLICT_WINDOW_MINUTES: Env.schema.number.optional(),
   RESERVATION_REMINDER_LEAD_MINUTES: Env.schema.number.optional(),
   RESERVATION_ACTIVATION_BATCH_SIZE: Env.schema.number.optional(),

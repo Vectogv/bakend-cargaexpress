@@ -20,6 +20,12 @@ const reservationConfig = {
   dispatchLeadMinutes: Number(env.get('RESERVATION_DISPATCH_LEAD_MINUTES', 120)),
 
   /**
+   * Reserva con conductor ya asignado: minutos antes de la hora programada en
+   * que pasa a `aceptado` (se revela la ubicación y el conductor sale al origen).
+   */
+  assignedLeadMinutes: Number(env.get('RESERVATION_ASSIGNED_LEAD_MINUTES', 45)),
+
+  /**
    * Ventana usada para detectar conflictos de horario entre viajes de un mismo
    * conductor (minutos alrededor de la hora programada).
    */

@@ -14,6 +14,8 @@ import AntifraudeService from '#services/antifraude_service'
 import { distanciaKm } from '#services/geo_service'
 import antifraudeConfig from '#config/antifraude'
 import DriverDebtSuspensionService from '#services/driver_debt_suspension_service'
+import reservationConfig from '#config/reservations'
+import { parseScheduledDateTime } from '#services/reservation_time'
 
 export default class OfferController {
   async store({ auth, request, response, params }: HttpContext) {
@@ -62,13 +64,26 @@ export default class OfferController {
     if (!viaje) {
       return response.status(404).send({ error: 'Viaje no encontrado' })
     }
-    if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
+    // Una reserva recibe ofertas desde que se crea, hasta que se le asigna conductor.
+    const esReserva = viaje.estado === 'reservado' && viaje.conductorId === null
+    if (!esReserva && !['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
       return response.status(400).send({ error: 'El viaje ya no acepta ofertas' })
+    }
+
+    if (esReserva) {
+      // Sin exigir GPS reciente ni radio: el conductor puede estar en cualquier
+      // lado hoy; lo que importa es que no tenga otro viaje a esa hora.
+      if (await TripConflictService.conductorTieneConflicto(conductor.id, viaje)) {
+        return response.status(409).send({
+          error: 'Ya tienes otro viaje a esa hora. No puedes ofertar en esta reserva.',
+          code: 'CONDUCTOR_OCUPADO',
+        })
+      }
     }
 
     // H2: El conductor solo puede ofertar si su ubicación guardada/reciente está
     // dentro de radioOfertaKm del ORIGEN del viaje.
-    try {
+    if (!esReserva) try {
       const ubicacion = AntifraudeService.obtenerUbicacionReciente(conductor)
       const distOfertaKm = distanciaKm(
         ubicacion.lat,
@@ -135,7 +150,10 @@ export default class OfferController {
       estado: 'pendiente',
       placa,
       mensaje,
-      expiraAt: DateTime.now().plus({ seconds: 28 }),
+      // Reserva: la oferta vive hasta 12 h (o hasta la activación, lo que llegue antes).
+      expiraAt: esReserva
+        ? DateTime.min(DateTime.now().plus({ hours: 12 }), viaje.activacionAt ?? DateTime.now().plus({ hours: 12 }))
+        : DateTime.now().plus({ seconds: 28 }),
     })
 
     // Si es la primera oferta, pasar a 'pendiente'
@@ -265,7 +283,8 @@ export default class OfferController {
         }
 
         // Verificar (bajo lock) que el viaje sigue aceptando ofertas
-        if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
+        const esReserva = viaje.estado === 'reservado' && viaje.conductorId === null
+        if (!esReserva && !['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
           throw Object.assign(new Error('YA_ASIGNADO'), {
             statusCode: 400,
             message: 'El viaje ya no acepta ofertas',
@@ -346,12 +365,23 @@ export default class OfferController {
           .update({ estado: 'rechazada' })
 
         viaje.conductorId = oferta.conductorId
-        viaje.estado = 'aceptado'
         viaje.precioFinal = oferta.monto
         // PIN de entrega: el cliente se lo da a quien recibe y el conductor lo
         // escribe al cerrar cerca del destino (trip_controller.complete).
         viaje.pinEntrega = String(randomInt(0, 10000)).padStart(4, '0')
-        viaje.aceptadoAt = DateTime.now()
+        if (esReserva) {
+          // Sigue `reservado` con conductor asignado; pasa a `aceptado` en
+          // activacion_at (ReservationActivationService), poco antes de la hora.
+          const programada = parseScheduledDateTime(viaje.fechaProgramada, viaje.horaProgramada)
+          if (programada) {
+            viaje.activacionAt = programada
+              .minus({ minutes: reservationConfig.assignedLeadMinutes })
+              .setZone(DateTime.now().zone)
+          }
+        } else {
+          viaje.estado = 'aceptado'
+          viaje.aceptadoAt = DateTime.now()
+        }
         await viaje.useTransaction(trx).save()
 
         return { viaje, oferta }
@@ -376,9 +406,11 @@ export default class OfferController {
     // Se usan los helpers (no `getIO()` directo) para que el endpoint siga
     // respondiendo aunque Socket.IO no esté inicializado. Eventos y rooms
     // son exactamente los mismos que antes.
+    // Reserva: estado 'reservado' (asignada, sin activar); viaje inmediato: 'aceptado'.
+    const estado = viaje.estado
     emitTripStatusChanged(viaje.clienteId, oferta.conductor.usuarioId, {
       id: String(viaje.id),
-      estado: 'aceptado',
+      estado,
     })
 
     emitToClient(viaje.clienteId, 'offer:accepted', {
@@ -394,30 +426,39 @@ export default class OfferController {
         rating: oferta.conductor.calificacion,
         totalViajes: oferta.conductor.totalViajes,
       },
-      estado: 'aceptado',
+      estado,
     })
 
     emitToDriver(oferta.conductor.usuarioId, 'offer:accepted', {
       viajeId: String(viaje.id),
       ofertaId: String(oferta.id),
       monto: oferta.monto,
-      estado: 'aceptado',
+      estado,
     })
 
     emitToDriver(oferta.conductor.usuarioId, 'trip:offer_accepted', {
       viajeId: String(viaje.id),
       ofertaId: String(oferta.id),
       monto: oferta.monto,
-      estado: 'aceptado',
+      estado,
     })
 
     if (oferta.conductor.usuario.fcmToken) {
-      await sendToToken(
-        oferta.conductor.usuario.fcmToken,
-        'Oferta aceptada',
-        `Tu oferta de $${oferta.monto} fue aceptada. Dirígete al origen del viaje`,
-        { tipo: 'viaje_estado', viajeId: String(viaje.id) }
-      )
+      if (estado === 'reservado') {
+        await sendToToken(
+          oferta.conductor.usuario.fcmToken,
+          `Reserva asignada: ${viaje.fechaProgramada} ${viaje.horaProgramada}`,
+          `Tu oferta de $${oferta.monto} fue aceptada. Te avisamos cuando sea hora de salir.`,
+          { tipo: 'reserva', viajeId: String(viaje.id) }
+        )
+      } else {
+        await sendToToken(
+          oferta.conductor.usuario.fcmToken,
+          'Oferta aceptada',
+          `Tu oferta de $${oferta.monto} fue aceptada. Dirígete al origen del viaje`,
+          { tipo: 'viaje_estado', viajeId: String(viaje.id) }
+        )
+      }
     }
 
     const otrasOfertas = await Oferta.query()

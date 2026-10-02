@@ -27,6 +27,19 @@ export const ESTADOS_CONDUCTOR_OCUPADO = [
 ]
 
 /**
+ * Orden determinista para elegir "el" viaje en curso del conductor: la fase
+ * más avanzada primero y, a igualdad, el más reciente.
+ */
+export const ORDEN_CONDUCTOR_OCUPADO_SQL = `CASE estado
+  WHEN 'sos' THEN 0
+  WHEN 'en_curso' THEN 1
+  WHEN 'conductor_llegada' THEN 2
+  WHEN 'conductor_en_camino' THEN 3
+  WHEN 'aceptado' THEN 4
+  ELSE 5
+END ASC, id DESC`
+
+/**
  * Validación de disponibilidad de un conductor.
  *
  * Reglas:
@@ -77,16 +90,20 @@ export default class TripConflictService {
     excluirViajeId?: number | null,
     client?: any
   ): Promise<boolean> {
+    // `reservado` con conductor = reserva asignada sin activar: ocupa solo si
+    // su hora cae dentro de la ventana (igual que una reserva ya aceptada).
     const query = Viaje.query(client ? { client } : {})
       .where('conductor_id', conductorId)
-      .whereIn('estado', ESTADOS_CONDUCTOR_OCUPADO)
+      .whereIn('estado', [...ESTADOS_CONDUCTOR_OCUPADO, 'reservado'])
     if (excluirViajeId) query.whereNot('id', excluirViajeId)
 
     const otros = await query
     const now = DateTime.now()
 
     for (const otro of otros) {
-      if (otro.tipoProgramacion !== 'programada' || otro.estado !== 'aceptado') return true
+      const reservaFutura =
+        otro.tipoProgramacion === 'programada' && ['aceptado', 'reservado'].includes(otro.estado)
+      if (!reservaFutura) return true
       const hora = effectiveTripTime(otro, now)
       if (!hora || timesConflict(hora, now)) return true
     }

@@ -24,7 +24,9 @@ import GeoService, { distanciaKm } from '#services/geo_service'
 import { rutaDelViaje, payloadRuta } from '#services/trip_route_service'
 import CoverageService from '#services/coverage_service'
 import TripDispatchService from '#services/trip_dispatch_service'
-import TripConflictService from '#services/trip_conflict_service'
+import TripConflictService, { ESTADOS_CONDUCTOR_OCUPADO, ORDEN_CONDUCTOR_OCUPADO_SQL } from '#services/trip_conflict_service'
+import OfferExpiryService from '#services/offer_expiry_service'
+import Oferta from '#models/oferta'
 import reservationConfig from '#config/reservations'
 import { parseScheduledDateTime } from '#services/reservation_time'
 import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
@@ -85,6 +87,23 @@ export function viajeActivoDelCliente(clienteId: number, trx?: TransactionClient
     .where('cliente_id', clienteId)
     .whereIn('estado', ESTADOS_VIAJE_ACTIVO_CLIENTE)
     .first()
+}
+
+/** H4: cancelar un viaje ya asignado resta reputación y calificación visible. */
+async function penalizarCancelacionConductor(conductor: Conductor) {
+  const conductorUser = await User.find(conductor.usuarioId)
+  if (conductorUser) {
+    conductorUser.reputacion = Math.max(
+      1.0,
+      Number(conductorUser.reputacion || 5.0) - antifraudeConfig.penalizacionCancelacion
+    )
+    await conductorUser.save()
+  }
+  // ponytail: la penalizacion se acumula para siempre; si hace falta perdon,
+  // bajar 0,1 por viaje finalizado en trip_finalization_service.ts.
+  conductor.penalizacionCancelacion =
+    Number(conductor.penalizacionCancelacion || 0) + antifraudeConfig.penalizacionCancelacion
+  await recalcularCalificacionConductor(conductor)
 }
 
 type Punto = { lat: number; lng: number }
@@ -405,6 +424,9 @@ export default class TripController {
       await sendToToken(user.fcmToken, 'Reserva creada', 'Tu reserva fue creada correctamente.')
     }
 
+    // La reserva recibe ofertas desde ya: se avisa a los conductores cercanos.
+    await TripDispatchService.buscarConductores(viaje)
+
     // `serialize.withoutWrapping` es asíncrono: hay que esperarlo antes de
     // pasarlo a response.send, de lo contrario el body sale vacío.
     const payload = await serialize.withoutWrapping({
@@ -507,6 +529,11 @@ export default class TripController {
     const conductor = viaje.conductorId ? await Conductor.find(viaje.conductorId) : null
     if (viaje.clienteId !== user.id && conductor?.usuarioId !== user.id) {
       return response.status(403).json({ error: 'No participas en este viaje' })
+    }
+    // Reserva asignada sin activar (`reservado`) u otro estado sin seguimiento:
+    // no se revela nada de la posición del conductor.
+    if (!ESTADOS_CONDUCTOR_OCUPADO.includes(viaje.estado)) {
+      return response.status(404).json({ error: 'El viaje no está en una fase con ruta', code: 'SIN_RUTA' })
     }
     if (!conductor?.ultimaUbicacionLat || !conductor?.ultimaUbicacionLng) {
       return response.status(404).json({ error: 'Aún no hay ubicación del conductor', code: 'SIN_UBICACION' })
@@ -623,6 +650,7 @@ export default class TripController {
           .preload('conductor', (q) => q.select('id', 'placa', 'tipo_vehiculo', 'foto_conductor', 'calificacion', 'total_viajes', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono')))
       viaje = await viajeDelConductor()
         .whereIn('estado', ['aceptado', 'conductor_en_camino', 'conductor_llegada', 'en_curso', 'entregado', 'esperando_confirmacion', 'sos'])
+        .orderByRaw(ORDEN_CONDUCTOR_OCUPADO_SQL)
         .first()
       // Sin viaje en curso: el más reciente que espera la confirmación del
       // cliente, para no perderlo al reiniciar la app. No cuenta como ocupado
@@ -1366,7 +1394,22 @@ export default class TripController {
 
     // R1: Cancelación - Cliente no puede cancelar si conductor está a < radioCierreKm del origen
     // R1: Conductor SÍ puede cancelar pero exige justificación (mín 10 chars) y registra en logs_fraude
-    if (user.rol === 'cliente' && viaje.conductorId) {
+    // Reserva sin activar: el cliente cancela sin regla de 1 km ni penalización;
+    // el conductor asignado la "suelta" y la reserva se reabre (no se cancela).
+    const esReserva = viaje.estado === 'reservado'
+    if (esReserva && user.rol === 'conductor') {
+      const justificacion = request.input('justificacion') as string | undefined
+      try {
+        await AntifraudeService.validarCancelacionConductor(justificacion)
+      } catch (e: any) {
+        if (e.code === 'JUSTIFICACION_REQUERIDA') {
+          return response.status(422).send({ error: e.message, code: e.code })
+        }
+        throw e
+      }
+      return serialize.withoutWrapping(await this.reabrirReserva(viaje, user, justificacion!))
+    }
+    if (user.rol === 'cliente' && viaje.conductorId && !esReserva) {
       const conductor = await Conductor.find(viaje.conductorId)
       if (conductor) {
         try {
@@ -1420,21 +1463,7 @@ export default class TripController {
     // H4: Penalizar reputacion del conductor si el cancela un viaje ya asignado
     if (user.rol === 'conductor' && viaje.conductorId && ['aceptado', 'conductor_en_camino'].includes(estadoAnterior)) {
       const conductorPenalizado = await Conductor.find(viaje.conductorId)
-      if (conductorPenalizado) {
-        const conductorUser = await User.find(conductorPenalizado.usuarioId)
-        if (conductorUser) {
-          conductorUser.reputacion = Math.max(
-            1.0,
-            Number(conductorUser.reputacion || 5.0) - antifraudeConfig.penalizacionCancelacion
-          )
-          await conductorUser.save()
-        }
-        // ponytail: la penalizacion se acumula para siempre; si hace falta perdon,
-        // bajar 0,1 por viaje finalizado en trip_finalization_service.ts.
-        conductorPenalizado.penalizacionCancelacion =
-          Number(conductorPenalizado.penalizacionCancelacion || 0) + antifraudeConfig.penalizacionCancelacion
-        await recalcularCalificacionConductor(conductorPenalizado)
-      }
+      if (conductorPenalizado) await penalizarCancelacionConductor(conductorPenalizado)
     }
 
     const conductorStatusChanged = viaje.conductorId
@@ -1493,9 +1522,13 @@ export default class TripController {
       if (conductorCancelado?.fcmToken) {
         await sendToToken(
           conductorCancelado.fcmToken,
-          'Viaje cancelado',
-          user.rol === 'cliente' ? 'El cliente canceló el viaje.' : 'El administrador canceló el viaje.',
-          datosPush
+          esReserva ? 'Reserva cancelada' : 'Viaje cancelado',
+          esReserva
+            ? `El cliente canceló la reserva del ${viaje.fechaProgramada} ${viaje.horaProgramada}.`
+            : user.rol === 'cliente'
+              ? 'El cliente canceló el viaje.'
+              : 'El administrador canceló el viaje.',
+          esReserva ? { tipo: 'reserva', viajeId: String(viaje.id) } : datosPush
         ).catch(() => {})
       }
     }
@@ -1505,6 +1538,62 @@ export default class TripController {
       estado: viaje.estado,
       canceladoAt: viaje.canceladoAt.toISO(),
     })
+  }
+
+  /**
+   * El conductor asignado suelta una reserva sin activar: la reserva vuelve a
+   * recibir ofertas (sigue `reservado`). Penaliza solo si faltan menos de 24 h.
+   */
+  private async reabrirReserva(viaje: Viaje, user: User, justificacion: string) {
+    const conductor = await Conductor.findOrFail(viaje.conductorId!)
+    const ahora = DateTime.now()
+    const programada = parseScheduledDateTime(viaje.fechaProgramada, viaje.horaProgramada)
+    const penalizado = !!programada && programada.diff(ahora, 'hours').hours < 24
+
+    if (penalizado) {
+      await AntifraudeService.registrarFraude('cancelacion_conductor', {
+        userId: user.id,
+        conductorId: conductor.id,
+        viajeId: viaje.id,
+        justificacion,
+        descripcion: `Conductor soltó la reserva del ${viaje.fechaProgramada} ${viaje.horaProgramada} con menos de 24 h. Justificación: ${justificacion}`,
+      })
+      await penalizarCancelacionConductor(conductor)
+    }
+
+    await Oferta.query()
+      .where('viaje_id', viaje.id)
+      .where('estado', 'aceptada')
+      .update({ estado: 'cancelada' })
+    await OfferExpiryService.expirarDelViaje(viaje.id)
+
+    viaje.conductorId = null
+    viaje.precioFinal = null
+    viaje.pinEntrega = null
+    const activacion = programada?.minus({ minutes: reservationConfig.dispatchLeadMinutes }).setZone(ahora.zone)
+    viaje.activacionAt = activacion && activacion > ahora ? activacion : ahora
+    await viaje.save()
+
+    emitToClient(viaje.clienteId, 'trip:status_changed', {
+      id: String(viaje.id),
+      estado: 'reservado',
+      conductorId: null,
+    })
+    emitTripUpdateToModerators(viaje)
+
+    const cliente = await User.find(viaje.clienteId)
+    if (cliente?.fcmToken) {
+      await sendToToken(
+        cliente.fcmToken,
+        'Tu conductor canceló la reserva',
+        'Tu conductor canceló la reserva; buscamos otro.',
+        { tipo: 'viaje_estado', viajeId: String(viaje.id) }
+      ).catch(() => {})
+    }
+
+    await TripDispatchService.buscarConductores(viaje)
+
+    return { id: String(viaje.id), estado: 'reservado', reabierta: true, penalizado }
   }
 
   @ApiOperation({ summary: 'Solicitar cancelación', description: 'El conductor o el cliente solicitan la cancelación del viaje cuando está en_curso. El administrador debe aprobarla.' })
@@ -1651,7 +1740,7 @@ export default class TripController {
       }
       const estado = viaje.estado as string
       const disponibleSinAsignar = user.rol === 'conductor' && !esConductor
-        && ['buscando_conductor', 'pendiente'].includes(estado)
+        && (['buscando_conductor', 'pendiente'].includes(estado) || (estado === 'reservado' && !viaje.conductorId))
       if (!esCliente && !esConductor && !disponibleSinAsignar) {
         return response.status(403).send({ error: 'No tienes permisos para ver este viaje' })
       }

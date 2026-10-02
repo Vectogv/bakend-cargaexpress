@@ -7,6 +7,20 @@ import { sendToToken } from '#services/push_notification_service'
 import logger from '@adonisjs/core/services/logger'
 import { contieneContacto, MENSAJE_CONTACTO_BLOQUEADO } from '#services/filtro_contacto'
 
+/** Solo el cliente y el conductor asignado (nadie más, ni con conductor_id nulo). */
+async function esParticipante(viaje: Viaje, userId: number) {
+  if (viaje.clienteId === userId) return true
+  if (!viaje.conductorId) return false
+  const conductor = await Conductor.find(viaje.conductorId)
+  return conductor?.usuarioId === userId
+}
+
+/** Durante el viaje, y en una reserva ya asignada (`reservado` con conductor). */
+function chatDisponible(viaje: Viaje) {
+  if (viaje.estado === 'reservado') return viaje.conductorId !== null
+  return ['aceptado', 'en_curso', 'conductor_en_camino', 'conductor_llegada', 'sos'].includes(viaje.estado)
+}
+
 export default class ChatController {
   async index({ auth, params, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -14,15 +28,12 @@ export default class ChatController {
     if (!viaje) {
       return response.status(404).send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
-    if (viaje.clienteId !== user.id && viaje.conductorId) {
-      const conductor = await Conductor.find(viaje.conductorId)
-      if (!conductor || conductor.usuarioId !== user.id) {
-        return response
-          .status(403)
-          .send(await serialize.withoutWrapping({ error: 'No participas en este viaje' }))
-      }
+    if (!(await esParticipante(viaje, user.id))) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ error: 'No participas en este viaje' }))
     }
-    if (!['aceptado', 'en_curso', 'conductor_en_camino', 'conductor_llegada', 'sos'].includes(viaje.estado)) {
+    if (!chatDisponible(viaje)) {
       return response
         .status(422)
         .send(await serialize.withoutWrapping({ error: 'El chat solo está disponible durante el viaje' }))
@@ -73,17 +84,12 @@ export default class ChatController {
       return response.status(404).send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
     }
 
-    let esParticipante = viaje.clienteId === user.id
-    if (!esParticipante && viaje.conductorId) {
-      const conductor = await Conductor.find(viaje.conductorId)
-      esParticipante = conductor?.usuarioId === user.id
-    }
-    if (!esParticipante) {
+    if (!(await esParticipante(viaje, user.id))) {
       return response
         .status(403)
         .send(await serialize.withoutWrapping({ error: 'No participas en este viaje' }))
     }
-    if (!['aceptado', 'en_curso', 'conductor_en_camino', 'conductor_llegada', 'sos'].includes(viaje.estado)) {
+    if (!chatDisponible(viaje)) {
       return response
         .status(422)
         .send(await serialize.withoutWrapping({ error: 'El chat solo está disponible durante el viaje' }))

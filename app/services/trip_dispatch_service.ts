@@ -87,9 +87,11 @@ export default class TripDispatchService {
       const precioFormateado = Number(viaje.precioEstimado).toLocaleString('es-CO')
       await sendToMultiple(
         tokens,
-        esProgramada ? 'Reserva programada disponible' : 'Nuevo viaje disponible',
         esProgramada
-          ? `${viaje.fechaProgramada ?? ''} ${viaje.horaProgramada ?? ''} — ${viaje.origenDireccion} — $${precioFormateado}`
+          ? `Nueva reserva para ${viaje.fechaProgramada ?? ''} ${viaje.horaProgramada ?? ''}`
+          : 'Nuevo viaje disponible',
+        esProgramada
+          ? `${viaje.origenDireccion} — $${precioFormateado}`
           : `Cerca de tu ubicación — $${precioFormateado}`,
         tripFcmData,
         'default'

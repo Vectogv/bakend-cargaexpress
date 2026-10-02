@@ -9,6 +9,7 @@ import Conductor from '#models/conductor'
 import MensajeChat from '#models/mensaje_chat'
 import RedisService from '#services/redis_service'
 import { claveDe } from '#services/coverage_service'
+import { ESTADOS_CONDUCTOR_OCUPADO } from '#services/trip_conflict_service'
 
 let io: SocketServer | null = null
 
@@ -332,6 +333,8 @@ export async function initSocket(nodeHttpServer: NodeServer | null) {
         if (tripId == null) return
         const viaje = await Viaje.find(tripId)
         if (!viaje || viaje.conductorId == null) return
+        // Reserva asignada (`reservado`): la ubicación no se revela hasta activarse.
+        if (!ESTADOS_CONDUCTOR_OCUPADO.includes(viaje.estado)) return
         const conductor = await Conductor.find(viaje.conductorId)
         if (!conductor || conductor.usuarioId !== user.id) return
         const raw = data as Record<string, unknown>
