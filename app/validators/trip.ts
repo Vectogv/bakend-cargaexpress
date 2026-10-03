@@ -56,3 +56,11 @@ export const tripCompleteValidator = vine.create({
 export const tripCancelValidator = vine.create({
   motivo: vine.string().nullable().optional(),
 })
+
+export const tripPlazoValidator = vine.create({
+  minutos: vine.number().in([15, 30, 60]),
+})
+
+export const tripPlazoResponderValidator = vine.create({
+  aceptar: vine.boolean(),
+})

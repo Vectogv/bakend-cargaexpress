@@ -158,6 +158,8 @@ router
     router.post(':id/confirm-close', [controllers.Trip, 'confirmClose'])
       .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
     router.post(':id/cancel', [controllers.Trip, 'cancel'])
+    router.post(':id/plazo', [controllers.Trip, 'pedirPlazo']) // conductor asignado a una reserva
+    router.post(':id/plazo/responder', [controllers.Trip, 'responderPlazo']) // cliente dueño
     router.post(':id/request-cancellation', [controllers.Trip, 'requestCancellation'])
     router.post(':id/rate', [controllers.Trip, 'rate'])
     router.post(':id/delivery-photo', [controllers.Trip, 'deliveryPhoto'])

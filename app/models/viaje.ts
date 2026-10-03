@@ -35,6 +35,9 @@ export default class Viaje extends BaseModel {
     'receptorNombre',
     'receptorTelefono',
     'tipoVehiculoRequerido',
+    'plazoMinutos',
+    'plazoEstado',
+    'plazoSolicitadoAt',
     'tiempoEstimadoMinutos',
     'createdAt',
     'aceptadoAt',
@@ -162,6 +165,20 @@ export default class Viaje extends BaseModel {
   @ApiProperty()
   @column()
   declare tipoVehiculoRequerido: string | null
+
+  /** "Pedir más plazo" (solo reservas asignadas): 15 | 30 | 60, una sola vez. */
+  @ApiProperty()
+  @column()
+  declare plazoMinutos: number | null
+
+  /** 'pendiente' | 'aceptado' | 'rechazado' */
+  @ApiProperty()
+  @column()
+  declare plazoEstado: string | null
+
+  @ApiProperty()
+  @column.dateTime()
+  declare plazoSolicitadoAt: DateTime | null
 
   @ApiProperty()
   @column()

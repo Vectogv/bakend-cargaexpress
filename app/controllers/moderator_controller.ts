@@ -1407,6 +1407,10 @@ export default class ModeratorController {
         fechaProgramada: t.fechaProgramada,
         horaProgramada: t.horaProgramada,
         activacionAt: t.activacionAt?.toISO() ?? null,
+        // "Pedir más plazo": el moderador lo ve, pero lo decide el cliente.
+        plazo: t.plazoEstado
+          ? { minutos: t.plazoMinutos, estado: t.plazoEstado, solicitadoAt: t.plazoSolicitadoAt?.toISO() ?? null }
+          : null,
         origenDireccion: t.origenDireccion,
         origen: { lat: t.origenLat, lng: t.origenLng },
         destinoDireccion: t.destinoDireccion,

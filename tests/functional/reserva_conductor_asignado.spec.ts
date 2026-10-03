@@ -346,3 +346,103 @@ test.group('Reserva con conductor asignado al reservar', (group) => {
     assert.equal(viaje.estado, 'cancelado')
   })
 })
+
+test.group('Reserva asignada: pedir más plazo', (group) => {
+  group.each.setup(() => testUtils.db().withGlobalTransaction())
+
+  const pedir = (client: any, token: string, viajeId: number, minutos: unknown) =>
+    client.post(`/api/trips/${viajeId}/plazo`).header('Authorization', `Bearer ${token}`).json({ minutos })
+  const responder = (client: any, token: string, viajeId: number, aceptar: boolean) =>
+    client
+      .post(`/api/trips/${viajeId}/plazo/responder`)
+      .header('Authorization', `Bearer ${token}`)
+      .json({ aceptar })
+
+  test('pedir 30 queda pendiente; segunda vez 409; inválido 422; tercero 403', async ({
+    client,
+    assert,
+  }) => {
+    const { cliente, driver, viajeId } = await reservaAsignada(client)
+
+    ;(await pedir(client, driver.token, viajeId, 20)).assertStatus(422)
+    const otro = await registerDriver(client)
+    ;(await pedir(client, otro.token, viajeId, 30)).assertStatus(403)
+
+    const ok = await pedir(client, driver.token, viajeId, 30)
+    ok.assertStatus(200)
+    assert.deepEqual(ok.body().plazo, { minutos: 30, estado: 'pendiente' })
+
+    const repetido = await pedir(client, driver.token, viajeId, 15)
+    repetido.assertStatus(409)
+    assert.equal(repetido.body().code, 'PLAZO_YA_SOLICITADO')
+
+    const show = await client.get(`/api/trips/${viajeId}`).header('Authorization', `Bearer ${cliente.token}`)
+    show.assertStatus(200)
+    assert.equal(show.body().plazo.estado, 'pendiente')
+    assert.equal(show.body().plazo.minutos, 30)
+    assert.isNotNull(show.body().plazo.solicitadoAt)
+  })
+
+  test('el cliente acepta: recogida y activación se corren los minutos pedidos', async ({
+    client,
+    assert,
+  }) => {
+    const { cliente, driver, viajeId } = await reservaAsignada(client)
+    const antes = await Viaje.findOrFail(viajeId)
+    const programadaAntes = parseScheduledDateTime(antes.fechaProgramada, antes.horaProgramada)!
+
+    ;(await responder(client, cliente.token, viajeId, true)).assertStatus(409)
+    ;(await pedir(client, driver.token, viajeId, 30)).assertStatus(200)
+    ;(await responder(client, driver.token, viajeId, true)).assertStatus(403)
+
+    const res = await responder(client, cliente.token, viajeId, true)
+    res.assertStatus(200)
+    assert.deepEqual(res.body().plazo, { minutos: 30, estado: 'aceptado' })
+    assert.equal(res.body().estado, 'reservado')
+
+    const viaje = await Viaje.findOrFail(viajeId)
+    assert.equal(viaje.conductorId, driver.conductorId)
+    assert.equal(viaje.plazoEstado, 'aceptado')
+    const programada = parseScheduledDateTime(viaje.fechaProgramada, viaje.horaProgramada)!
+    assert.equal(programada.diff(programadaAntes, 'minutes').minutes, 30)
+    assert.equal(res.body().horaProgramada, programada.toFormat('HH:mm'))
+    assert.equal(
+      Math.round(viaje.activacionAt!.diff(antes.activacionAt!, 'minutes').minutes),
+      30
+    )
+
+    // Sigue siendo una sola vez por reserva.
+    ;(await responder(client, cliente.token, viajeId, true)).assertStatus(409)
+    ;(await pedir(client, driver.token, viajeId, 15)).assertStatus(409)
+  })
+
+  test('el cliente rechaza: la reserva se libera sin penalizar al conductor', async ({
+    client,
+    assert,
+  }) => {
+    const { cliente, driver, viajeId } = await reservaAsignada(client)
+    // A menos de 24 h, soltar la reserva sí penalizaría; el rechazo del plazo no.
+    const pronto = DateTime.now().setZone(TZ).plus({ hours: 3 })
+    await db.from('viajes').where('id', viajeId).update({
+      fecha_programada: pronto.toISODate(),
+      hora_programada: pronto.toFormat('HH:mm'),
+    })
+    ;(await pedir(client, driver.token, viajeId, 60)).assertStatus(200)
+
+    const res = await responder(client, cliente.token, viajeId, false)
+    res.assertStatus(200)
+    assert.deepEqual(res.body().plazo, { minutos: 60, estado: 'rechazado' })
+    assert.isTrue(res.body().reabierta)
+
+    const viaje = await Viaje.findOrFail(viajeId)
+    assert.equal(viaje.estado, 'reservado')
+    assert.isNull(viaje.conductorId)
+    assert.equal(viaje.plazoEstado, 'rechazado')
+    const ofertas = await db.from('ofertas').where('viaje_id', viajeId).where('estado', 'aceptada')
+    assert.lengthOf(ofertas, 0)
+    const conductor = await db.from('conductores').where('id', driver.conductorId).first()
+    assert.equal(Number(conductor.penalizacion_cancelacion ?? 0), 0)
+    // Ya no es su reserva: no puede volver a pedir plazo.
+    ;(await pedir(client, driver.token, viajeId, 15)).assertStatus(403)
+  })
+})

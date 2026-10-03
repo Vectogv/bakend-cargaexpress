@@ -12,6 +12,8 @@ import {
   tripReserveValidator,
   tripCompleteValidator,
   tripCancelValidator,
+  tripPlazoValidator,
+  tripPlazoResponderValidator,
 } from '#validators/trip'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
@@ -19,10 +21,10 @@ import StorageService from '#services/storage_service'
 import { randomUUID } from 'node:crypto'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import { emitToClient, emitToDriver, emitToAdmin, emitTripStatusChanged } from '#start/socket'
-import { sendToToken } from '#services/push_notification_service'
+import { sendToToken, sendToMultiple } from '#services/push_notification_service'
 import GeoService, { distanciaKm } from '#services/geo_service'
 import { rutaDelViaje, payloadRuta } from '#services/trip_route_service'
-import CoverageService from '#services/coverage_service'
+import CoverageService, { claveDe } from '#services/coverage_service'
 import TripDispatchService from '#services/trip_dispatch_service'
 import TripConflictService, { ESTADOS_CONDUCTOR_OCUPADO, ORDEN_CONDUCTOR_OCUPADO_SQL } from '#services/trip_conflict_service'
 import OfferExpiryService from '#services/offer_expiry_service'
@@ -32,7 +34,7 @@ import { parseScheduledDateTime } from '#services/reservation_time'
 import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine'
 import TripFinalizationService from '#services/trip_finalization_service'
 import DriverDebtSuspensionService from '#services/driver_debt_suspension_service'
-import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
+import { emitTripUpdateToModerators, resolverZonaViaje } from '#services/moderator_trip_events'
 import antifraudeConfig from '#config/antifraude'
 import logger from '@adonisjs/core/services/logger'
 import AntifraudeService from '#services/antifraude_service'
@@ -1544,11 +1546,18 @@ export default class TripController {
    * El conductor asignado suelta una reserva sin activar: la reserva vuelve a
    * recibir ofertas (sigue `reservado`). Penaliza solo si faltan menos de 24 h.
    */
-  private async reabrirReserva(viaje: Viaje, user: User, justificacion: string) {
+  private async reabrirReserva(
+    viaje: Viaje,
+    user: User,
+    justificacion: string,
+    // Al rechazar el cliente un plazo, es él quien libera: ni penalización ni aviso a sí mismo.
+    opts: { penalizar?: boolean; avisarCliente?: boolean } = {}
+  ) {
+    const { penalizar = true, avisarCliente = true } = opts
     const conductor = await Conductor.findOrFail(viaje.conductorId!)
     const ahora = DateTime.now()
     const programada = parseScheduledDateTime(viaje.fechaProgramada, viaje.horaProgramada)
-    const penalizado = !!programada && programada.diff(ahora, 'hours').hours < 24
+    const penalizado = penalizar && !!programada && programada.diff(ahora, 'hours').hours < 24
 
     if (penalizado) {
       await AntifraudeService.registrarFraude('cancelacion_conductor', {
@@ -1581,7 +1590,7 @@ export default class TripController {
     })
     emitTripUpdateToModerators(viaje)
 
-    const cliente = await User.find(viaje.clienteId)
+    const cliente = avisarCliente ? await User.find(viaje.clienteId) : null
     if (cliente?.fcmToken) {
       await sendToToken(
         cliente.fcmToken,
@@ -1594,6 +1603,157 @@ export default class TripController {
     await TripDispatchService.buscarConductores(viaje)
 
     return { id: String(viaje.id), estado: 'reservado', reabierta: true, penalizado }
+  }
+
+  /** Token FCM del usuario de un conductor (null si no hay token). */
+  private async tokenDelConductor(conductorId: number) {
+    const conductor = await Conductor.query().where('id', conductorId).preload('usuario').first()
+    return conductor?.usuario?.fcmToken ?? null
+  }
+
+  @ApiOperation({
+    summary: 'Pedir más plazo en una reserva',
+    description:
+      'El conductor asignado a una reserva pide +15/+30/+60 min (una sola vez). Decide el cliente; el moderador de la zona solo recibe aviso.',
+  })
+  @ApiBody({ type: () => tripPlazoValidator })
+  @ApiResponse({ type: 'object' })
+  async pedirPlazo({ auth, params, request, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const { minutos } = await request.validateUsing(tripPlazoValidator)
+    const viaje = await Viaje.findOrFail(params.id)
+
+    const conductor = user.rol === 'conductor' ? await Conductor.findBy('usuario_id', user.id) : null
+    if (!conductor || !viaje.conductorId || viaje.conductorId !== conductor.id) {
+      return response.status(403).send({ error: 'No eres el conductor asignado a esta reserva' })
+    }
+    if (viaje.estado !== 'reservado') {
+      return response
+        .status(409)
+        .send({ error: 'Solo se puede pedir plazo en una reserva sin activar', code: 'NO_ES_RESERVA_ASIGNADA' })
+    }
+    if (viaje.plazoEstado) {
+      return response
+        .status(409)
+        .send({ error: 'Ya pediste plazo para esta reserva; solo se puede una vez', code: 'PLAZO_YA_SOLICITADO' })
+    }
+
+    viaje.plazoMinutos = minutos
+    viaje.plazoEstado = 'pendiente'
+    viaje.plazoSolicitadoAt = DateTime.now()
+    await viaje.save()
+
+    const plazo = { minutos, estado: 'pendiente' }
+    emitToClient(viaje.clienteId, 'trip:plazo', { id: String(viaje.id), plazo })
+    emitTripUpdateToModerators(viaje, { plazo })
+
+    const cliente = await User.find(viaje.clienteId)
+    if (cliente?.fcmToken) {
+      await sendToToken(
+        cliente.fcmToken,
+        'Tu conductor pide más plazo',
+        `El conductor pide ${minutos} min más para tu reserva. Acepta o elige otro conductor.`,
+        { tipo: 'reserva_plazo', viajeId: String(viaje.id) }
+      ).catch(() => {})
+    }
+
+    // Aviso (sin decisión) a los moderadores de la zona del viaje.
+    const zona = await resolverZonaViaje(viaje)
+    if (zona) {
+      const moderadores = await User.query()
+        .where('es_moderador', true)
+        .whereNotNull('fcm_token')
+        .whereNotNull('zona_moderador')
+        .select('fcm_token', 'zona_moderador')
+      const tokens = moderadores
+        .filter((m) => claveDe(m.zonaModerador!) === zona)
+        .map((m) => m.fcmToken!)
+      await sendToMultiple(
+        tokens,
+        'Solicitud de plazo en una reserva',
+        `El conductor de la reserva #${viaje.id} pide ${minutos} min más. Lo decide el cliente.`,
+        { tipo: 'reserva_plazo', viajeId: String(viaje.id), zona }
+      ).catch(() => {})
+    }
+
+    return serialize.withoutWrapping({ id: String(viaje.id), plazo })
+  }
+
+  @ApiOperation({
+    summary: 'Responder la solicitud de plazo',
+    description:
+      'El cliente acepta (se corren la recogida y la activación) o rechaza (la reserva se libera sin penalizar al conductor).',
+  })
+  @ApiBody({ type: () => tripPlazoResponderValidator })
+  @ApiResponse({ type: 'object' })
+  async responderPlazo({ auth, params, request, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const { aceptar } = await request.validateUsing(tripPlazoResponderValidator)
+    const viaje = await Viaje.findOrFail(params.id)
+
+    if (user.rol !== 'cliente' || viaje.clienteId !== user.id) {
+      return response.status(403).send({ error: 'Este viaje no te pertenece' })
+    }
+    if (viaje.estado !== 'reservado' || viaje.plazoEstado !== 'pendiente' || !viaje.conductorId) {
+      return response
+        .status(409)
+        .send({ error: 'Esta reserva no tiene una solicitud de plazo pendiente', code: 'SIN_PLAZO_PENDIENTE' })
+    }
+
+    const minutos = viaje.plazoMinutos!
+    const tokenConductor = await this.tokenDelConductor(viaje.conductorId)
+
+    if (!aceptar) {
+      viaje.plazoEstado = 'rechazado'
+      await this.reabrirReserva(viaje, user, 'El cliente rechazó el plazo pedido', {
+        penalizar: false,
+        avisarCliente: false,
+      })
+      if (tokenConductor) {
+        await sendToToken(
+          tokenConductor,
+          'Reserva liberada',
+          'El cliente prefirió otro conductor; la reserva se liberó.',
+          { tipo: 'reserva', viajeId: String(viaje.id) }
+        ).catch(() => {})
+      }
+      return serialize.withoutWrapping({
+        id: String(viaje.id),
+        estado: 'reservado',
+        plazo: { minutos, estado: 'rechazado' },
+        reabierta: true,
+      })
+    }
+
+    const programada = parseScheduledDateTime(viaje.fechaProgramada, viaje.horaProgramada)
+    if (!programada) {
+      return response.status(422).send({ error: 'La reserva no tiene una fecha y hora válidas' })
+    }
+    const nueva = programada.plus({ minutes: minutos })
+    viaje.fechaProgramada = nueva.toISODate()
+    viaje.horaProgramada = nueva.toFormat('HH:mm')
+    viaje.activacionAt = viaje.activacionAt ? viaje.activacionAt.plus({ minutes: minutos }) : null
+    viaje.plazoEstado = 'aceptado'
+    await viaje.save()
+
+    emitToClient(viaje.clienteId, 'trip:plazo', { id: String(viaje.id), plazo: { minutos, estado: 'aceptado' } })
+    emitTripUpdateToModerators(viaje, { plazo: { minutos, estado: 'aceptado' } })
+    if (tokenConductor) {
+      await sendToToken(
+        tokenConductor,
+        'Nuevo horario aceptado',
+        `El cliente aceptó el nuevo horario: ${viaje.fechaProgramada} a las ${viaje.horaProgramada}.`,
+        { tipo: 'reserva', viajeId: String(viaje.id) }
+      ).catch(() => {})
+    }
+
+    return serialize.withoutWrapping({
+      id: String(viaje.id),
+      estado: 'reservado',
+      plazo: { minutos, estado: 'aceptado' },
+      fechaProgramada: viaje.fechaProgramada,
+      horaProgramada: viaje.horaProgramada,
+    })
   }
 
   @ApiOperation({ summary: 'Solicitar cancelación', description: 'El conductor o el cliente solicitan la cancelación del viaje cuando está en_curso. El administrador debe aprobarla.' })
@@ -1804,6 +1964,14 @@ export default class TripController {
       fechaProgramada: viaje.fechaProgramada,
       horaProgramada: viaje.horaProgramada,
       activacionAt: viaje.activacionAt?.toISO() ?? null,
+      // "Pedir más plazo" (reserva asignada): null si el conductor no lo pidió.
+      plazo: viaje.plazoEstado
+        ? {
+            minutos: viaje.plazoMinutos,
+            estado: viaje.plazoEstado,
+            solicitadoAt: viaje.plazoSolicitadoAt?.toISO() ?? null,
+          }
+        : null,
       fotoEntrega: viaje.fotoEntrega,
       fotoRecogida: viaje.fotoRecogida,
       receptorNombre: viaje.receptorNombre,
