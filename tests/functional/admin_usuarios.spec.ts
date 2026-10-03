@@ -40,15 +40,25 @@ test.group('Admin - alta y edición de usuarios', (group) => {
     await ConfiguracionPlataforma.query().delete()
   })
 
-  test('el registro exige la edad (contrato del formulario de alta)', async ({ client }) => {
-    const res = await client.post('/api/auth/register').json({
-      nombre: 'Sin',
-      apellido: 'Edad',
-      email: `sin_edad_${uniq()}@test.com`,
-      password: 'Password123',
-      rol: 'cliente',
+  test('el registro exige la edad al conductor; el cliente la completa después', async ({ client, assert }) => {
+    const base = { nombre: 'Sin', apellido: 'Edad', password: 'Password123' }
+    const conductor = await client.post('/api/auth/register').json({
+      ...base,
+      email: `sin_edad_c_${uniq()}@test.com`,
+      rol: 'conductor',
+      cedula: '1061234567',
+      placa: `SED${Math.floor(Math.random() * 900) + 100}`,
+      tipoVehiculo: 'Turbo',
+      capacidad: '1 tonelada',
+      ciudad: 'popayan',
     })
-    res.assertStatus(422)
+    conductor.assertStatus(422)
+
+    const cliente = await client
+      .post('/api/auth/register')
+      .json({ ...base, email: `sin_edad_${uniq()}@test.com`, rol: 'cliente' })
+    cliente.assertStatus(200)
+    assert.isFalse(cliente.body().perfilCompleto)
   })
 
   test('el registro exige los datos del vehículo a los conductores', async ({ client }) => {
