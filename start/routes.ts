@@ -104,6 +104,7 @@ router
     router.get('profile', [controllers.Profile, 'show'])
     router.put('profile', [controllers.Profile, 'update'])
     router.put('password', [controllers.Profile, 'changePassword'])
+    router.delete('me', [controllers.Profile, 'destroy'])
     router.post('avatar', [controllers.Profile, 'avatar'])
     router.put('fcm-token', [controllers.Profile, 'updateFcmToken'])
   })

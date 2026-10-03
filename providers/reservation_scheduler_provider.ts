@@ -6,6 +6,7 @@ const TICK_LOCK_MS = 55_000
 // Las ofertas vencen a los 28 s: se barren con más frecuencia.
 const OFFERS_TICK_MS = 30_000
 const OFFERS_TICK_LOCK_MS = 25_000
+const ARCHIVADO_CADA_MS = 6 * 60 * 60 * 1000
 
 /**
  * Ejecuta cada minuto la activación de reservas programadas, el aviso de cierres
@@ -32,6 +33,7 @@ const OFFERS_TICK_LOCK_MS = 25_000
 export default class ReservationSchedulerProvider {
   private interval: NodeJS.Timeout | null = null
   private offersInterval: NodeJS.Timeout | null = null
+  private ultimoArchivado = 0
 
   constructor(protected app: ApplicationService) {}
 
@@ -124,6 +126,15 @@ export default class ReservationSchedulerProvider {
 
         // Búsquedas de conductor vencidas (BUSQUEDA_TIMEOUT_MIN): el sistema cancela el viaje.
         await BusquedaTimeoutService.expirarBusquedasVencidas()
+
+        // Cuentas con 6 meses sin uso: archivado automático (cada 6 h basta).
+        if (Date.now() - this.ultimoArchivado > ARCHIVADO_CADA_MS) {
+          this.ultimoArchivado = Date.now()
+          const { default: ArchivadoCuentaService } = await import(
+            '#services/archivado_cuenta_service'
+          )
+          await ArchivadoCuentaService.archivarInactivas()
+        }
       } finally {
         await RedisService.releaseLock('reservation:scheduler:tick')
       }

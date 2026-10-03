@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import { DateTime } from 'luxon'
-import Conductor from '#models/conductor'
+import Conductor, { SOAT_OBLIGATORIO } from '#models/conductor'
 import User from '#models/user'
 
 /**
@@ -94,6 +94,13 @@ test.group('Documentos del conductor y excepción del SOAT', (group) => {
     assert.equal(perfil.body().conductor.tecnomecanicaVence, manana())
   })
 
+  test('SOAT apagado: el admin aprueba aunque no haya SOAT', async ({ client }) => {
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const { conductor } = await crearConductor(client)
+    const res = await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)
+    res.assertStatus(SOAT_OBLIGATORIO ? 422 : 200)
+  })
+
   test('el admin no aprueba sin SOAT vigente, y sí con SOAT', async ({ client, assert }) => {
     const admin = await crearUsuario(client, { rol: 'admin' })
     const { token, conductor } = await crearConductor(client)
@@ -106,7 +113,7 @@ test.group('Documentos del conductor y excepción del SOAT', (group) => {
     const conSoat = await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)
     conSoat.assertStatus(200)
     assert.equal(conSoat.body().estadoVerificacion, 'aprobado')
-  })
+  }).skip(!SOAT_OBLIGATORIO, 'SOAT apagado (SOAT_OBLIGATORIO = false)')
 
   test('excepción del SOAT: el conductor la pide, el admin la aprueba y ya se puede aprobar al conductor', async ({ client, assert }) => {
     const admin = await crearUsuario(client, { rol: 'admin' })
@@ -128,7 +135,9 @@ test.group('Documentos del conductor y excepción del SOAT', (group) => {
     assert.equal(item.excepcionSoatNota, 'Es una moto de carga sin SOAT vigente')
 
     // Todavía sin SOAT ni excepción aprobada: no se puede aprobar.
-    ;(await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)).assertStatus(422)
+    if (SOAT_OBLIGATORIO) {
+      ;(await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)).assertStatus(422)
+    }
 
     const aprobada = await client
       .put(`/api/admin/verifications/${conductor.id}/soat-exception`)
@@ -156,7 +165,9 @@ test.group('Documentos del conductor y excepción del SOAT', (group) => {
     rechazada.assertStatus(200)
     assert.equal(rechazada.body().excepcionSoatEstado, 'rechazada')
 
-    ;(await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)).assertStatus(422)
+    if (SOAT_OBLIGATORIO) {
+      ;(await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)).assertStatus(422)
+    }
 
     // El conductor puede volver a pedirla.
     const otra = await client.post('/api/drivers/verification-soat/excepcion').bearerToken(token).json({})

@@ -8,6 +8,7 @@ import SessionService from '#services/session_service'
 import hash from '@adonisjs/core/services/hash'
 import logger from '@adonisjs/core/services/logger'
 import User from '#models/user'
+import ArchivadoCuentaService from '#services/archivado_cuenta_service'
 import { DateTime } from 'luxon'
 
 export default class ProfileController {
@@ -185,5 +186,17 @@ export default class ProfileController {
     await SessionService.revokeAll(user, tokenActual === undefined ? undefined : String(tokenActual))
 
     return serialize.withoutWrapping({ message: 'Contraseña actualizada' })
+  }
+
+  @ApiOperation({
+    summary: 'Archivar mi cuenta',
+    description: 'Archiva la cuenta (no borra datos). 409 si hay algo pendiente.',
+  })
+  @ApiResponse({ type: 'object' })
+  async destroy({ auth, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const bloqueo = await ArchivadoCuentaService.archivar(user)
+    if (bloqueo) return response.status(409).send({ message: bloqueo })
+    return serialize.withoutWrapping({ message: 'Tu cuenta fue archivada' })
   }
 }

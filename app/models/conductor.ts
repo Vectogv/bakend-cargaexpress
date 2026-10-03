@@ -11,6 +11,9 @@ function fechaTexto(v: unknown): string | null {
   return String(v).slice(0, 10)
 }
 
+/** Apagado por ahora (decisión del gerente): si es true, aprobar a un conductor exige SOAT válido. */
+export const SOAT_OBLIGATORIO = false
+
 export default class Conductor extends BaseModel {
   static table = 'conductores'
   static $columns = [

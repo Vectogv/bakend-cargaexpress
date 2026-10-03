@@ -99,6 +99,10 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
   @column({ consume: (value: unknown) => Boolean(value) })
   declare registroCompleto: boolean
 
+  /** Cuándo se archivó la cuenta (estadoCuenta = 'archivada'). */
+  @column.dateTime()
+  declare archivadaAt: DateTime | null
+
   get initials() {
     const nombre = this.nombre || ''
     const apellido = this.apellido || ''

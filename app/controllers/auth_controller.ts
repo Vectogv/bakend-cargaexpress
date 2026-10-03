@@ -232,6 +232,12 @@ export default class AuthController {
     if (!user || !passwordOk) {
       return response.status(400).send({ errors: [{ message: 'Invalid user credentials' }] })
     }
+    if (user.estadoCuenta === 'archivada') {
+      return response.status(403).send({
+        code: 'CUENTA_ARCHIVADA',
+        errors: [{ message: 'Esta cuenta fue archivada. Escribe a soporte si quieres recuperarla.' }],
+      })
+    }
     if (user.suspendido) {
       return response
         .status(403)
@@ -292,6 +298,12 @@ export default class AuthController {
     const { info, correo } = g
 
     let user = await User.query().whereRaw('lower(email) = ?', [correo]).first()
+    if (user?.estadoCuenta === 'archivada') {
+      return response.status(403).send({
+        code: 'CUENTA_ARCHIVADA',
+        errors: [{ message: 'Esta cuenta fue archivada. Escribe a soporte si quieres recuperarla.' }],
+      })
+    }
     if (user?.suspendido) {
       return response.status(403).send({
         code: 'CUENTA_SUSPENDIDA',
@@ -375,7 +387,7 @@ export default class AuthController {
     if (!deletedCount) return invalid()
 
     const user = await User.find(row.user_id)
-    if (!user || user.suspendido) return invalid()
+    if (!user || user.suspendido || user.estadoCuenta === 'archivada') return invalid()
 
     const token = await User.accessTokens.create(user, [], { expiresIn: '7 days' })
     const newRefreshTokenValue = await issueRefreshToken(user.id)

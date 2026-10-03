@@ -1,5 +1,5 @@
 import User from '#models/user'
-import Conductor from '#models/conductor'
+import Conductor, { SOAT_OBLIGATORIO } from '#models/conductor'
 import Ganancia from '#models/ganancia'
 import Viaje from '#models/viaje'
 import Reporte from '#models/reporte'
@@ -750,7 +750,7 @@ export default class AdminController {
     }
 
     // Solo al aprobar: un conductor ya aprobado no se ve afectado.
-    if (!conductor.soatValido) {
+    if (SOAT_OBLIGATORIO && !conductor.soatValido) {
       return response.status(422).send(
         await serialize.withoutWrapping({
           error: 'El conductor necesita un SOAT vigente o una excepción de SOAT aprobada',
