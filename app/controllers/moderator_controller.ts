@@ -11,7 +11,6 @@ import Oferta from '#models/oferta'
 import Ganancia from '#models/ganancia'
 import Disputa from '#models/disputa'
 import LogFraude from '#models/log_fraude'
-import Notificacion from '#models/notificacion'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
@@ -1275,14 +1274,7 @@ export default class ModeratorController {
       logger.error({ err: e, viajeId }, 'Error auditando disputa por moderador')
     }
 
-    await Notificacion.create({
-      usuarioId: viaje.clienteId,
-      tipo: 'disputa_cierre',
-      titulo: 'Tu cierre fue revisado',
-      mensaje: `El viaje #${viaje.id} fue abierto como disputa. Un moderador lo está revisando.`,
-      leido: false,
-    })
-
+    // La fila de la bandeja la crea sendToToken (tipo viaje_estado, con viajeId).
     const clienteUsuario = await User.find(viaje.clienteId)
     if (clienteUsuario?.fcmToken) {
       await sendToToken(

@@ -7,7 +7,17 @@ import { emitToUser } from '#start/socket'
 
 export default class Notificacion extends BaseModel {
   static table = 'notificaciones'
-  static $columns = ['id', 'usuarioId', 'tipo', 'titulo', 'mensaje', 'leido', 'createdAt'] as const
+  static $columns = [
+    'id',
+    'usuarioId',
+    'tipo',
+    'titulo',
+    'mensaje',
+    'leido',
+    'viajeId',
+    'ticketId',
+    'createdAt',
+  ] as const
   $columns = Notificacion.$columns
 
   @ApiProperty()
@@ -34,6 +44,16 @@ export default class Notificacion extends BaseModel {
   @column()
   declare leido: boolean
 
+  /** Viaje al que se refiere el aviso (la app lo abre al tocarlo). */
+  @ApiProperty()
+  @column()
+  declare viajeId: number | null
+
+  /** Ticket de soporte al que se refiere el aviso. */
+  @ApiProperty()
+  @column()
+  declare ticketId: number | null
+
   @ApiProperty()
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -41,22 +61,29 @@ export default class Notificacion extends BaseModel {
   @belongsTo(() => User, { foreignKey: 'usuarioId' })
   declare usuario: BelongsTo<typeof User>
 
+  /** Forma que ven la app y el socket (con los alias viejos _id/type/title/body/read). */
+  static serializar(n: Notificacion) {
+    return {
+      id: String(n.id),
+      _id: String(n.id),
+      tipo: n.tipo,
+      type: n.tipo,
+      titulo: n.titulo,
+      title: n.titulo,
+      mensaje: n.mensaje,
+      body: n.mensaje,
+      leido: n.leido,
+      read: n.leido,
+      viajeId: n.viajeId == null ? null : String(n.viajeId),
+      ticketId: n.ticketId == null ? null : String(n.ticketId),
+      createdAt: n.createdAt,
+    }
+  }
+
   @afterCreate()
   static async emitNew(notificacion: Notificacion) {
     try {
-      emitToUser(notificacion.usuarioId, 'notification:new', {
-        id: String(notificacion.id),
-        _id: String(notificacion.id),
-        tipo: notificacion.tipo,
-        type: notificacion.tipo,
-        titulo: notificacion.titulo,
-        title: notificacion.titulo,
-        mensaje: notificacion.mensaje,
-        body: notificacion.mensaje,
-        leido: notificacion.leido,
-        read: notificacion.leido,
-        createdAt: notificacion.createdAt,
-      })
+      emitToUser(notificacion.usuarioId, 'notification:new', Notificacion.serializar(notificacion))
     } catch {
       // ignore socket errors
     }

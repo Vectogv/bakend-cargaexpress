@@ -129,6 +129,39 @@ export function armarMensaje(
   return message
 }
 
+/** Avisos que, además del push, quedan en la bandeja de la app (abren el viaje). */
+const TIPOS_EN_BANDEJA = new Set(['viaje_estado', 'viaje_cancelado', 'reserva'])
+
+/**
+ * Guarda el aviso de estado del viaje en la bandeja del dueño del token, para
+ * que la app lo vea aunque el push no haya llegado (app cerrada, token viejo).
+ * Un solo lugar: cada controlador manda el push y la fila sale sola.
+ */
+async function guardarEnBandeja(
+  token: string,
+  title: string,
+  body: string,
+  data?: Record<string, string>
+) {
+  if (!data?.tipo || !data.viajeId || !TIPOS_EN_BANDEJA.has(data.tipo)) return
+  try {
+    const { default: User } = await import('#models/user')
+    const { default: Notificacion } = await import('#models/notificacion')
+    const user = await User.findBy('fcmToken', token)
+    if (!user) return
+    await Notificacion.create({
+      usuarioId: user.id,
+      tipo: data.tipo,
+      titulo: title,
+      mensaje: body,
+      leido: false,
+      viajeId: Number(data.viajeId) || null,
+    })
+  } catch (err: any) {
+    logger.warn(`No se pudo guardar el aviso en la bandeja: ${err.message}`)
+  }
+}
+
 export async function sendToToken(
   token: string,
   title: string,
@@ -137,6 +170,8 @@ export async function sendToToken(
   sound?: string,
   tag?: string
 ) {
+  await guardarEnBandeja(token, title, body, data)
+
   ensureInit()
   if (!messaging) return
 

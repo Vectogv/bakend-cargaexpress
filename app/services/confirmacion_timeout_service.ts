@@ -72,6 +72,7 @@ export default class ConfirmacionTimeoutService {
         titulo,
         mensaje,
         leido: false,
+        viajeId: viaje.id,
       })
     }
 

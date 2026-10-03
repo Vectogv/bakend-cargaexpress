@@ -228,6 +228,7 @@ export async function notificarMensaje(ticket: TicketSoporte, mensaje: TicketMen
       titulo,
       mensaje: cuerpo,
       leido: false,
+      ticketId: ticket.id,
     })
   } catch (err) {
     logger.warn({ err, ticketId: ticket.id }, 'No se pudo guardar la notificación del ticket')
@@ -270,7 +271,14 @@ export async function notificarEstado(ticket: TicketSoporte, actor: User, opts: 
   const titulo = `Ticket #${ticket.id} ${etiquetas[ticket.estado] || 'actualizado'}`
   const cuerpo = ticket.asunto
   try {
-    await Notificacion.create({ usuarioId: ticket.usuarioId, tipo: 'ticket_estado', titulo, mensaje: cuerpo, leido: false })
+    await Notificacion.create({
+      usuarioId: ticket.usuarioId,
+      tipo: 'ticket_estado',
+      titulo,
+      mensaje: cuerpo,
+      leido: false,
+      ticketId: ticket.id,
+    })
   } catch (err) {
     logger.warn({ err, ticketId: ticket.id }, 'No se pudo guardar la notificación de estado del ticket')
   }

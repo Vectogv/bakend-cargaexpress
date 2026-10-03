@@ -430,6 +430,8 @@ test.group('H1 - Cierre sin confirmar notifica y se resuelve', (group) => {
     const moderador = await crearModerador(client, ZONA)
     const tripId = await viajePendienteConfirmacion(client, cliente.token, driver)
     await vencerPlazoConfirmacion(tripId)
+    // Con token FCM: el push de estado deja la fila en la bandeja (sendToToken).
+    await db.from('users').where('id', cliente.id).update({ fcm_token: `fcm-disputa-${cliente.id}` })
 
     const resuelto = await client
       .post(`/api/moderator/trips/${tripId}/resolve-close`)
@@ -447,8 +449,10 @@ test.group('H1 - Cierre sin confirmar notifica y se resuelve', (group) => {
 
     const notifCliente = await Notificacion.query()
       .where('usuario_id', cliente.id)
-      .where('tipo', 'disputa_cierre')
+      .where('tipo', 'viaje_estado')
+      .where('viaje_id', tripId)
       .first()
     assert.isNotNull(notifCliente, 'El cliente debe recibir la notificación de disputa')
+    assert.equal(notifCliente!.titulo, 'Tu cierre fue revisado')
   })
 })

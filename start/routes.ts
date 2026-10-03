@@ -188,6 +188,8 @@ router
   .group(() => {
     router.get('', [controllers.Notification, 'index'])
     router.post('', [controllers.Notification, 'store'])
+    // Antes de ':id/read' para que "read-all" no se tome como id.
+    router.put('read-all', [controllers.Notification, 'readAll'])
     router.put(':id/read', [controllers.Notification, 'read'])
     router.delete(':id', [controllers.Notification, 'destroy'])
   })

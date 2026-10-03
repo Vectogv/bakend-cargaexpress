@@ -18,19 +18,7 @@ export default class NotificationController {
       .orderBy('createdAt', 'desc')
       .paginate(page, limit)
 
-    return notificaciones.all().map((n) => ({
-      id: String(n.id),
-      _id: String(n.id),
-      tipo: n.tipo,
-      type: n.tipo,
-      titulo: n.titulo,
-      title: n.titulo,
-      mensaje: n.mensaje,
-      body: n.mensaje,
-      leido: n.leido,
-      read: n.leido,
-      createdAt: n.createdAt,
-    }))
+    return notificaciones.all().map(Notificacion.serializar)
   }
 
   @ApiOperation({
@@ -50,19 +38,24 @@ export default class NotificationController {
       leido: false,
     })
 
-    return response.created({
-      id: String(notificacion.id),
-      _id: String(notificacion.id),
-      tipo: notificacion.tipo,
-      type: notificacion.tipo,
-      titulo: notificacion.titulo,
-      title: notificacion.titulo,
-      mensaje: notificacion.mensaje,
-      body: notificacion.mensaje,
-      leido: notificacion.leido,
-      read: notificacion.leido,
-      createdAt: notificacion.createdAt,
-    })
+    return response.created(Notificacion.serializar(notificacion))
+  }
+
+  @ApiOperation({
+    summary: 'Marcar todas como leídas',
+    description: 'Marca como leídas todas las notificaciones del usuario autenticado',
+  })
+  @ApiResponse({ type: 'object' })
+  async readAll({ auth, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const [actualizadas] = await Notificacion.query()
+      .where('usuario_id', user.id)
+      .where('leido', false)
+      .update({ leido: true })
+
+    emitToUser(user.id, 'notification:read_all', { actualizadas: Number(actualizadas) })
+
+    return serialize.withoutWrapping({ actualizadas: Number(actualizadas) })
   }
 
   @ApiOperation({

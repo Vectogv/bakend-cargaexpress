@@ -101,6 +101,7 @@ export default class BusquedaTimeoutService {
       titulo,
       mensaje,
       leido: false,
+      viajeId: viaje.id,
     })
     const cliente = await User.find(viaje.clienteId)
     if (cliente?.fcmToken) {
