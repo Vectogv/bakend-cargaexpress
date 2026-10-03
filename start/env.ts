@@ -64,6 +64,8 @@ export default await Env.create(new URL('../', import.meta.url), {
   RESERVATION_CONFLICT_WINDOW_MINUTES: Env.schema.number.optional(),
   RESERVATION_REMINDER_LEAD_MINUTES: Env.schema.number.optional(),
   RESERVATION_ACTIVATION_BATCH_SIZE: Env.schema.number.optional(),
+  RESERVATION_PLAZO_VENTANA_MINUTES: Env.schema.number.optional(),
+  RESERVATION_PLAZO_RESPUESTA_MINUTES: Env.schema.number.optional(),
   RESERVATION_TIMEZONE: Env.schema.string.optional(),
   RESERVATION_SCHEDULER_ENABLED: Env.schema.boolean.optional(),
   BUSQUEDA_TIMEOUT_MIN: Env.schema.number.optional(),
