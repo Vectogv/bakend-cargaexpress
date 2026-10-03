@@ -4,7 +4,7 @@ import { pipeline } from 'node:stream/promises'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { mkdir, readdir, stat, unlink } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { google } from 'googleapis'
+import { google, type drive_v3 } from 'googleapis'
 import { DateTime } from 'luxon'
 import app from '@adonisjs/core/services/app'
 import env from '#start/env'
@@ -173,34 +173,76 @@ export async function generateDump(): Promise<string> {
   return gzPath
 }
 
-async function uploadToDrive(filePath: string): Promise<string | null> {
-  // start.sh escribe la clave en GOOGLE_SERVICE_ACCOUNT_KEY; se acepta también
-  // GOOGLE_SERVICE_ACCOUNT_PATH, que es como está nombrada en Railway.
-  const keyPath = env.get('GOOGLE_SERVICE_ACCOUNT_KEY', '') || env.get('GOOGLE_SERVICE_ACCOUNT_PATH', '')
-  const folderId = env.get('GOOGLE_DRIVE_FOLDER_ID', '')
-  if (!keyPath || !folderId) {
-    logger.warn('Google Drive credentials not configured, skipping upload')
-    return null
-  }
+const CARPETA_DRIVE = 'CargaExpress respaldos'
+/** Cuántos respaldos se conservan en Drive. */
+export const RESPALDOS_A_CONSERVAR = 30
+/** Hora (Colombia) a partir de la cual toca el respaldo del día. */
+const HORA_RESPALDO = 3
+const ZONA = 'America/Bogota'
 
-  const auth = new google.auth.GoogleAuth({
-    keyFile: keyPath,
-    scopes: ['https://www.googleapis.com/auth/drive.file'],
-  })
+/** ¿Toca respaldar ahora? Pasadas las 3:00 a. m. de Colombia y sin un respaldo exitoso de hoy. */
+export function tocaRespaldar(ahora: DateTime, ultimoExitoso: DateTime | null): boolean {
+  const hoy = ahora.setZone(ZONA)
+  if (hoy.hour < HORA_RESPALDO) return false
+  return !ultimoExitoso || ultimoExitoso.setZone(ZONA).toISODate() !== hoy.toISODate()
+}
 
-  const drive = google.drive({ version: 'v3', auth })
-  const fileMetadata = {
-    name: basename(filePath),
-    parents: [folderId],
-  }
-  const media = { mimeType: 'application/gzip', body: createReadStream(filePath) }
+/** De una lista (más nuevos primero) devuelve los ids que sobran. */
+export function respaldosSobrantes<T extends { id: string }>(nuevosPrimero: T[], conservar = RESPALDOS_A_CONSERVAR): T[] {
+  return nuevosPrimero.slice(conservar)
+}
 
-  const response = await drive.files.create({
-    requestBody: fileMetadata,
-    media,
+export function clienteDrive() {
+  const clientId = env.get('GOOGLE_OAUTH_CLIENT_ID', '')
+  const clientSecret = env.get('GOOGLE_OAUTH_CLIENT_SECRET', '')
+  const refreshToken = env.get('GOOGLE_OAUTH_REFRESH_TOKEN', '')
+  if (!clientId || !clientSecret || !refreshToken) return null
+  const auth = new google.auth.OAuth2(clientId, clientSecret)
+  auth.setCredentials({ refresh_token: refreshToken })
+  return google.drive({ version: 'v3', auth })
+}
+
+async function carpetaDrive(drive: drive_v3.Drive): Promise<string> {
+  const fija = env.get('GOOGLE_DRIVE_FOLDER_ID', '')
+  if (fija) return fija
+  // Con el alcance drive.file solo se ven las carpetas creadas por esta app.
+  const q = `name = '${CARPETA_DRIVE}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+  const found = await drive.files.list({ q, fields: 'files(id)', pageSize: 1 })
+  const id = found.data.files?.[0]?.id
+  if (id) return id
+  const created = await drive.files.create({
+    requestBody: { name: CARPETA_DRIVE, mimeType: 'application/vnd.google-apps.folder' },
     fields: 'id',
   })
+  return created.data.id!
+}
 
+/** Deja en la carpeta solo los RESPALDOS_A_CONSERVAR más recientes. */
+export async function aplicarRetencion(drive: drive_v3.Drive, folderId: string) {
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and name contains 'backup_' and trashed = false`,
+    orderBy: 'createdTime desc',
+    fields: 'files(id)',
+    pageSize: 1000,
+  })
+  for (const f of respaldosSobrantes((res.data.files ?? []) as { id: string }[])) {
+    await drive.files.delete({ fileId: f.id! })
+  }
+}
+
+async function uploadToDrive(filePath: string): Promise<string | null> {
+  const drive = clienteDrive()
+  if (!drive) {
+    logger.warn('Credenciales OAuth de Google Drive no configuradas: se omite la subida del respaldo')
+    return null
+  }
+  const folderId = await carpetaDrive(drive)
+  const response = await drive.files.create({
+    requestBody: { name: basename(filePath), parents: [folderId] },
+    media: { mimeType: 'application/gzip', body: createReadStream(filePath) },
+    fields: 'id',
+  })
+  await aplicarRetencion(drive, folderId)
   return response.data.id || null
 }
 
@@ -235,8 +277,10 @@ async function doBackup(): Promise<void> {
   try {
     archivo = await generateDump()
     driveId = await uploadToDrive(archivo)
+    // Ya está en Drive: el temporal local sobra (en Railway el disco es efímero).
+    if (driveId) await unlink(archivo).catch(() => {})
     await cleanOldBackups()
-    await LogRespaldo.create({ fecha, estado: 'exitoso', archivo, driveId })
+    await LogRespaldo.create({ fecha, estado: 'exitoso', archivo, driveId, errorMensaje: driveId ? null : 'Sin credenciales de Drive: respaldo solo local' })
     logger.info(`Backup successful: ${archivo}`)
   } catch (err: any) {
     const errorMensaje = err?.message || String(err)
@@ -261,4 +305,12 @@ export async function runBackup(): Promise<void> {
     inFlight = null
   })
   return inFlight
+}
+
+/** Revisa si toca el respaldo diario y lo ejecuta (lo llama el programador cada hora). */
+export async function respaldoDiarioSiToca(ahora = DateTime.now()): Promise<boolean> {
+  const ultimo = await LogRespaldo.query().where('estado', 'exitoso').orderBy('fecha', 'desc').first()
+  if (!tocaRespaldar(ahora, ultimo?.fecha ?? null)) return false
+  await runBackup()
+  return true
 }

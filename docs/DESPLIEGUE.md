@@ -96,6 +96,29 @@ curl -o /dev/null -w "%{http_code}\n" https://<backend>/storage/uploads/cedula-1
 Luego, en el panel: iniciar sesión, abrir Configuración → Cobertura, guardar una
 zona y confirmar que aparece en `/api/config/coverage`.
 
+## Respaldos diarios
+
+Cada día, pasadas las 3:00 a. m. (hora de Colombia), el servidor hace un `pg_dump` completo y lo sube al Drive personal de cargaexpressgv@gmail.com, en la carpeta "CargaExpress respaldos". Se conservan los últimos 30. Si un día falla o el servidor estaba apagado, se reintenta en la siguiente hora. Se apaga con `BACKUP_DIARIO=false`.
+
+Preparación (una sola vez):
+
+1. Entra a https://console.cloud.google.com con cargaexpressgv@gmail.com y crea un proyecto (por ejemplo "CargaExpress respaldos").
+2. Menú APIs y servicios, Biblioteca: busca "Google Drive API" y pulsa Habilitar.
+3. APIs y servicios, Pantalla de consentimiento OAuth: tipo "Externo", pon nombre de app y tu correo, y en Usuarios de prueba agrega cargaexpressgv@gmail.com.
+4. En esa misma pantalla pulsa **Publicar aplicación** (estado "En producción"), aunque no esté verificada. En modo "Prueba" el refresh token caduca a los 7 días y los respaldos dejarían de subirse.
+5. Credenciales, Crear credenciales, ID de cliente de OAuth, tipo **App de escritorio**. Copia el ID de cliente y el secreto.
+6. En tu PC, dentro de la carpeta del servidor: `node ace backup:autorizar --client-id=ID --client-secret=SECRETO`. Abre el enlace, inicia sesión, acepta (si avisa "app no verificada": Avanzado, Ir a la app). La terminal imprime las variables.
+7. En Railway pon `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` y `GOOGLE_OAUTH_REFRESH_TOKEN`, y redespliega. Opcional: `GOOGLE_DRIVE_FOLDER_ID` para usar una carpeta concreta.
+
+Prueba: en el panel admin, "Respaldo manual" (o `node ace backup:run`) y revisa que aparezca el archivo `backup_*.sql.gz` en Drive.
+
+Restaurar: descarga el archivo desde Drive y, contra una base vacía:
+
+```bash
+gunzip backup_2026-10-02_03-00-00.sql.gz
+psql "postgresql://usuario:clave@host:5432/base" -f backup_2026-10-02_03-00-00.sql
+```
+
 ## Pendiente conocido
 
 - Las fotos de documentos de conductores siguen en el historial de git. Sacarlas

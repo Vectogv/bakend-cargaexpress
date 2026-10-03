@@ -16,15 +16,6 @@ if [ -n "$FIREBASE_CREDENTIALS_JSON" ]; then
   echo "✓ Firebase credentials escritas en $FIREBASE_CREDENTIALS_PATH"
 fi
 
-# ── Google Service Account (backups) ──────────────────────────────
-if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
-  echo "Configurando Google Service Account..."
-  mkdir -p /app/build
-  printf '%s\n' "$GOOGLE_SERVICE_ACCOUNT_KEY" > /app/build/google-service-account.json
-  export GOOGLE_SERVICE_ACCOUNT_KEY=/app/build/google-service-account.json
-  echo "✓ Google Service Account escrita"
-fi
-
 # ── Migraciones ───────────────────────────────────────────────────
 echo "Ejecutando migraciones..."
 node build/ace.js migration:run --force

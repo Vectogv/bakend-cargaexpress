@@ -30,9 +30,12 @@ export default await Env.create(new URL('../', import.meta.url), {
   FIREBASE_CREDENTIALS_JSON: Env.schema.string.optional(),
 
   GOOGLE_DRIVE_FOLDER_ID: Env.schema.string.optional(),
-  GOOGLE_SERVICE_ACCOUNT_KEY: Env.schema.string.optional(),
-  // Alias aceptado para la ruta de la clave de servicio (así está nombrada en Railway).
-  GOOGLE_SERVICE_ACCOUNT_PATH: Env.schema.string.optional(),
+  // Respaldos en el Drive personal: OAuth de usuario (ver `node ace backup:autorizar`).
+  GOOGLE_OAUTH_CLIENT_ID: Env.schema.string.optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: Env.schema.string.optional(),
+  GOOGLE_OAUTH_REFRESH_TOKEN: Env.schema.string.optional(),
+  // Respaldo diario automático (3:00 a. m. Colombia); por defecto activo fuera de tests.
+  BACKUP_DIARIO: Env.schema.boolean.optional(),
   BACKUP_EMAIL: Env.schema.string.optional(),
 
   // Directorio absoluto para archivos subidos (p. ej. mount path de un Volume de Railway).

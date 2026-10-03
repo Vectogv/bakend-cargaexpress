@@ -55,6 +55,7 @@ export default defineConfig({
     () => import('@foadonis/openapi/openapi_provider'),
     () => import('#providers/api_provider'),
     () => import('#providers/reservation_scheduler_provider'),
+    () => import('#providers/backup_scheduler_provider'),
   ],
 
   /*
