@@ -88,6 +88,9 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
   @column()
   declare esLider: boolean
 
+  @column.dateTime()
+  declare terminosAceptadosAt: DateTime | null
+
   get initials() {
     const nombre = this.nombre || ''
     const apellido = this.apellido || ''

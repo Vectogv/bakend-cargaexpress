@@ -73,6 +73,20 @@ export default class AuthController {
   async register({ request, serialize, response }: HttpContext) {
     const data = await request.validateUsing(registerValidator, { messagesProvider: registerValidatorMessages })
 
+    if (!data.idToken && (!data.email || !data.password)) {
+      return response.status(422).send({
+        errors: [{ field: data.email ? 'password' : 'email', rule: 'required', message: 'El correo y la contraseña son obligatorios' }],
+      })
+    }
+    // Con idToken el correo sale de Google y no se pide contraseña.
+    if (data.idToken) {
+      const g = await this.validarGoogle(data.idToken)
+      if ('respuesta' in g) return response.status(g.respuesta.status).send(g.respuesta.body)
+      data.email = g.correo
+    }
+    const password = data.password || randomUUID()
+    const email = data.email!
+
     if (
       data.rol === 'conductor' &&
       (!data.cedula || !data.placa || !data.tipoVehiculo || !data.capacidad)
@@ -83,7 +97,7 @@ export default class AuthController {
     }
 
     // ponytail: usuarios viejos con mayúsculas pueden duplicarse; se busca con lower(email), sin migrar datos.
-    const correoUsado = await User.query().whereRaw('lower(email) = ?', [data.email]).first()
+    const correoUsado = await User.query().whereRaw('lower(email) = ?', [email]).first()
     if (correoUsado) return response.status(409).send(DUPLICADO.email)
 
     // Placa y cédula son únicas: se responde 409 con un mensaje claro en vez
@@ -110,11 +124,12 @@ export default class AuthController {
           {
             nombre: data.nombre,
             apellido: data.apellido,
-            email: data.email,
-            password: data.password,
+            email,
+            password,
             telefono: data.telefono || null,
             rol: data.rol,
             edad: data.edad || null,
+            terminosAceptadosAt: data.aceptaTerminos ? DateTime.now() : null,
           },
           { client: trx }
         )
@@ -127,6 +142,7 @@ export default class AuthController {
               placa: data.placa!,
               tipoVehiculo: data.tipoVehiculo || null,
               capacidad: data.capacidad || null,
+              modeloVehiculo: data.modeloVehiculo || null,
               ciudad: data.ciudad || null,
               estadoVerificacion: 'pendiente',
             },
@@ -222,33 +238,39 @@ export default class AuthController {
     })
   }
 
-  /**
-   * Entrar con Google. La app manda el idToken; Google lo valida (tokeninfo) y
-   * aquí se comprueba que sea para nuestra app y con el correo verificado.
-   * Si el correo ya existe se entra a esa cuenta; si no, se crea un cliente
-   * (teléfono y edad los completa la app después, en Editar perfil).
-   */
-  async google({ request, serialize, response }: HttpContext) {
-    const { idToken } = await request.validateUsing(googleLoginValidator)
-    const invalido = () => response.status(401).send({ message: 'No se pudo validar tu cuenta de Google' })
-
+  /** Valida el idToken de Google (tokeninfo); devuelve los datos o la respuesta de error. */
+  private async validarGoogle(idToken: string) {
+    const invalido = { respuesta: { status: 401, body: { message: 'No se pudo validar tu cuenta de Google' } } }
     let info: any
     try {
       const res = await fetch(
         `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
       )
-      if (!res.ok) return invalido()
+      if (!res.ok) return invalido
       info = await res.json()
     } catch (err: any) {
       logger.error({ err: err?.message }, 'No se pudo consultar tokeninfo de Google')
-      return response.status(503).send({ message: 'No pudimos contactar a Google, intenta de nuevo' })
+      return {
+        respuesta: { status: 503, body: { message: 'No pudimos contactar a Google, intenta de nuevo' } },
+      }
     }
-
     const audEsperada = env.get('GOOGLE_WEB_CLIENT_ID', GOOGLE_WEB_CLIENT_ID_DEFECTO)
     const correo = String(info?.email || '').toLowerCase()
-    if (info?.aud !== audEsperada || String(info?.email_verified) !== 'true' || !correo) {
-      return invalido()
-    }
+    if (info?.aud !== audEsperada || String(info?.email_verified) !== 'true' || !correo) return invalido
+    return { info, correo }
+  }
+
+  /**
+   * Entrar con Google. La app manda el idToken; Google lo valida (tokeninfo) y
+   * aquí se comprueba que sea para nuestra app y con el correo verificado.
+   * Si el correo ya existe se entra a esa cuenta; si no, 404 CUENTA_NO_EXISTE
+   * (la app lleva al registro con los datos de Google).
+   */
+  async google({ request, serialize, response }: HttpContext) {
+    const { idToken } = await request.validateUsing(googleLoginValidator)
+    const g = await this.validarGoogle(idToken)
+    if ('respuesta' in g) return response.status(g.respuesta.status).send(g.respuesta.body)
+    const { info, correo } = g
 
     let user = await User.query().whereRaw('lower(email) = ?', [correo]).first()
     if (user?.suspendido) {
@@ -257,26 +279,18 @@ export default class AuthController {
         errors: [{ message: 'Tu cuenta ha sido suspendida. Contacta al administrador.' }],
       })
     }
-    const nueva = !user
     if (!user) {
-      user = await User.create({
-        nombre: String(info.given_name || info.name || correo.split('@')[0]).slice(0, 100),
-        apellido: String(info.family_name || '-').slice(0, 100),
-        email: correo,
-        // Sin contraseña propia: se pone una aleatoria (puede usar "olvidé mi contraseña").
-        password: randomUUID(),
-        rol: 'cliente',
+      return response.status(404).send({
+        code: 'CUENTA_NO_EXISTE',
+        message: 'No tienes cuenta. Regístrate primero.',
+        error: 'No tienes cuenta. Regístrate primero.',
+        google: {
+          nombre: info.given_name || null,
+          apellido: info.family_name || null,
+          email: correo,
+          foto: info.picture || null,
+        },
       })
-      try {
-        emitToAdmin('admin:new_user', {
-          id: String(user.id),
-          nombre: user.nombre,
-          apellido: user.apellido,
-          email: user.email,
-        })
-      } catch {
-        // Socket.io may not be initialized in test environment
-      }
     }
 
     const token = await User.accessTokens.create(user, [], { expiresIn: '7 days' })
@@ -291,7 +305,7 @@ export default class AuthController {
       zonaModerador: user.zonaModerador,
       token: token.value!.release(),
       refreshToken: refreshTokenValue,
-      cuentaNueva: nueva,
+      cuentaNueva: false,
       // La app pide estos datos si faltan (teléfono y edad mínima 18).
       perfilCompleto: Boolean(user.telefono && user.edad),
     })

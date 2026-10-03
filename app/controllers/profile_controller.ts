@@ -43,6 +43,7 @@ export default class ProfileController {
             placa: user.conductor.placa,
             tipoVehiculo: user.conductor.tipoVehiculo,
             capacidad: user.conductor.capacidad,
+            modeloVehiculo: user.conductor.modeloVehiculo,
             fotoConductor: user.conductor.fotoConductor,
             fotoVehiculo: user.conductor.fotoVehiculo,
             online: user.conductor.online,

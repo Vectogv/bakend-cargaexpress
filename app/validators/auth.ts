@@ -6,8 +6,12 @@ const password = () => vine.string().minLength(6).maxLength(32)
 export const registerValidator = vine.create({
   nombre: vine.string().maxLength(100),
   apellido: vine.string().maxLength(100),
-  email: email(),
-  password: password(),
+  // Con idToken (Google) el correo sale del token y la contraseña no se pide.
+  email: email().optional(),
+  password: password().optional(),
+  idToken: vine.string().minLength(20).maxLength(4096).optional(),
+  modeloVehiculo: vine.string().maxLength(50).nullable().optional(),
+  aceptaTerminos: vine.boolean().optional(),
   telefono: vine.string().maxLength(20).nullable().optional(),
   rol: vine.enum(['conductor', 'cliente']),
   // H3: La edad es obligatoria y debe ser mayor de 18 años.

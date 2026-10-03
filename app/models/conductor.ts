@@ -20,6 +20,7 @@ export default class Conductor extends BaseModel {
     'placa',
     'tipoVehiculo',
     'capacidad',
+    'modeloVehiculo',
     'ciudad',
     'fotoConductor',
     'fotoVehiculo',
@@ -71,6 +72,9 @@ export default class Conductor extends BaseModel {
   @ApiProperty()
   @column()
   declare capacidad: string | null
+
+  @column()
+  declare modeloVehiculo: string | null
 
   @ApiProperty()
   @column()

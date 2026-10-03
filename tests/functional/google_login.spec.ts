@@ -21,19 +21,17 @@ function simularGoogle(info: any, status = 200) {
 test.group('Entrar con Google', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('correo nuevo: crea un cliente y devuelve sesión', async ({ client, assert }) => {
+  test('correo nuevo: 404 CUENTA_NO_EXISTE con datos de Google y no crea usuario', async ({ client, assert }) => {
     const email = `google_${uniq()}@gmail.com`
     const restaurar = simularGoogle({
-      aud: AUD, email, email_verified: 'true', given_name: 'Ana', family_name: 'Pérez',
+      aud: AUD, email, email_verified: 'true', given_name: 'Ana', family_name: 'Pérez', picture: 'http://f/x.png',
     })
     const res = await client.post('/api/auth/google').json({ idToken: TOKEN })
     restaurar()
-    res.assertStatus(200)
-    assert.equal(res.body().rol, 'cliente')
-    assert.isTrue(res.body().cuentaNueva)
-    assert.isFalse(res.body().perfilCompleto)
-    assert.isString(res.body().token)
-    assert.equal((await User.findByOrFail('email', email)).nombre, 'Ana')
+    res.assertStatus(404)
+    assert.equal(res.body().code, 'CUENTA_NO_EXISTE')
+    assert.deepEqual(res.body().google, { nombre: 'Ana', apellido: 'Pérez', email, foto: 'http://f/x.png' })
+    assert.isNull(await User.findBy('email', email))
   })
 
   test('correo existente: entra a esa cuenta sin crear otra', async ({ client, assert }) => {

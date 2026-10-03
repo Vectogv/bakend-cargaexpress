@@ -250,3 +250,60 @@ test.group('Auth - Refresh Token', (group) => {
     response.assertStatus(422)
   })
 })
+
+test.group('Auth - Register con Google', (group) => {
+  group.each.setup(() => testUtils.db().withGlobalTransaction())
+
+  const AUD = '848686850284-bi6477mo5t1ok3tgrha0vvnfmqcdcfma.apps.googleusercontent.com'
+  const sim = (info: any) => {
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(info), { status: 200 })) as typeof fetch
+    return () => {
+      globalThis.fetch = original
+    }
+  }
+
+  test('conductor con idToken, sin password, con modelo y términos', async ({ client, assert }) => {
+    const ts = Date.now()
+    const email = `gdrv${ts}@gmail.com`
+    const restaurar = sim({ aud: AUD, email, email_verified: 'true' })
+    const res = await client.post('/api/auth/register').json({
+      nombre: 'Gina', apellido: 'Ruiz', email: 'ignorado@x.com', idToken: 'x'.repeat(40),
+      rol: 'conductor', edad: 30, cedula: `${ts}`, placa: `G${String(ts).slice(-5)}`,
+      tipoVehiculo: 'Camioneta', capacidad: '1t', modeloVehiculo: 'Hilux 2020', aceptaTerminos: true,
+    })
+    restaurar()
+    res.assertStatus(200)
+    assert.equal(res.body().email, email)
+    const user = await User.findByOrFail('email', email)
+    assert.isNotNull(user.terminosAceptadosAt)
+    const perfil = await client.get('/api/users/profile').bearerToken(res.body().token)
+    assert.equal(perfil.body().conductor.modeloVehiculo, 'Hilux 2020')
+  })
+
+  test('sin idToken y sin password: 422', async ({ client }) => {
+    const res = await client.post('/api/auth/register').json({
+      nombre: 'A', apellido: 'B', email: `np${Date.now()}@test.com`, rol: 'cliente', edad: 30,
+    })
+    res.assertStatus(422)
+  })
+
+  test('idToken inválido: 401; correo existente: 409', async ({ client }) => {
+    const email = `dup${Date.now()}@gmail.com`
+    await client.post('/api/auth/register').json({
+      nombre: 'A', apellido: 'B', email, password: '123456', rol: 'cliente', edad: 30,
+    })
+    let restaurar = sim({ aud: AUD, email, email_verified: 'true' })
+    const dup = await client.post('/api/auth/register').json({
+      nombre: 'A', apellido: 'B', idToken: 'x'.repeat(40), rol: 'cliente', edad: 30,
+    })
+    restaurar()
+    dup.assertStatus(409)
+    restaurar = sim({ aud: 'otra', email, email_verified: 'true' })
+    const mal = await client.post('/api/auth/register').json({
+      nombre: 'A', apellido: 'B', idToken: 'x'.repeat(40), rol: 'cliente', edad: 30,
+    })
+    restaurar()
+    mal.assertStatus(401)
+  })
+})
