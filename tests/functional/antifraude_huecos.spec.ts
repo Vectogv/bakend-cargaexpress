@@ -115,15 +115,32 @@ async function vencerPlazoConfirmacion(tripId: number) {
 test.group('H3 - Registro exige edad (>= 18)', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('registro sin edad es rechazado (422)', async ({ client }) => {
-    const res = await client.post('/api/auth/register').json({
+  test('conductor sin edad es rechazado (422); el cliente la completa después', async ({ client, assert }) => {
+    const ts = Date.now()
+    const conductor = await client.post('/api/auth/register').json({
       nombre: 'Sin',
       apellido: 'Edad',
       email: email('hf-sinedad'),
       password: '123456',
+      rol: 'conductor',
+      cedula: `${ts}`,
+      placa: `SE${String(ts).slice(-5)}`,
+      tipoVehiculo: 'camioneta',
+      capacidad: '1000 kg',
+    } as any)
+    conductor.assertStatus(422)
+    assert.equal(conductor.body().errors[0].field, 'edad')
+
+    // El cliente la pone en el asistente (PUT /api/users/profile), con mínimo 18.
+    const cliente = await client.post('/api/auth/register').json({
+      nombre: 'Sin',
+      apellido: 'Edad',
+      email: email('hf-sinedad-cli'),
+      password: '123456',
       rol: 'cliente',
     } as any)
-    res.assertStatus(422)
+    cliente.assertStatus(200)
+    assert.isFalse(cliente.body().perfilCompleto)
   })
 
   test('registro con edad menor a 18 es rechazado (422)', async ({ client }) => {

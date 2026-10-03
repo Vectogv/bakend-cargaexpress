@@ -14,8 +14,9 @@ export const registerValidator = vine.create({
   aceptaTerminos: vine.boolean().optional(),
   telefono: vine.string().maxLength(20).nullable().optional(),
   rol: vine.enum(['conductor', 'cliente']),
-  // H3: La edad es obligatoria y debe ser mayor de 18 años.
-  edad: vine.number().min(18).max(120),
+  // H3: mayor de 18. Obligatoria para el conductor (lo exige el controlador);
+  // el cliente la completa después, en el asistente (PUT /api/users/profile).
+  edad: vine.number().min(18).max(120).optional(),
   cedula: vine.string().maxLength(20).nullable().optional(),
   placa: vine.string().maxLength(20).nullable().optional(),
   tipoVehiculo: vine.string().maxLength(50).nullable().optional(),

@@ -8,6 +8,7 @@ import SessionService from '#services/session_service'
 import hash from '@adonisjs/core/services/hash'
 import logger from '@adonisjs/core/services/logger'
 import User from '#models/user'
+import { DateTime } from 'luxon'
 
 export default class ProfileController {
   @ApiOperation({
@@ -26,6 +27,8 @@ export default class ProfileController {
       email: user.email,
       telefono: user.telefono,
       edad: user.edad,
+      cedula: user.cedula,
+      registroCompleto: Boolean(user.registroCompleto),
       avatar: user.avatar,
       rol: user.rol,
       esModerador: Boolean(user.esModerador),
@@ -81,6 +84,12 @@ export default class ProfileController {
     if (data.apellido !== undefined) user.apellido = data.apellido
     if (data.telefono !== undefined) user.telefono = data.telefono
     if (data.edad !== undefined) user.edad = data.edad
+    if (data.cedula !== undefined) user.cedula = data.cedula
+    // Último paso del asistente de registro del cliente.
+    if (data.aceptaTerminos === true) {
+      user.registroCompleto = true
+      user.terminosAceptadosAt = user.terminosAceptadosAt ?? DateTime.now()
+    }
     if (data.contactoEmergenciaNombre !== undefined)
       user.contactoEmergenciaNombre = data.contactoEmergenciaNombre
     if (data.contactoEmergenciaTelefono !== undefined)
@@ -95,6 +104,8 @@ export default class ProfileController {
       email: user.email,
       telefono: user.telefono,
       edad: user.edad,
+      cedula: user.cedula,
+      registroCompleto: Boolean(user.registroCompleto),
       avatar: user.avatar,
       rol: user.rol,
       contactoEmergenciaNombre: user.contactoEmergenciaNombre,

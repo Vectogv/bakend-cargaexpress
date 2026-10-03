@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import { updateProfileValidator } from '#validators/profile'
+import User from '#models/user'
 
 test.group('Profile - Show', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
@@ -176,6 +177,94 @@ test.group('Profile - Update', (group) => {
   test('fail to update profile without authentication', async ({ client }) => {
     const response = await client.put('/api/users/profile').json({ nombre: 'Test' })
     response.assertStatus(401)
+  })
+})
+
+test.group('Profile - Asistente de registro del cliente', (group) => {
+  group.each.setup(() => testUtils.db().withGlobalTransaction())
+
+  test('la cuenta nace incompleta y se cierra con cédula, edad y aceptaTerminos', async ({ client, assert }) => {
+    const email = `asist-${Date.now()}@test.com`
+    // Sin edad: la pide el asistente después de crear la cuenta.
+    const reg = await client.post('/api/auth/register').json({
+      nombre: 'Paso',
+      apellido: 'A paso',
+      email,
+      password: '123456',
+      rol: 'cliente',
+      telefono: '3001234567',
+    })
+    reg.assertStatus(200)
+    assert.isFalse(reg.body().perfilCompleto)
+    const token = reg.body().token
+
+    const perfil = await client.get('/api/users/profile').bearerToken(token)
+    perfil.assertBodyContains({ registroCompleto: false })
+    assert.isNull(perfil.body().cedula)
+
+    // Login mientras tanto: sigue incompleto.
+    const login = await client.post('/api/auth/login').json({ email, password: '123456' })
+    assert.isFalse(login.body().perfilCompleto)
+
+    // Edad menor de 18: 422.
+    const menor = await client.put('/api/users/profile').bearerToken(token).json({ edad: 17 })
+    menor.assertStatus(422)
+
+    // Datos del asistente sin aceptar términos: sigue incompleto.
+    const datos = await client
+      .put('/api/users/profile')
+      .bearerToken(token)
+      .json({ edad: 25, cedula: '1061234567' })
+    datos.assertStatus(200)
+    datos.assertBodyContains({ edad: 25, cedula: '1061234567', registroCompleto: false })
+    assert.isFalse((await client.post('/api/auth/login').json({ email, password: '123456' })).body().perfilCompleto)
+
+    // aceptaTerminos: true cierra el registro.
+    const fin = await client.put('/api/users/profile').bearerToken(token).json({ aceptaTerminos: true })
+    fin.assertStatus(200)
+    fin.assertBodyContains({ registroCompleto: true })
+    const user = await User.findByOrFail('email', email)
+    assert.isTrue(user.registroCompleto)
+    assert.isNotNull(user.terminosAceptadosAt)
+    assert.isTrue((await client.post('/api/auth/login').json({ email, password: '123456' })).body().perfilCompleto)
+
+    // aceptaTerminos: false no lo reabre.
+    const noReabre = await client.put('/api/users/profile').bearerToken(token).json({ aceptaTerminos: false })
+    noReabre.assertBodyContains({ registroCompleto: true })
+  })
+
+  test('perfilCompleto exige también teléfono y edad; el conductor nace completo', async ({ client, assert }) => {
+    const ts = Date.now()
+    // Cliente con términos aceptados desde el registro pero sin teléfono ni edad.
+    const sinDatos = await client.post('/api/auth/register').json({
+      nombre: 'Sin',
+      apellido: 'Datos',
+      email: `sd-${ts}@test.com`,
+      password: '123456',
+      rol: 'cliente',
+      aceptaTerminos: true,
+    })
+    sinDatos.assertStatus(200)
+    assert.isFalse(sinDatos.body().perfilCompleto)
+    ;(await client.get('/api/users/profile').bearerToken(sinDatos.body().token)).assertBodyContains({
+      registroCompleto: true,
+    })
+
+    const conductor = await client.post('/api/auth/register').json({
+      nombre: 'Con',
+      apellido: 'Ductor',
+      email: `cd-${ts}@test.com`,
+      password: '123456',
+      rol: 'conductor',
+      edad: 30,
+      telefono: '3001234567',
+      cedula: `${ts}`,
+      placa: `PC${String(ts).slice(-5)}`,
+      tipoVehiculo: 'camioneta',
+      capacidad: '1000 kg',
+    })
+    conductor.assertStatus(200)
+    assert.isTrue(conductor.body().perfilCompleto)
   })
 })
 

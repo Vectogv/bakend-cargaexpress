@@ -12,6 +12,9 @@ export const updateProfileValidator = vine.create({
   // Obligatorio si se manda (sin nullable: null/"" falla), con formato.
   telefono: vine.string().trim().regex(TELEFONO_REGEX).optional(),
   edad: vine.number().min(18).max(120).nullable().optional(),
+  cedula: vine.string().trim().maxLength(20).nullable().optional(),
+  // Asistente de registro del cliente: `true` cierra el registro (registro_completo).
+  aceptaTerminos: vine.boolean().optional(),
   contactoEmergenciaNombre: vine.string().maxLength(100).nullable().optional(),
   // Sigue opcional y se puede limpiar con null, pero si se manda un valor debe
   // tener formato de teléfono.

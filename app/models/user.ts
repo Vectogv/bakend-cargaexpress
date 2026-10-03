@@ -91,6 +91,14 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
   @column.dateTime()
   declare terminosAceptadosAt: DateTime | null
 
+  /** Cédula del cliente (opcional; la del conductor vive en `conductores`). */
+  @column()
+  declare cedula: string | null
+
+  /** false mientras el cliente no termine el asistente de registro (acepta términos al final). */
+  @column({ consume: (value: unknown) => Boolean(value) })
+  declare registroCompleto: boolean
+
   get initials() {
     const nombre = this.nombre || ''
     const apellido = this.apellido || ''

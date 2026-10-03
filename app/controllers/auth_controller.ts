@@ -57,6 +57,14 @@ const hashCodigo = (codigo: string) =>
   createHmac('sha256', env.get('APP_KEY').release()).update(codigo).digest('hex')
 const CODIGO_INVALIDO = { message: 'Código inválido o vencido' }
 
+/**
+ * La app manda al asistente si falta algo: el registro (acepta términos al
+ * final, `registro_completo`) o los datos que pide después (teléfono y edad).
+ */
+export function perfilCompleto(user: User): boolean {
+  return Boolean(user.registroCompleto && user.telefono && user.edad)
+}
+
 let dummyHash: string | null = null
 async function getDummyHash() {
   dummyHash = dummyHash || (await hash.make(randomUUID()))
@@ -95,6 +103,12 @@ export default class AuthController {
         error: 'Cédula, placa, tipo de vehículo y capacidad son requeridas para conductores',
       })
     }
+    // El cliente completa la edad en el asistente; el conductor la trae al registrarse.
+    if (data.rol === 'conductor' && !data.edad) {
+      return response.status(422).send({
+        errors: [{ field: 'edad', rule: 'required', message: 'La edad es obligatoria' }],
+      })
+    }
 
     // ponytail: usuarios viejos con mayúsculas pueden duplicarse; se busca con lower(email), sin migrar datos.
     const correoUsado = await User.query().whereRaw('lower(email) = ?', [email]).first()
@@ -130,6 +144,9 @@ export default class AuthController {
             rol: data.rol,
             edad: data.edad || null,
             terminosAceptadosAt: data.aceptaTerminos ? DateTime.now() : null,
+            // El cliente cierra el registro al aceptar las políticas al final del
+            // asistente (PUT /api/users/profile); el conductor lo trae todo aquí.
+            registroCompleto: data.rol !== 'cliente' || Boolean(data.aceptaTerminos),
           },
           { client: trx }
         )
@@ -196,6 +213,7 @@ export default class AuthController {
       zonaModerador: user.zonaModerador,
       token: token.value!.release(),
       refreshToken: refreshTokenValue,
+      perfilCompleto: perfilCompleto(user),
     })
   }
 
@@ -235,6 +253,7 @@ export default class AuthController {
       zonaModerador: user.zonaModerador,
       token: token.value!.release(),
       refreshToken: refreshTokenValue,
+      perfilCompleto: perfilCompleto(user),
     })
   }
 
@@ -306,8 +325,7 @@ export default class AuthController {
       token: token.value!.release(),
       refreshToken: refreshTokenValue,
       cuentaNueva: false,
-      // La app pide estos datos si faltan (teléfono y edad mínima 18).
-      perfilCompleto: Boolean(user.telefono && user.edad),
+      perfilCompleto: perfilCompleto(user),
     })
   }
 

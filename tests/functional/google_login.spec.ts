@@ -45,6 +45,17 @@ test.group('Entrar con Google', (group) => {
     res.assertStatus(200)
     assert.equal(res.body().id, reg.body().id)
     assert.isFalse(res.body().cuentaNueva)
+    // Tiene edad pero no teléfono ni registro cerrado: la app lo manda al asistente.
+    assert.isFalse(res.body().perfilCompleto)
+
+    await client
+      .put('/api/users/profile')
+      .bearerToken(reg.body().token)
+      .json({ telefono: '3001234567', aceptaTerminos: true })
+    const restaurar2 = simularGoogle({ aud: AUD, email, email_verified: 'true' })
+    const res2 = await client.post('/api/auth/google').json({ idToken: TOKEN })
+    restaurar2()
+    assert.isTrue(res2.body().perfilCompleto)
   })
 
   test('rechaza token de otra app, correo sin verificar o inválido', async ({ client }) => {
