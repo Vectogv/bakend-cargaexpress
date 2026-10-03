@@ -113,6 +113,9 @@ export default class ReservationSchedulerProvider {
           await ReservationActivationService.activar(reserva.id)
         }
 
+        // "Pedir más plazo" sin respuesta del cliente: cuenta como rechazo.
+        await ReservationActivationService.expirarPlazosVencidos()
+
         // H1: Notificar al moderador de zona cuando un cierre quedó sin confirmar por el cliente.
         await ConfirmacionTimeoutService.notificarConfirmacionesVencidas()
 

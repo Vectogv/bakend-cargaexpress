@@ -13,7 +13,7 @@ import { parseScheduledDateTime } from '#services/reservation_time'
 import { emitToClient, emitTripStatusChanged } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
-import { viajeActivoDelCliente } from '#controllers/trip_controller'
+import { viajeActivoDelCliente, reabrirReserva } from '#controllers/trip_controller'
 
 /** Token FCM del usuario de un conductor (null si no hay conductor o token). */
 async function tokenDelConductor(conductorId: number | null): Promise<string | null> {
@@ -105,6 +105,55 @@ export default class ReservationActivationService {
     }
 
     return enviados
+  }
+
+  /**
+   * "Pedir más plazo" sin respuesta del cliente en N minutos: cuenta como
+   * rechazo (`plazo_estado = 'expirado'`), la reserva se libera sin penalizar
+   * al conductor y se le avisa igual que en el rechazo. Devuelve cuántas venció.
+   */
+  static async expirarPlazosVencidos(now: DateTime = DateTime.now()): Promise<number> {
+    const limite = now.minus({ minutes: reservationConfig.plazoRespuestaMinutes })
+    const candidatas = await Viaje.query()
+      .where('estado', 'reservado')
+      .where('plazo_estado', 'pendiente')
+      .whereNotNull('conductor_id')
+      .whereNotNull('plazo_solicitado_at')
+      .orderBy('plazo_solicitado_at', 'asc')
+      .limit(reservationConfig.activationBatchSize)
+
+    const vencidas = candidatas.filter((v) => v.plazoSolicitadoAt !== null && v.plazoSolicitadoAt <= limite)
+
+    let expiradas = 0
+    for (const viaje of vencidas) {
+      // Marca primero: si dos workers compiten, solo uno obtiene la fila.
+      const actualizados = await Viaje.query()
+        .where('id', viaje.id)
+        .where('plazo_estado', 'pendiente')
+        .update({ plazo_estado: 'expirado' })
+      if (Number(actualizados) === 0) continue
+      viaje.plazoEstado = 'expirado'
+
+      const tokenConductor = await tokenDelConductor(viaje.conductorId)
+      await reabrirReserva(viaje, viaje.clienteId, 'El cliente no respondió la solicitud de plazo', {
+        penalizar: false,
+        avisarCliente: false,
+      })
+      const plazo = { minutos: viaje.plazoMinutos, estado: 'expirado' }
+      emitToClient(viaje.clienteId, 'trip:plazo', { id: String(viaje.id), plazo })
+      emitTripUpdateToModerators(viaje, { plazo })
+      if (tokenConductor) {
+        await sendToToken(
+          tokenConductor,
+          'Reserva liberada',
+          'El cliente no respondió a tiempo; la reserva se liberó.',
+          { tipo: 'reserva', viajeId: String(viaje.id) }
+        ).catch(() => {})
+      }
+      expiradas++
+    }
+
+    return expiradas
   }
 
   /**

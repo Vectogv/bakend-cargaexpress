@@ -171,7 +171,7 @@ export default class Viaje extends BaseModel {
   @column()
   declare plazoMinutos: number | null
 
-  /** 'pendiente' | 'aceptado' | 'rechazado' */
+  /** 'pendiente' | 'aceptado' | 'rechazado' | 'expirado' (sin respuesta en 5 min: cuenta como rechazo) */
   @ApiProperty()
   @column()
   declare plazoEstado: string | null

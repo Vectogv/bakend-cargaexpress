@@ -357,12 +357,21 @@ test.group('Reserva asignada: pedir más plazo', (group) => {
       .post(`/api/trips/${viajeId}/plazo/responder`)
       .header('Authorization', `Bearer ${token}`)
       .json({ aceptar })
+  /** Mueve la hora programada a `minutos` desde ahora (la ventana del plazo es de 2 h). */
+  const programarEn = async (viajeId: number, minutos: number) => {
+    const cuando = DateTime.now().setZone(TZ).plus({ minutes: minutos })
+    await db.from('viajes').where('id', viajeId).update({
+      fecha_programada: cuando.toISODate(),
+      hora_programada: cuando.toFormat('HH:mm'),
+    })
+  }
 
   test('pedir 30 queda pendiente; segunda vez 409; inválido 422; tercero 403', async ({
     client,
     assert,
   }) => {
     const { cliente, driver, viajeId } = await reservaAsignada(client)
+    await programarEn(viajeId, 60)
 
     ;(await pedir(client, driver.token, viajeId, 20)).assertStatus(422)
     const otro = await registerDriver(client)
@@ -370,7 +379,9 @@ test.group('Reserva asignada: pedir más plazo', (group) => {
 
     const ok = await pedir(client, driver.token, viajeId, 30)
     ok.assertStatus(200)
-    assert.deepEqual(ok.body().plazo, { minutos: 30, estado: 'pendiente' })
+    assert.equal(ok.body().plazo.minutos, 30)
+    assert.equal(ok.body().plazo.estado, 'pendiente')
+    assert.isString(ok.body().plazo.expiraEn)
 
     const repetido = await pedir(client, driver.token, viajeId, 15)
     repetido.assertStatus(409)
@@ -381,6 +392,68 @@ test.group('Reserva asignada: pedir más plazo', (group) => {
     assert.equal(show.body().plazo.estado, 'pendiente')
     assert.equal(show.body().plazo.minutos, 30)
     assert.isNotNull(show.body().plazo.solicitadoAt)
+    const expira = DateTime.fromISO(show.body().plazo.expiraEn)
+    const solicitado = DateTime.fromISO(show.body().plazo.solicitadoAt)
+    assert.equal(Math.round(expira.diff(solicitado, 'minutes').minutes), reservationConfig.plazoRespuestaMinutes)
+  })
+
+  test('fuera de la ventana de 2 h (muy pronto o ya pasada): 409 FUERA_DE_VENTANA', async ({
+    client,
+    assert,
+  }) => {
+    const { driver, viajeId } = await reservaAsignada(client)
+
+    // Reserva a 2 días: todavía no abre la ventana.
+    const lejos = await pedir(client, driver.token, viajeId, 30)
+    lejos.assertStatus(409)
+    assert.equal(lejos.body().code, 'FUERA_DE_VENTANA')
+
+    // Justo al borde (menos de 2 h): sí abre. Se verifica por el 409 distinto al repetir.
+    await programarEn(viajeId, reservationConfig.plazoVentanaMinutes - 5)
+    ;(await pedir(client, driver.token, viajeId, 30)).assertStatus(200)
+
+    // Hora de recogida ya pasada: cerrada.
+    const { driver: driver2, viajeId: viajeId2 } = await reservaAsignada(client)
+    await programarEn(viajeId2, -10)
+    const tarde = await pedir(client, driver2.token, viajeId2, 30)
+    tarde.assertStatus(409)
+    assert.equal(tarde.body().code, 'FUERA_DE_VENTANA')
+    assert.isNull((await Viaje.findOrFail(viajeId2)).plazoEstado)
+  })
+
+  test('sin respuesta del cliente en 5 min: expira, se libera sin penalizar y el cliente ya no puede responder', async ({
+    client,
+    assert,
+  }) => {
+    const { cliente, driver, viajeId } = await reservaAsignada(client)
+    await programarEn(viajeId, 60)
+    ;(await pedir(client, driver.token, viajeId, 30)).assertStatus(200)
+
+    // Recién pedida: nada vence.
+    assert.equal(await ReservationActivationService.expirarPlazosVencidos(), 0)
+    assert.equal((await Viaje.findOrFail(viajeId)).plazoEstado, 'pendiente')
+
+    const ahora = DateTime.now()
+    const vencido = ahora.plus({ minutes: reservationConfig.plazoRespuestaMinutes + 1 })
+    assert.equal(await ReservationActivationService.expirarPlazosVencidos(vencido), 1)
+    // Idempotente: una segunda pasada no la vuelve a procesar.
+    assert.equal(await ReservationActivationService.expirarPlazosVencidos(vencido), 0)
+
+    const viaje = await Viaje.findOrFail(viajeId)
+    assert.equal(viaje.estado, 'reservado')
+    assert.equal(viaje.plazoEstado, 'expirado')
+    assert.isNull(viaje.conductorId)
+    const ofertas = await db.from('ofertas').where('viaje_id', viajeId).where('estado', 'aceptada')
+    assert.lengthOf(ofertas, 0)
+    const conductor = await db.from('conductores').where('id', driver.conductorId).first()
+    assert.equal(Number(conductor.penalizacion_cancelacion ?? 0), 0)
+
+    const show = await client.get(`/api/trips/${viajeId}`).header('Authorization', `Bearer ${cliente.token}`)
+    assert.equal(show.body().plazo.estado, 'expirado')
+    assert.isNull(show.body().plazo.expiraEn)
+    const tarde = await responder(client, cliente.token, viajeId, true)
+    tarde.assertStatus(409)
+    assert.equal(tarde.body().code, 'SIN_PLAZO_PENDIENTE')
   })
 
   test('el cliente acepta: recogida y activación se corren los minutos pedidos', async ({
@@ -388,6 +461,7 @@ test.group('Reserva asignada: pedir más plazo', (group) => {
     assert,
   }) => {
     const { cliente, driver, viajeId } = await reservaAsignada(client)
+    await programarEn(viajeId, 90)
     const antes = await Viaje.findOrFail(viajeId)
     const programadaAntes = parseScheduledDateTime(antes.fechaProgramada, antes.horaProgramada)!
 
@@ -422,11 +496,7 @@ test.group('Reserva asignada: pedir más plazo', (group) => {
   }) => {
     const { cliente, driver, viajeId } = await reservaAsignada(client)
     // A menos de 24 h, soltar la reserva sí penalizaría; el rechazo del plazo no.
-    const pronto = DateTime.now().setZone(TZ).plus({ hours: 3 })
-    await db.from('viajes').where('id', viajeId).update({
-      fecha_programada: pronto.toISODate(),
-      hora_programada: pronto.toFormat('HH:mm'),
-    })
+    await programarEn(viajeId, 60)
     ;(await pedir(client, driver.token, viajeId, 60)).assertStatus(200)
 
     const res = await responder(client, cliente.token, viajeId, false)

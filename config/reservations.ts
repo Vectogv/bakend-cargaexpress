@@ -47,6 +47,15 @@ const reservationConfig = {
    */
   busquedaTimeoutMin: Number(env.get('BUSQUEDA_TIMEOUT_MIN', 15)),
 
+  /**
+   * "Pedir más plazo" (reserva asignada): el conductor solo puede pedirlo
+   * desde N minutos antes de la hora programada hasta esa hora.
+   */
+  plazoVentanaMinutes: Number(env.get('RESERVATION_PLAZO_VENTANA_MINUTES', 120)),
+
+  /** Minutos que tiene el cliente para responder el plazo; después cuenta como rechazo. */
+  plazoRespuestaMinutes: Number(env.get('RESERVATION_PLAZO_RESPUESTA_MINUTES', 5)),
+
   /** Zona horaria de operación (Popayán/Cali/Pasto). */
   timezone: env.get('RESERVATION_TIMEZONE', 'America/Bogota'),
 }

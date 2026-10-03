@@ -108,6 +108,77 @@ async function penalizarCancelacionConductor(conductor: Conductor) {
   await recalcularCalificacionConductor(conductor)
 }
 
+/**
+ * El conductor asignado suelta una reserva sin activar: la reserva vuelve a
+ * recibir ofertas (sigue `reservado`). Penaliza solo si faltan menos de 24 h.
+ * A nivel de módulo para que el vencimiento del plazo (scheduler) reutilice
+ * exactamente el mismo camino que el rechazo del cliente.
+ */
+export async function reabrirReserva(
+  viaje: Viaje,
+  userId: number,
+  justificacion: string,
+  // Al rechazar (o no responder) el cliente un plazo, es él quien libera: ni
+  // penalización ni aviso a sí mismo.
+  opts: { penalizar?: boolean; avisarCliente?: boolean } = {}
+) {
+  const { penalizar = true, avisarCliente = true } = opts
+  const conductor = await Conductor.findOrFail(viaje.conductorId!)
+  const ahora = DateTime.now()
+  const programada = parseScheduledDateTime(viaje.fechaProgramada, viaje.horaProgramada)
+  const penalizado = penalizar && !!programada && programada.diff(ahora, 'hours').hours < 24
+
+  if (penalizado) {
+    await AntifraudeService.registrarFraude('cancelacion_conductor', {
+      userId,
+      conductorId: conductor.id,
+      viajeId: viaje.id,
+      justificacion,
+      descripcion: `Conductor soltó la reserva del ${viaje.fechaProgramada} ${viaje.horaProgramada} con menos de 24 h. Justificación: ${justificacion}`,
+    })
+    await penalizarCancelacionConductor(conductor)
+  }
+
+  await Oferta.query()
+    .where('viaje_id', viaje.id)
+    .where('estado', 'aceptada')
+    .update({ estado: 'cancelada' })
+  await OfferExpiryService.expirarDelViaje(viaje.id)
+
+  viaje.conductorId = null
+  viaje.precioFinal = null
+  viaje.pinEntrega = null
+  const activacion = programada?.minus({ minutes: reservationConfig.dispatchLeadMinutes }).setZone(ahora.zone)
+  viaje.activacionAt = activacion && activacion > ahora ? activacion : ahora
+  await viaje.save()
+
+  emitToClient(viaje.clienteId, 'trip:status_changed', {
+    id: String(viaje.id),
+    estado: 'reservado',
+    conductorId: null,
+  })
+  emitTripUpdateToModerators(viaje)
+
+  const cliente = avisarCliente ? await User.find(viaje.clienteId) : null
+  if (cliente?.fcmToken) {
+    await sendToToken(
+      cliente.fcmToken,
+      'Tu conductor canceló la reserva',
+      'Tu conductor canceló la reserva; buscamos otro.',
+      { tipo: 'viaje_estado', viajeId: String(viaje.id) }
+    ).catch(() => {})
+  }
+
+  await TripDispatchService.buscarConductores(viaje)
+
+  return { id: String(viaje.id), estado: 'reservado', reabierta: true, penalizado }
+}
+
+/** Hasta cuándo puede responder el cliente una solicitud de plazo pendiente. */
+export function plazoExpiraEn(viaje: Viaje): DateTime | null {
+  return viaje.plazoSolicitadoAt?.plus({ minutes: reservationConfig.plazoRespuestaMinutes }) ?? null
+}
+
 type Punto = { lat: number; lng: number }
 
 /**
@@ -1409,7 +1480,7 @@ export default class TripController {
         }
         throw e
       }
-      return serialize.withoutWrapping(await this.reabrirReserva(viaje, user, justificacion!))
+      return serialize.withoutWrapping(await reabrirReserva(viaje, user.id, justificacion!))
     }
     if (user.rol === 'cliente' && viaje.conductorId && !esReserva) {
       const conductor = await Conductor.find(viaje.conductorId)
@@ -1542,69 +1613,6 @@ export default class TripController {
     })
   }
 
-  /**
-   * El conductor asignado suelta una reserva sin activar: la reserva vuelve a
-   * recibir ofertas (sigue `reservado`). Penaliza solo si faltan menos de 24 h.
-   */
-  private async reabrirReserva(
-    viaje: Viaje,
-    user: User,
-    justificacion: string,
-    // Al rechazar el cliente un plazo, es él quien libera: ni penalización ni aviso a sí mismo.
-    opts: { penalizar?: boolean; avisarCliente?: boolean } = {}
-  ) {
-    const { penalizar = true, avisarCliente = true } = opts
-    const conductor = await Conductor.findOrFail(viaje.conductorId!)
-    const ahora = DateTime.now()
-    const programada = parseScheduledDateTime(viaje.fechaProgramada, viaje.horaProgramada)
-    const penalizado = penalizar && !!programada && programada.diff(ahora, 'hours').hours < 24
-
-    if (penalizado) {
-      await AntifraudeService.registrarFraude('cancelacion_conductor', {
-        userId: user.id,
-        conductorId: conductor.id,
-        viajeId: viaje.id,
-        justificacion,
-        descripcion: `Conductor soltó la reserva del ${viaje.fechaProgramada} ${viaje.horaProgramada} con menos de 24 h. Justificación: ${justificacion}`,
-      })
-      await penalizarCancelacionConductor(conductor)
-    }
-
-    await Oferta.query()
-      .where('viaje_id', viaje.id)
-      .where('estado', 'aceptada')
-      .update({ estado: 'cancelada' })
-    await OfferExpiryService.expirarDelViaje(viaje.id)
-
-    viaje.conductorId = null
-    viaje.precioFinal = null
-    viaje.pinEntrega = null
-    const activacion = programada?.minus({ minutes: reservationConfig.dispatchLeadMinutes }).setZone(ahora.zone)
-    viaje.activacionAt = activacion && activacion > ahora ? activacion : ahora
-    await viaje.save()
-
-    emitToClient(viaje.clienteId, 'trip:status_changed', {
-      id: String(viaje.id),
-      estado: 'reservado',
-      conductorId: null,
-    })
-    emitTripUpdateToModerators(viaje)
-
-    const cliente = avisarCliente ? await User.find(viaje.clienteId) : null
-    if (cliente?.fcmToken) {
-      await sendToToken(
-        cliente.fcmToken,
-        'Tu conductor canceló la reserva',
-        'Tu conductor canceló la reserva; buscamos otro.',
-        { tipo: 'viaje_estado', viajeId: String(viaje.id) }
-      ).catch(() => {})
-    }
-
-    await TripDispatchService.buscarConductores(viaje)
-
-    return { id: String(viaje.id), estado: 'reservado', reabierta: true, penalizado }
-  }
-
   /** Token FCM del usuario de un conductor (null si no hay token). */
   private async tokenDelConductor(conductorId: number) {
     const conductor = await Conductor.query().where('id', conductorId).preload('usuario').first()
@@ -1637,13 +1645,23 @@ export default class TripController {
         .status(409)
         .send({ error: 'Ya pediste plazo para esta reserva; solo se puede una vez', code: 'PLAZO_YA_SOLICITADO' })
     }
+    // Ventana: desde N min antes de la hora programada hasta esa hora.
+    const programada = parseScheduledDateTime(viaje.fechaProgramada, viaje.horaProgramada)
+    const ahora = DateTime.now()
+    const ventana = reservationConfig.plazoVentanaMinutes
+    if (!programada || ahora < programada.minus({ minutes: ventana }) || ahora > programada) {
+      return response.status(409).send({
+        error: `Solo puedes pedir plazo desde ${ventana} minutos antes de la hora de recogida hasta esa hora`,
+        code: 'FUERA_DE_VENTANA',
+      })
+    }
 
     viaje.plazoMinutos = minutos
     viaje.plazoEstado = 'pendiente'
     viaje.plazoSolicitadoAt = DateTime.now()
     await viaje.save()
 
-    const plazo = { minutos, estado: 'pendiente' }
+    const plazo = { minutos, estado: 'pendiente', expiraEn: plazoExpiraEn(viaje)!.toISO() }
     emitToClient(viaje.clienteId, 'trip:plazo', { id: String(viaje.id), plazo })
     emitTripUpdateToModerators(viaje, { plazo })
 
@@ -1705,7 +1723,7 @@ export default class TripController {
 
     if (!aceptar) {
       viaje.plazoEstado = 'rechazado'
-      await this.reabrirReserva(viaje, user, 'El cliente rechazó el plazo pedido', {
+      await reabrirReserva(viaje, user.id, 'El cliente rechazó el plazo pedido', {
         penalizar: false,
         avisarCliente: false,
       })
@@ -1970,6 +1988,8 @@ export default class TripController {
             minutos: viaje.plazoMinutos,
             estado: viaje.plazoEstado,
             solicitadoAt: viaje.plazoSolicitadoAt?.toISO() ?? null,
+            // Solo informativo mientras está pendiente; vencido, cuenta como rechazo.
+            expiraEn: viaje.plazoEstado === 'pendiente' ? (plazoExpiraEn(viaje)?.toISO() ?? null) : null,
           }
         : null,
       fotoEntrega: viaje.fotoEntrega,
