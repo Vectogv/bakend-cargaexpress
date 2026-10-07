@@ -49,6 +49,10 @@ export default class ConfiguracionPlataforma extends BaseModel {
   @column(jsonColumn)
   declare escalera: any
 
+  /** Programa de referidos (encendido, metas, porcentajes, topes). Ver referidos_service. */
+  @column(jsonColumn)
+  declare referidos: any
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

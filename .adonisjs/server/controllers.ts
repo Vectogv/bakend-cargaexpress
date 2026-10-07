@@ -15,6 +15,7 @@ export const controllers = {
   Emergency: () => import('#controllers/emergency_controller'),
   FavoriteRoute: () => import('#controllers/favorite_route_controller'),
   FraudAlert: () => import('#controllers/fraud_alert_controller'),
+  Gerencia: () => import('#controllers/gerencia_controller'),
   Leader: () => import('#controllers/leader_controller'),
   Mapbox: () => import('#controllers/mapbox_controller'),
   Moderator: () => import('#controllers/moderator_controller'),

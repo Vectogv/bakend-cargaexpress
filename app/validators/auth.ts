@@ -22,6 +22,8 @@ export const registerValidator = vine.create({
   tipoVehiculo: vine.string().maxLength(50).nullable().optional(),
   capacidad: vine.string().maxLength(50).nullable().optional(),
   ciudad: vine.string().maxLength(100).nullable().optional(),
+  // Programa de referidos: código del conductor que lo invitó (solo conductores).
+  codigoReferido: vine.string().trim().maxLength(12).nullable().optional(),
 })
 
 // Mensajes en español para la regla requerida de la edad (H3).

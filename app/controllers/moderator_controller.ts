@@ -17,6 +17,7 @@ import logger from '@adonisjs/core/services/logger'
 import db from '@adonisjs/lucid/services/db'
 import { sendToMultiple, sendToToken } from '#services/push_notification_service'
 import TripFinalizationService from '#services/trip_finalization_service'
+import ReferidosService from '#services/referidos_service'
 import {
   emitToAdmin,
   emitToModerators,
@@ -351,6 +352,7 @@ export default class ModeratorController {
     conductor.estadoVerificacion = 'aprobado'
     conductor.notaRechazo = null
     await conductor.save()
+    await ReferidosService.alAprobar(conductor.id)
 
     try {
       emitToDriver(conductor.usuarioId, 'driver:approved', {

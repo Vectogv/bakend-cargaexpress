@@ -120,6 +120,7 @@ router
     router.get('stats', [controllers.Driver, 'stats'])
     router.get('today-stats', [controllers.Driver, 'todayStats'])
     router.get('grupo', [controllers.Driver, 'grupo']) // zona, líder, avisos y comunicados
+    router.get('referidos', [controllers.Driver, 'referidos']) // código, invitados y cupones
     router.post('grupo/avisos/:id/comentarios', [controllers.Driver, 'comentarAviso'])
     router.delete('grupo/comentarios/:id', [controllers.Driver, 'borrarComentario'])
     router.get('earnings/history', [controllers.Driver, 'earningsHistory'])
@@ -237,6 +238,8 @@ router
     router.put('payments/:userId/reject', [controllers.Admin, 'rejectPayment'])
     router.get('config', [controllers.Admin, 'config'])
     router.put('config', [controllers.Admin, 'updateConfig'])
+    router.get('referidos', [controllers.Admin, 'referidos'])
+    router.put('referidos/:id/anular', [controllers.Admin, 'anularReferido'])
     router.get('config/coverage', [controllers.Admin, 'coverage'])
     router.put('config/coverage', [controllers.Admin, 'updateCoverage'])
     router.put('config/banner', [controllers.Admin, 'updateBanner'])

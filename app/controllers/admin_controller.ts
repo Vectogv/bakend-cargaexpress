@@ -44,6 +44,7 @@ import {
 import { adminUpdateUserValidator } from '#validators/user'
 import { restaurarViajeTrasSos } from '#services/sos_trip_service'
 import { mezclarEscalera, validarEscalera } from '#services/busqueda_escalera_service'
+import ReferidosService, { mezclarReferidos, validarReferidos } from '#services/referidos_service'
 
 /** Tokens push de los conductores cuya ciudad cae en la zona (ya normalizada con claveDe). */
 export async function tokensConductoresDeZona(zona: string): Promise<string[]> {
@@ -762,6 +763,7 @@ export default class AdminController {
     conductor.estadoVerificacion = 'aprobado'
     conductor.notaRechazo = null
     await conductor.save()
+    await ReferidosService.alAprobar(conductor.id)
 
     emitToDriver(conductor.usuarioId, 'driver:approved', {
       conductorId: conductor.id,
@@ -1507,6 +1509,7 @@ export default class AdminController {
       soporteTelefono: config.soporteTelefono,
       soporteEmail: config.soporteEmail,
       escalera: mezclarEscalera(config.escalera),
+      referidos: mezclarReferidos(config.referidos),
     })
   }
 
@@ -1516,12 +1519,13 @@ export default class AdminController {
       config = await ConfiguracionPlataforma.create({})
     }
 
-    const { nequiNumero, nequiNombre, soporteTelefono, soporteEmail, escalera } = request.only([
+    const { nequiNumero, nequiNombre, soporteTelefono, soporteEmail, escalera, referidos } = request.only([
       'nequiNumero',
       'nequiNombre',
       'soporteTelefono',
       'soporteEmail',
       'escalera',
+      'referidos',
     ])
 
     // Escalera de acompañamiento: acepta parciales, se valida el resultado completo.
@@ -1529,6 +1533,11 @@ export default class AdminController {
       const resultado = validarEscalera(escalera, mezclarEscalera(config.escalera))
       if ('error' in resultado) return response.status(422).send({ error: resultado.error })
       config.escalera = resultado.valor
+    }
+    if (referidos !== undefined) {
+      const resultado = validarReferidos(referidos, mezclarReferidos(config.referidos))
+      if ('error' in resultado) return response.status(422).send({ error: resultado.error })
+      config.referidos = resultado.valor
     }
 
     // Validación blanda: solo se rechaza si viene un valor con formato inválido;
@@ -1555,7 +1564,19 @@ export default class AdminController {
       soporteTelefono: config.soporteTelefono,
       soporteEmail: config.soporteEmail,
       escalera: mezclarEscalera(config.escalera),
+      referidos: mezclarReferidos(config.referidos),
     })
+  }
+
+  /** Programa de referidos: lista completa y comisión no cobrada del mes. */
+  async referidos({ serialize }: HttpContext) {
+    return serialize.withoutWrapping(await ReferidosService.resumenAdmin())
+  }
+
+  async anularReferido({ params, response, serialize }: HttpContext) {
+    const referido = await ReferidosService.anular(Number(params.id))
+    if (!referido) return response.status(404).send({ error: 'Referido no encontrado' })
+    return serialize.withoutWrapping({ id: referido.id, estado: referido.estado })
   }
 
   /** Zonas de operación tal como las edita el admin (incluye las inactivas). */

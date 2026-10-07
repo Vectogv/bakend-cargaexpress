@@ -11,6 +11,7 @@ import {
 } from '#validators/auth'
 import CodigoRecuperacion from '#models/codigo_recuperacion'
 import SessionService from '#services/session_service'
+import ReferidosService, { CodigoReferidoInvalido } from '#services/referidos_service'
 import { enviarCorreo } from '#services/mail_service'
 import env from '#start/env'
 import logger from '@adonisjs/core/services/logger'
@@ -152,7 +153,7 @@ export default class AuthController {
         )
 
         if (nuevo.rol === 'conductor') {
-          await Conductor.create(
+          const conductor = await Conductor.create(
             {
               usuarioId: nuevo.id,
               cedula: data.cedula!,
@@ -162,13 +163,18 @@ export default class AuthController {
               modeloVehiculo: data.modeloVehiculo || null,
               ciudad: data.ciudad || null,
               estadoVerificacion: 'pendiente',
+              codigoReferido: await ReferidosService.codigoNuevo(data.nombre, data.placa!, trx),
             },
             { client: trx }
           )
+          await ReferidosService.registrarInvitacion(trx, conductor, data.codigoReferido)
         }
         return nuevo
       })
     } catch (err: any) {
+      if (err instanceof CodigoReferidoInvalido) {
+        return response.status(422).send({ error: err.message, message: err.message, code: err.code })
+      }
       // Carrera entre dos registros simultáneos: la restricción UNIQUE de la BD
       // es la última defensa (MySQL ER_DUP_ENTRY / SQLite UNIQUE constraint).
       const mensaje = String(err?.message || '')

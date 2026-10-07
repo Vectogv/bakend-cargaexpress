@@ -16,6 +16,7 @@ import { DateTime } from 'luxon'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import { emitToClient, emitToAdmin, emitToDriver } from '#start/socket'
 import { rutaDelViaje, payloadRuta, distanciaM } from '#services/trip_route_service'
+import ReferidosService from '#services/referidos_service'
 
 /**
  * Viajes a los que ya se envió el push "Conductor cerca": antes salía en cada
@@ -695,6 +696,16 @@ export default class DriverController {
    * aprobados de la zona. Las zonas se comparan normalizadas (claveDe); los
    * avisos incluyen los 'general' (los que publican los propios conductores).
    */
+  /** Programa de referidos: código, invitados, cupones y progreso propio. */
+  async referidos({ auth, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conductor = await Conductor.query().where('usuario_id', user.id).first()
+    if (user.rol !== 'conductor' || !conductor) {
+      return response.status(403).send({ error: 'Solo para conductores' })
+    }
+    return serialize.withoutWrapping(await ReferidosService.resumenConductor(conductor))
+  }
+
   async grupo({ auth, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
     if (user.rol !== 'conductor') {

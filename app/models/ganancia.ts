@@ -16,6 +16,7 @@ export default class Ganancia extends BaseModel {
     'montoNeto',
     'comisionPagada',
     'comisionPagadaAt',
+    'cuponId',
     'createdAt',
   ] as const
   $columns = Ganancia.$columns
@@ -63,6 +64,10 @@ export default class Ganancia extends BaseModel {
   @ApiProperty()
   @column.dateTime()
   declare comisionPagadaAt: DateTime | null
+
+  /** Cupón de referidos que rebajó la comisión de este viaje (null = 10 % normal). */
+  @column()
+  declare cuponId: number | null
 
   @ApiProperty()
   @column.dateTime({ autoCreate: true })

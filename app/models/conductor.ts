@@ -49,6 +49,7 @@ export default class Conductor extends BaseModel {
     'updatedAt',
     'ubicacionActualizadaEn',
     'penalizacionCancelacion',
+    'codigoReferido',
   ] as const
   $columns = Conductor.$columns
 
@@ -194,6 +195,10 @@ export default class Conductor extends BaseModel {
 
   @column.dateTime()
   declare ubicacionActualizadaEn: DateTime | null
+
+  /** Código que comparte para invitar a otros conductores (referidos_service). */
+  @column()
+  declare codigoReferido: string | null
 
   @belongsTo(() => User, { foreignKey: 'usuarioId' })
   declare usuario: BelongsTo<typeof User>

@@ -9,6 +9,7 @@ import TripStateMachine, { type EstadoViaje } from '#services/trip_state_machine
 import DriverDebtSuspensionService, {
   DIAS_PLAZO_DEUDA_COMISION,
 } from '#services/driver_debt_suspension_service'
+import ReferidosService, { COMISION_PCT } from '#services/referidos_service'
 
 /**
  * TripFinalizationService
@@ -212,7 +213,10 @@ export default class TripFinalizationService {
 
         if (viaje.conductorId) {
           const montoBruto = input.montoFinal
-          const comision = Math.round(montoBruto * 0.1 * 100) / 100
+          // Programa de referidos: un cupón vigente rebaja el 10 % (y gasta un uso).
+          const descuento = await ReferidosService.descuentoPara(trx, viaje.conductorId, montoBruto)
+          const pct = descuento?.pct ?? COMISION_PCT
+          const comision = Math.round(montoBruto * pct) / 100
           const montoNeto = Math.round((montoBruto - comision) * 100) / 100
 
           // 2. Crear registro de ganancia (UNIQUE en viaje_id lo protege)
@@ -225,6 +229,7 @@ export default class TripFinalizationService {
               comision,
               montoNeto,
               comisionPagada: false,
+              cuponId: descuento?.cuponId ?? null,
             },
             { client: trx }
           )
@@ -288,6 +293,9 @@ export default class TripFinalizationService {
 
         return { idempotent: false, viaje }
       })
+
+      // Fuera de la transacción: la meta del referido no puede frenar el cierre.
+      if (!resultado.idempotent) await ReferidosService.alFinalizar(resultado.viaje)
 
       return {
         ok: true,

@@ -1952,12 +1952,14 @@ export default class TripController {
         .where('conductor_id', conductor.id)
         .preload('cliente')
         .preload('conductor', (q) => q.preload('usuario'))
+        .preload('ganancia')
         .orderBy('createdAt', 'desc')
     } else {
       query = Viaje.query()
         .where('cliente_id', user.id)
         .preload('cliente')
         .preload('conductor', (q) => q.preload('usuario'))
+        .preload('ganancia')
         .orderBy('createdAt', 'desc')
     }
     if (estadoFilter) {
@@ -1987,6 +1989,7 @@ export default class TripController {
       .where('id', params.id)
       .preload('cliente')
       .preload('conductor', (q) => q.preload('usuario'))
+      .preload('ganancia')
       .firstOrFail()
 
     // Solo el cliente, el conductor asignado o un admin pueden ver los detalles del viaje.
@@ -2093,6 +2096,9 @@ export default class TripController {
       // Evitar Number(null) → 0: si el campo es null se manda null.
       precioEstimado: viaje.precioEstimado ?? null,
       precioFinal: viaje.precioFinal ?? null,
+      // Comisión real cobrada (ganancias): con cupón de referidos no es el 10 %.
+      // Solo viene en historial y detalle (viajes cerrados); null si no hay ganancia.
+      comision: viaje.ganancia?.comision ?? null,
       // tiempoEstimado/tempoEstimadoMinutos ya incluidos arriba
       createdAt: viaje.createdAt.toISO(),
       aceptadoAt: viaje.aceptadoAt?.toISO() || null,

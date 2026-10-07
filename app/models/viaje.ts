@@ -1,8 +1,9 @@
 import { DateTime } from 'luxon'
-import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
-import type { BelongsTo } from '@adonisjs/lucid/types/relations'
+import { BaseModel, column, belongsTo, hasOne } from '@adonisjs/lucid/orm'
+import type { BelongsTo, HasOne } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 import Conductor from './conductor.js'
+import Ganancia from './ganancia.js'
 import { ApiProperty } from '@foadonis/openapi/decorators'
 
 export default class Viaje extends BaseModel {
@@ -240,4 +241,8 @@ export default class Viaje extends BaseModel {
 
   @belongsTo(() => Conductor, { foreignKey: 'conductorId' })
   declare conductor: BelongsTo<typeof Conductor>
+
+  /** Ganancia del conductor al finalizar (trae la comisión real cobrada). */
+  @hasOne(() => Ganancia, { foreignKey: 'viajeId' })
+  declare ganancia: HasOne<typeof Ganancia>
 }
