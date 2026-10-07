@@ -21,7 +21,7 @@ import { emitTripUpdateToModerators } from '#services/moderator_trip_events'
  *   • publicado  (al pedir):      aviso a los conductores dentro de `radioInicialKm`.
  *   • ampliada   (min `minAmpliar`):   reenvío entre `radioInicialKm` y `radioAmpliadoKm`,
  *                                      incluyendo a los que están terminando un viaje.
- *   • sugerencia (min `minSugerencia`): rango de precio de viajes parecidos (o +pct% de respaldo).
+ *   • sugerencia (min `minSugerencia`): precio sugerido = km × tarifa por km del tipo de vehículo.
  *   • cierre     (`minRespuestaCierre` min antes de `busqueda_hasta`): se le pregunta al cliente;
  *                "seguir esperando" reinicia el ciclo en 'ampliada' con `minSeguirEsperando` más.
  *
@@ -41,8 +41,8 @@ export interface EscaleraConfig {
   minCierre: number
   minRespuestaCierre: number
   minSeguirEsperando: number
-  pctSugerenciaMin: number
-  pctSugerenciaMax: number
+  /** Pesos por km según el tipo de vehículo (0 = sin sugerencia para ese tipo). */
+  tarifaKm: { piaggio: number; furgon: number; camioneta: number }
   etapas: { ampliar: boolean; sugerencia: boolean; cierre: boolean }
 }
 
@@ -54,16 +54,12 @@ export const ESCALERA_DEFAULT: EscaleraConfig = {
   minCierre: 20,
   minRespuestaCierre: 10,
   minSeguirEsperando: 20,
-  pctSugerenciaMin: 15,
-  pctSugerenciaMax: 30,
+  tarifaKm: { piaggio: 0, furgon: 0, camioneta: 0 },
   etapas: { ampliar: true, sugerencia: true, cierre: true },
 }
 
 const ESTADOS_BUSQUEDA = ['buscando_conductor', 'pendiente']
 const ORDEN: EtapaBusqueda[] = ['publicado', 'ampliada', 'sugerencia', 'cierre']
-/** Viajes finalizados que se miran para el rango de precio (los más recientes). */
-const MUESTRA_HISTORIAL = 500
-const MINIMO_PARECIDOS = 5
 
 /** Config guardada mezclada con los valores por defecto; el radio ampliado nunca pasa el tope antifraude. */
 export function mezclarEscalera(guardada: unknown): EscaleraConfig {
@@ -72,6 +68,7 @@ export function mezclarEscalera(guardada: unknown): EscaleraConfig {
     ...ESCALERA_DEFAULT,
     ...g,
     etapas: { ...ESCALERA_DEFAULT.etapas, ...(g.etapas ?? {}) },
+    tarifaKm: { ...ESCALERA_DEFAULT.tarifaKm, ...(g.tarifaKm ?? {}) },
   }
   cfg.radioAmpliadoKm = Math.min(cfg.radioAmpliadoKm, antifraudeConfig.radioOfertaKm)
   cfg.radioInicialKm = Math.min(cfg.radioInicialKm, cfg.radioAmpliadoKm)
@@ -95,7 +92,7 @@ export function validarEscalera(
     return { error: 'escalera debe ser un objeto' }
   }
   const e = entrada as Record<string, unknown>
-  const cfg: EscaleraConfig = { ...actual, etapas: { ...actual.etapas } }
+  const cfg: EscaleraConfig = { ...actual, etapas: { ...actual.etapas }, tarifaKm: { ...actual.tarifaKm } }
   const rangos: Array<[keyof EscaleraConfig, number, number]> = [
     ['radioInicialKm', 1, antifraudeConfig.radioOfertaKm],
     ['radioAmpliadoKm', 1, antifraudeConfig.radioOfertaKm],
@@ -104,8 +101,6 @@ export function validarEscalera(
     ['minCierre', 1, 240],
     ['minRespuestaCierre', 1, 60],
     ['minSeguirEsperando', 1, 240],
-    ['pctSugerenciaMin', 1, 200],
-    ['pctSugerenciaMax', 1, 300],
   ]
   for (const [campo, min, max] of rangos) {
     if (e[campo] === undefined) continue
@@ -124,6 +119,20 @@ export function validarEscalera(
       cfg.etapas[k] = v
     }
   }
+  if (e.tarifaKm !== undefined) {
+    if (!e.tarifaKm || typeof e.tarifaKm !== 'object' || Array.isArray(e.tarifaKm)) {
+      return { error: 'tarifaKm debe ser un objeto' }
+    }
+    for (const k of ['piaggio', 'furgon', 'camioneta'] as const) {
+      const v = (e.tarifaKm as Record<string, unknown>)[k]
+      if (v === undefined) continue
+      const n = Number(v)
+      if (v === null || v === '' || !Number.isFinite(n) || n < 0 || n > 100000) {
+        return { error: `tarifaKm.${k} debe estar entre 0 y 100000` }
+      }
+      cfg.tarifaKm[k] = Math.round(n)
+    }
+  }
   if (cfg.radioAmpliadoKm < cfg.radioInicialKm) {
     return { error: 'radioAmpliadoKm debe ser mayor o igual que radioInicialKm' }
   }
@@ -133,13 +142,14 @@ export function validarEscalera(
   if (cfg.minSeguirEsperando <= cfg.minRespuestaCierre) {
     return { error: 'minSeguirEsperando debe ser mayor que minRespuestaCierre' }
   }
-  if (cfg.pctSugerenciaMax <= cfg.pctSugerenciaMin) {
-    return { error: 'pctSugerenciaMax debe ser mayor que pctSugerenciaMin' }
-  }
   return { valor: cfg }
 }
 
 const pesos = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`
+
+/** Distancia origen→destino en línea recta, 1 decimal (el modelo no guarda la distancia). */
+const kmDe = (v: Viaje) =>
+  Math.round(distanciaKm(Number(v.origenLat), Number(v.origenLng), Number(v.destinoLat), Number(v.destinoLng)) * 10) / 10
 
 /** Objeto `busqueda` del payload del viaje (null si no está buscando o no entró a la escalera). */
 export function busquedaDe(viaje: Viaje) {
@@ -147,13 +157,13 @@ export function busquedaDe(viaje: Viaje) {
   if (!etapa || !ESTADOS_BUSQUEDA.includes(viaje.estado)) return null
   const precioSugerido =
     viaje.precioSugeridoMin != null && viaje.precioSugeridoMax != null
-      ? { min: Number(viaje.precioSugeridoMin), max: Number(viaje.precioSugeridoMax) }
+      ? { min: Number(viaje.precioSugeridoMin), max: Number(viaje.precioSugeridoMax), km: kmDe(viaje) }
       : null
   const mensajes: Record<EtapaBusqueda, string> = {
     publicado: 'Tu solicitud fue publicada. Estamos avisando a los conductores cercanos.',
     ampliada: 'Estamos ampliando la búsqueda para encontrarte conductor.',
     sugerencia: precioSugerido
-      ? `Los viajes parecidos se están pagando entre ${pesos(precioSugerido.min)} y ${pesos(precioSugerido.max)}. Subir tu oferta puede ayudarte a conseguir conductor más rápido.`
+      ? `Para ${precioSugerido.km.toLocaleString('es-CO')} km, el valor sugerido es ${pesos(precioSugerido.min)}`
       : 'Estamos ampliando la búsqueda para encontrarte conductor.',
     cierre: 'No logramos conseguir conductor por ahora. ¿Qué prefieres?',
   }
@@ -165,7 +175,8 @@ export function busquedaDe(viaje: Viaje) {
   }
 }
 
-const redondearMil = (n: number) => Math.round(n / 1000) * 1000
+// round(…,2) antes del ceil: 1.9 * 50000 da 95000.00000000001 en coma flotante.
+const redondearArribaMil = (n: number) => Math.ceil(Math.round(n * 100) / 100 / 1000) * 1000
 
 export default class BusquedaEscaleraService {
   /** Barrido del scheduler: sube de etapa los viajes que toque. Devuelve {id, etapa} de los que cambió. */
@@ -281,46 +292,25 @@ export default class BusquedaEscaleraService {
   }
 
   /**
-   * Rango de precio de viajes finalizados parecidos (mismo tipo de vehículo requerido,
-   * distancia ±30 %): percentiles 25-75 de `precio_final`. Con menos de 5, respaldo de
-   * +pct% sobre el precio del cliente. Redondeado a $1.000. Null si no supera el precio actual.
+   * Precio sugerido = km (línea recta origen→destino, 1 decimal) × tarifa por km del tipo
+   * de vehículo, redondeado hacia arriba a $1.000. Null si la tarifa es 0 o no supera el precio actual.
    */
   static async rangoSugerido(viaje: Viaje, cfg: EscaleraConfig): Promise<{ min: number; max: number } | null> {
     const precio = Number(viaje.precioCliente ?? viaje.precioEstimado ?? 0)
-    if (precio <= 0) return null
+    const tarifa = this.tarifaDe(viaje.tipoVehiculoRequerido, cfg)
+    if (precio <= 0 || tarifa <= 0) return null
+    const sugerido = redondearArribaMil(kmDe(viaje) * tarifa)
+    return sugerido > precio ? { min: sugerido, max: sugerido } : null
+  }
 
-    const dist = distanciaKm(Number(viaje.origenLat), Number(viaje.origenLng), Number(viaje.destinoLat), Number(viaje.destinoLng))
-    const query = Viaje.query()
-      .where('estado', 'finalizado')
-      .whereNotNull('precio_final')
-      .whereNot('id', viaje.id)
-      .orderBy('id', 'desc')
-      .limit(MUESTRA_HISTORIAL)
-    if (viaje.tipoVehiculoRequerido) query.where('tipo_vehiculo_requerido', viaje.tipoVehiculoRequerido)
-    const historial = await query
-    const precios = historial
-      .filter((v) => {
-        const d = distanciaKm(Number(v.origenLat), Number(v.origenLng), Number(v.destinoLat), Number(v.destinoLng))
-        return Math.abs(d - dist) <= dist * 0.3
-      })
-      .map((v) => Number(v.precioFinal))
-      .filter((p) => p > 0)
-      .sort((a, b) => a - b)
-
-    let min: number
-    let max: number
-    if (precios.length >= MINIMO_PARECIDOS) {
-      const p = (q: number) => precios[Math.min(precios.length - 1, Math.floor(q * precios.length))]
-      min = redondearMil(p(0.25))
-      max = redondearMil(p(0.75))
-    } else {
-      // Entero antes de dividir: 50000 * 1.15 da 57499.99… en coma flotante.
-      min = redondearMil((precio * (100 + cfg.pctSugerenciaMin)) / 100)
-      max = redondearMil((precio * (100 + cfg.pctSugerenciaMax)) / 100)
-    }
-    // "Subir a $min" solo tiene sentido si el rango queda por encima del precio actual.
-    if (min <= precio) return null
-    return { min, max: Math.max(max, min) }
+  static tarifaDe(tipo: string | null | undefined, cfg: EscaleraConfig): number {
+    const t = (tipo ?? '').toLowerCase()
+    if (t.includes('furgon') || t.includes('furgón')) return cfg.tarifaKm.furgon
+    if (t.includes('camioneta')) return cfg.tarifaKm.camioneta
+    if (t.includes('piaggio') || t.includes('mini') || t.includes('estacas')) return cfg.tarifaKm.piaggio
+    // ponytail: tipo desconocido o vacío → la tarifa más baja mayor que 0, para no inflar el precio a ciegas.
+    const positivas = Object.values(cfg.tarifaKm).filter((n) => n > 0)
+    return positivas.length ? Math.min(...positivas) : 0
   }
 
   /** Socket al cliente + moderadores con el objeto `busqueda` (misma forma que /trips/active). */

@@ -7,6 +7,7 @@ import Oferta from '#models/oferta'
 import Viaje from '#models/viaje'
 import User from '#models/user'
 import BusquedaEscaleraService, { ESCALERA_DEFAULT } from '#services/busqueda_escalera_service'
+import { distanciaKm } from '#services/geo_service'
 import BusquedaTimeoutService from '#services/busqueda_timeout_service'
 
 /**
@@ -117,14 +118,8 @@ test.group('Escalera de acompañamiento', (group) => {
 
     await envejecer(id, 6)
     cambios = await BusquedaEscaleraService.avanzar()
-    assert.deepInclude(cambios, { id, etapa: 'sugerencia' })
-    const v = await Viaje.findOrFail(id)
-    // Respaldo +15 % / +30 % sobre 50.000, redondeado a $1.000.
-    assert.equal(v.precioSugeridoMin, 58000)
-    assert.equal(v.precioSugeridoMax, 65000)
-    const activo = await client.get('/api/trips/active').bearerToken(cliente.token)
-    assert.deepEqual(activo.body().busqueda.precioSugerido, { min: 58000, max: 65000 })
-    assert.include(activo.body().busqueda.mensaje, '58.000')
+    // Con las tarifas en 0 (por defecto) no hay sugerencia: sigue en ampliada.
+    assert.equal(await etapaDe(id), 'ampliada')
 
     // Cierre: minRespuestaCierre antes de busqueda_hasta.
     await db.from('viajes').where('id', id).update({ busqueda_hasta: sql(ahoraMas(9)) })
@@ -165,73 +160,62 @@ test.group('Escalera de acompañamiento', (group) => {
     assert.equal(await etapaDe(id), 'ampliada')
   })
 
-  test('el rango usa el historial cuando hay 5 o más viajes parecidos', async ({ client, assert }) => {
+  test('el precio sugerido es km por tarifa del tipo, redondeado hacia arriba', async ({ client, assert }) => {
     const cliente = await registrar(client, 'cliente')
-    // Tipo de vehículo único: aísla el historial de los viajes de otras pruebas.
-    const tipo = `hist-${uniq()}`
-    const { id } = await pedirViaje(client, cliente.token, 50000, tipo)
-    for (const precio of [70000, 72000, 75000, 80000, 90000, 95000]) {
-      await Viaje.create({
-        clienteId: cliente.id,
-        estado: 'finalizado',
-        origenDireccion: ORIGEN.direccion,
-        origenLat: ORIGEN.lat,
-        origenLng: ORIGEN.lng,
-        destinoDireccion: DESTINO.direccion,
-        destinoLat: DESTINO.lat,
-        destinoLng: DESTINO.lng,
-        precioCliente: precio,
-        precioEstimado: precio,
-        precioFinal: precio,
-        tipoVehiculoRequerido: tipo,
-      })
-    }
-    // Un viaje muy lejano no cuenta.
-    await Viaje.create({
-      clienteId: cliente.id,
-      estado: 'finalizado',
-      origenDireccion: 'Lejos',
-      origenLat: 2.4419,
-      origenLng: -76.6063,
-      destinoDireccion: 'Cali',
-      destinoLat: 3.4516,
-      destinoLng: -76.532,
-      precioCliente: 500000,
-      precioEstimado: 500000,
-      precioFinal: 500000,
-      tipoVehiculoRequerido: tipo,
-    })
-
+    const cfg = { ...ESCALERA_DEFAULT, tarifaKm: { piaggio: 2000, furgon: 4000, camioneta: 3000 } }
+    const { id } = await pedirViaje(client, cliente.token, 1000)
     const viaje = await Viaje.findOrFail(id)
-    const rango = await BusquedaEscaleraService.rangoSugerido(viaje, ESCALERA_DEFAULT)
-    assert.deepEqual(rango, { min: 72000, max: 90000 })
+    const rango = (tipo: string | null) => {
+      viaje.tipoVehiculoRequerido = tipo
+      return BusquedaEscaleraService.rangoSugerido(viaje, cfg)
+    }
+    const km = Math.round(distanciaKm(ORIGEN.lat, ORIGEN.lng, DESTINO.lat, DESTINO.lng) * 10) / 10
+    const techo = (tarifa: number) => Math.ceil(Math.round(km * tarifa * 100) / 100 / 1000) * 1000
+    assert.deepEqual(await rango('Furgón sellado'), { min: techo(4000), max: techo(4000) })
+    assert.deepEqual(await rango('Camioneta'), { min: techo(3000), max: techo(3000) })
+    assert.deepEqual(await rango('Mini camión (Piaggio)'), { min: techo(2000), max: techo(2000) })
+    // Desconocido o sin tipo → la tarifa más baja mayor que 0 (piaggio).
+    assert.deepEqual(await rango('Moto'), { min: techo(2000), max: techo(2000) })
+    assert.deepEqual(await rango(null), { min: techo(2000), max: techo(2000) })
   })
 
-  test('no sugiere si el rango no supera el precio actual', async ({ client, assert }) => {
+  test('tarifa 0 para el tipo, o precio que no la supera → sin sugerencia', async ({ client, assert }) => {
     const cliente = await registrar(client, 'cliente')
-    const tipo = `bajo-${uniq()}`
-    const { id } = await pedirViaje(client, cliente.token, 100000, tipo)
-    for (const precio of [40000, 42000, 45000, 48000, 50000]) {
-      await Viaje.create({
-        clienteId: cliente.id,
-        estado: 'finalizado',
-        origenDireccion: ORIGEN.direccion,
-        origenLat: ORIGEN.lat,
-        origenLng: ORIGEN.lng,
-        destinoDireccion: DESTINO.direccion,
-        destinoLat: DESTINO.lat,
-        destinoLng: DESTINO.lng,
-        precioCliente: precio,
-        precioEstimado: precio,
-        precioFinal: precio,
-        tipoVehiculoRequerido: tipo,
-      })
-    }
+    const { id } = await pedirViaje(client, cliente.token, 50000, 'Furgón sellado')
+    const viaje = await Viaje.findOrFail(id)
+    // Tarifas en 0 (por defecto).
+    assert.isNull(await BusquedaEscaleraService.rangoSugerido(viaje, ESCALERA_DEFAULT))
+    // Tarifa tan baja que el sugerido no supera los $50.000 del cliente.
+    const baja = { ...ESCALERA_DEFAULT, tarifaKm: { piaggio: 1, furgon: 1, camioneta: 1 } }
+    assert.isNull(await BusquedaEscaleraService.rangoSugerido(viaje, baja))
+    // Furgón en 0 con camioneta con tarifa: el furgón no cae a otra tarifa.
+    const soloCamioneta = { ...ESCALERA_DEFAULT, tarifaKm: { piaggio: 0, furgon: 0, camioneta: 90000 } }
+    assert.isNull(await BusquedaEscaleraService.rangoSugerido(viaje, soloCamioneta))
+  })
+
+  test('la etapa sugerencia guarda el precio y arma el mensaje con km', async ({ client, assert }) => {
+    const admin = await registrar(client, 'admin')
+    const cliente = await registrar(client, 'cliente')
+    const put = await client
+      .put('/api/admin/config')
+      .bearerToken(admin.token)
+      .json({ escalera: { tarifaKm: { piaggio: 50000, furgon: 50000, camioneta: 50000 } } })
+    put.assertStatus(200)
+    const { id } = await pedirViaje(client, cliente.token, 20000)
     await envejecer(id, 6)
     await BusquedaEscaleraService.avanzar() // ampliada
     const cambios = await BusquedaEscaleraService.avanzar()
-    assert.notInclude(cambios.map((c) => c.id), id)
-    assert.equal(await etapaDe(id), 'ampliada')
+    assert.deepInclude(cambios, { id, etapa: 'sugerencia' })
+    const v = await Viaje.findOrFail(id)
+    assert.equal(v.precioSugeridoMin, v.precioSugeridoMax)
+    const activo = await client.get('/api/trips/active').bearerToken(cliente.token)
+    const ps = activo.body().busqueda.precioSugerido
+    assert.equal(ps.min, ps.max)
+    assert.isAbove(ps.km, 0)
+    assert.equal(
+      activo.body().busqueda.mensaje,
+      `Para ${ps.km.toLocaleString('es-CO')} km, el valor sugerido es $${ps.min.toLocaleString('es-CO')}`
+    )
   })
 
   test('PUT /precio sube el precio y rechaza uno menor o igual', async ({ client, assert }) => {
@@ -303,6 +287,16 @@ test.group('Escalera de acompañamiento', (group) => {
     const porDefecto = await client.get('/api/admin/config').bearerToken(admin.token)
     porDefecto.assertStatus(200)
     assert.deepEqual(porDefecto.body().escalera, ESCALERA_DEFAULT)
+
+    const tarifaMala = await client.put('/api/admin/config').bearerToken(admin.token).json({ escalera: { tarifaKm: { furgon: -1 } } })
+    tarifaMala.assertStatus(422)
+    const tarifaAlta = await client.put('/api/admin/config').bearerToken(admin.token).json({ escalera: { tarifaKm: { camioneta: 100001 } } })
+    tarifaAlta.assertStatus(422)
+    const viejos = await client.put('/api/admin/config').bearerToken(admin.token).json({ escalera: { pctSugerenciaMin: 15, pctSugerenciaMax: 30 } })
+    viejos.assertStatus(200)
+    const tarifaOk = await client.put('/api/admin/config').bearerToken(admin.token).json({ escalera: { tarifaKm: { furgon: 4500 } } })
+    tarifaOk.assertStatus(200)
+    assert.deepEqual(tarifaOk.body().escalera.tarifaKm, { piaggio: 0, furgon: 4500, camioneta: 0 })
 
     const malo = await client.put('/api/admin/config').bearerToken(admin.token).json({ escalera: { radioAmpliadoKm: 50 } })
     malo.assertStatus(422)
