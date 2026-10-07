@@ -239,6 +239,8 @@ router
     router.put('users/:id/role', [controllers.Admin, 'updateUserRole'])
     router.put('users/:id/leader', [controllers.Admin, 'assignLeader'])     // Asignar/quitar rol leader a conductor
     router.put('users/:id/password', [controllers.Admin, 'resetPassword'])  // Resetear contraseña (el admin la define)
+    router.get('pendientes', [controllers.Gerencia, 'pendientes'])
+    router.post('comunicacion', [controllers.Gerencia, 'comunicar'])
     router.get('comunicados', [controllers.Admin, 'listComunicados'])
     router.get('encuestas', [controllers.Admin, 'listEncuestas'])
     router.put('comunicados/:id/approve', [controllers.Admin, 'approveComunicado'])
