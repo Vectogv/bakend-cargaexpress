@@ -14,7 +14,9 @@ import {
   tripCancelValidator,
   tripPlazoValidator,
   tripPlazoResponderValidator,
+  tripPrecioValidator,
 } from '#validators/trip'
+import BusquedaEscaleraService, { busquedaDe, escaleraConfig } from '#services/busqueda_escalera_service'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import StorageService from '#services/storage_service'
@@ -275,6 +277,10 @@ export default class TripController {
       return response.status(422).send({ error: fueraDeCobertura })
     }
 
+    // Escalera de acompañamiento: etapa 'publicado' y corte de cancelación (cierre + respuesta).
+    const esc = await escaleraConfig()
+    const ahora = DateTime.now()
+
     // Verificación + INSERT atómicos: el FOR UPDATE sobre la fila del cliente
     // serializa solicitudes simultáneas (doble tap, reintentos sin
     // X-Idempotency-Key), así solo una puede crear el viaje.
@@ -299,6 +305,9 @@ export default class TripController {
           receptorNombre: data.receptorNombre || null,
           receptorTelefono: data.receptorTelefono || null,
           tipoVehiculoRequerido: data.tipoVehiculoRequerido || null,
+          busquedaEtapa: 'publicado',
+          busquedaEtapaEn: ahora,
+          busquedaHasta: ahora.plus({ minutes: esc.minCierre + esc.minRespuestaCierre }),
         },
         { client: trx }
       )
@@ -322,20 +331,23 @@ export default class TripController {
       estado: 'creado',
     })
 
+    const busqueda = busquedaDe(viaje)
     emitToClient(viaje.clienteId, 'trip:status_changed', {
       id: String(viaje.id),
       estado: 'buscando_conductor',
+      busqueda,
     })
 
-    emitTripUpdateToModerators(viaje)
+    emitTripUpdateToModerators(viaje, { busqueda })
 
-    // Buscar conductores online dentro de 20km y notificarles (socket + push).
-    // Centralizado en TripDispatchService para reutilizarlo en las reservas.
-    await TripDispatchService.buscarConductores(viaje)
+    // Etapa 1: conductores online dentro del radio inicial (socket + push).
+    // Centralizado en TripDispatchService para reutilizarlo en las reservas y la escalera.
+    await TripDispatchService.buscarConductores(viaje, esc.radioInicialKm)
 
     return serialize.withoutWrapping({
       id: String(viaje.id),
       estado: viaje.estado,
+      busqueda,
       clienteId: String(viaje.clienteId),
       origen: {
         direccion: viaje.origenDireccion,
@@ -1697,6 +1709,79 @@ export default class TripController {
     return serialize.withoutWrapping({ id: String(viaje.id), plazo })
   }
 
+  /** Dueño del viaje y viaje todavía buscando conductor; si no, la respuesta de error. */
+  private async viajeBuscandoDelCliente(ctx: HttpContext): Promise<Viaje | null> {
+    const { auth, params, response } = ctx
+    const user = auth.getUserOrFail()
+    const viaje = await Viaje.findOrFail(params.id)
+    if (user.rol !== 'cliente' || viaje.clienteId !== user.id) {
+      response.status(403).send({ error: 'Este viaje no te pertenece' })
+      return null
+    }
+    if (!['buscando_conductor', 'pendiente'].includes(viaje.estado)) {
+      response.status(409).send({ error: 'Este viaje ya no está buscando conductor', code: 'NO_ESTA_BUSCANDO' })
+      return null
+    }
+    return viaje
+  }
+
+  @ApiOperation({
+    summary: 'Subir el precio de un viaje que busca conductor',
+    description: 'Escalera de acompañamiento: el precio nuevo debe ser mayor que el actual y como máximo 3 veces. Reenvía el viaje a los conductores.',
+  })
+  @ApiBody({ type: () => tripPrecioValidator })
+  @ApiResponse({ type: 'object' })
+  async subirPrecio(ctx: HttpContext) {
+    const { request, response, serialize } = ctx
+    const { precio } = await request.validateUsing(tripPrecioValidator)
+    const viaje = await this.viajeBuscandoDelCliente(ctx)
+    if (!viaje) return
+
+    const actual = Number(viaje.precioCliente ?? viaje.precioEstimado ?? 0)
+    if (precio <= actual) {
+      return response.status(422).send({ error: 'El precio nuevo debe ser mayor que el actual' })
+    }
+    if (precio > actual * 3) {
+      return response.status(422).send({ error: 'El precio nuevo no puede pasar de 3 veces el actual' })
+    }
+
+    viaje.precioCliente = precio
+    viaje.precioEstimado = precio
+    await viaje.save()
+
+    const esc = await escaleraConfig()
+    await BusquedaEscaleraService.reenviar(viaje, esc)
+    BusquedaEscaleraService.emitirAlCliente(viaje)
+
+    return serialize.withoutWrapping({
+      id: String(viaje.id),
+      estado: viaje.estado,
+      precioCliente: viaje.precioCliente,
+      precioEstimado: viaje.precioEstimado,
+      busqueda: busquedaDe(viaje),
+    })
+  }
+
+  @ApiOperation({
+    summary: 'Seguir esperando conductor',
+    description: 'Etapa de cierre de la escalera: el cliente pide seguir buscando; la etapa vuelve a "ampliada" y el corte de cancelación se corre.',
+  })
+  @ApiResponse({ type: 'object' })
+  async seguirEsperando(ctx: HttpContext) {
+    const { response, serialize } = ctx
+    const viaje = await this.viajeBuscandoDelCliente(ctx)
+    if (!viaje) return
+
+    const esc = await escaleraConfig()
+    if (!(await BusquedaEscaleraService.seguirEsperando(viaje, esc))) {
+      return response
+        .status(409)
+        .send({ error: 'Este viaje no tiene una pregunta de cierre pendiente', code: 'SIN_CIERRE_PENDIENTE' })
+    }
+
+    return serialize.withoutWrapping({ id: String(viaje.id), estado: viaje.estado, busqueda: busquedaDe(viaje) })
+  }
+
   @ApiOperation({
     summary: 'Responder la solicitud de plazo',
     description:
@@ -1992,6 +2077,8 @@ export default class TripController {
             expiraEn: viaje.plazoEstado === 'pendiente' ? (plazoExpiraEn(viaje)?.toISO() ?? null) : null,
           }
         : null,
+      // Escalera de acompañamiento: null si el viaje no está buscando conductor.
+      busqueda: busquedaDe(viaje),
       fotoEntrega: viaje.fotoEntrega,
       fotoRecogida: viaje.fotoRecogida,
       receptorNombre: viaje.receptorNombre,

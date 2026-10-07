@@ -65,7 +65,8 @@ async function envejecer(viajeId: number, minutos: number) {
   await db
     .from('viajes')
     .where('id', viajeId)
-    .update({ created_at: sql(DateTime.now().minus({ minutes: minutos })) })
+    // Sin `busqueda_hasta`: estas pruebas cubren la regla vieja de BUSQUEDA_TIMEOUT_MIN.
+    .update({ created_at: sql(DateTime.now().minus({ minutes: minutos })), busqueda_hasta: null })
 }
 
 function conectar(token: string): Promise<Socket> {

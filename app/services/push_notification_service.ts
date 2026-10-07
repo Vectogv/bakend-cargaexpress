@@ -116,9 +116,15 @@ export function armarMensaje(
   data?: Record<string, string>,
   sound?: string,
   // Android: dos avisos con el mismo tag se reemplazan en vez de apilarse.
-  tag?: string
+  tag?: string,
+  // Android 8+: canal propio (sonido/prioridad definidos por la app), p. ej. 'cargaexpress_viajes'.
+  channelId?: string
 ) {
-  const notification = { ...(sound ? { sound } : {}), ...(tag ? { tag } : {}) }
+  const notification = {
+    ...(sound ? { sound } : {}),
+    ...(tag ? { tag } : {}),
+    ...(channelId ? { channelId } : {}),
+  }
   const message: any = {
     token,
     notification: { title, body },
@@ -196,7 +202,8 @@ export async function sendToMultiple(
   title: string,
   body: string,
   data?: Record<string, string>,
-  sound?: string
+  sound?: string,
+  channelId?: string
 ) {
   if (tokens.length === 0) return
   ensureInit()
@@ -204,7 +211,7 @@ export async function sendToMultiple(
 
   try {
     await messaging.sendEach(
-      tokens.map((token) => armarMensaje(token, title, body, data, sound))
+      tokens.map((token) => armarMensaje(token, title, body, data, sound, undefined, channelId))
     )
   } catch (err: any) {
     logger.error(`FCM sendEach error: ${err.message}`)

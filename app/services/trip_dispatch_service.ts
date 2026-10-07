@@ -5,25 +5,41 @@ import { ESTADOS_CONDUCTOR_OCUPADO } from '#services/trip_conflict_service'
 import { emitToDriver } from '#start/socket'
 import { sendToMultiple } from '#services/push_notification_service'
 
+/** Canal Android propio de los avisos de viaje nuevo al conductor (sonido definido por la app). */
+export const CANAL_PUSH_VIAJES = 'cargaexpress_viajes'
+
+export interface OpcionesDespacho {
+  /** Solo conductores a más de esta distancia (ya avisados en una etapa anterior). */
+  radioMinKm?: number
+  /** Incluye a los que están "terminando" un servicio (viaje `en_curso`). */
+  incluirTerminando?: boolean
+}
+
 /**
  * Centraliza el "disparo" de un viaje a los conductores cercanos.
  *
  * Lo usan por igual:
  *   • POST /api/trips/request  (viaje inmediato)
  *   • scheduler de reservas    (viaje programado que se activa)
+ *   • la escalera de acompañamiento (reenvío con radio ampliado o precio nuevo)
  *
  * Así no se duplica la lógica de búsqueda ni el contrato Socket.IO.
  */
 export default class TripDispatchService {
   /** Emite `trip:nearby` + push a los conductores cercanos. Devuelve cuántos notificó. */
-  static async buscarConductores(viaje: Viaje, radioKm = 20): Promise<number> {
+  static async buscarConductores(
+    viaje: Viaje,
+    radioKm = 20,
+    opciones: OpcionesDespacho = {}
+  ): Promise<number> {
     const cercanosRaw = await GeoService.obtenerConductoresCercanos(
       Number(viaje.origenLat),
       Number(viaje.origenLng),
       radioKm
     )
 
-    const conductorIds = cercanosRaw.map((c: any) => c.id)
+    const radioMin = opciones.radioMinKm ?? 0
+    const conductorIds = cercanosRaw.filter((c) => c.distancia >= radioMin).map((c) => c.id)
     if (conductorIds.length === 0) return 0
 
     const esProgramada = viaje.tipoProgramacion === 'programada'
@@ -32,12 +48,15 @@ export default class TripDispatchService {
     // Viaje inmediato: no se notifica a conductores que ya atienden un servicio
     // (no podrían ofertar: ver TripConflictService.conductorOcupado).
     if (!esProgramada) {
+      const ocupado = opciones.incluirTerminando
+        ? ESTADOS_CONDUCTOR_OCUPADO.filter((e) => e !== 'en_curso')
+        : ESTADOS_CONDUCTOR_OCUPADO
       query.whereNotIn(
         'id',
         Viaje.query()
           .select('conductor_id')
           .whereNotNull('conductor_id')
-          .whereIn('estado', ESTADOS_CONDUCTOR_OCUPADO)
+          .whereIn('estado', ocupado)
           .where((q) => q.whereNot('tipo_programacion', 'programada').orWhereNot('estado', 'aceptado'))
       )
     }
@@ -89,12 +108,13 @@ export default class TripDispatchService {
         tokens,
         esProgramada
           ? `Nueva reserva para ${viaje.fechaProgramada ?? ''} ${viaje.horaProgramada ?? ''}`
-          : 'Nuevo viaje disponible',
+          : '🚚 Nuevo viaje cerca',
         esProgramada
           ? `${viaje.origenDireccion} — $${precioFormateado}`
-          : `Cerca de tu ubicación — $${precioFormateado}`,
+          : `${viaje.carga || 'Carga'} · ${viaje.origenDireccion} → ${viaje.destinoDireccion} · $${precioFormateado}`,
         tripFcmData,
-        'default'
+        'default',
+        CANAL_PUSH_VIAJES
       )
     }
 

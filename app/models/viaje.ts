@@ -38,6 +38,11 @@ export default class Viaje extends BaseModel {
     'plazoMinutos',
     'plazoEstado',
     'plazoSolicitadoAt',
+    'busquedaEtapa',
+    'busquedaEtapaEn',
+    'precioSugeridoMin',
+    'precioSugeridoMax',
+    'busquedaHasta',
     'tiempoEstimadoMinutos',
     'createdAt',
     'aceptadoAt',
@@ -179,6 +184,28 @@ export default class Viaje extends BaseModel {
   @ApiProperty()
   @column.dateTime()
   declare plazoSolicitadoAt: DateTime | null
+
+  /** Escalera de acompañamiento: 'publicado' | 'ampliada' | 'sugerencia' | 'cierre' (null = sin escalera). */
+  @ApiProperty()
+  @column()
+  declare busquedaEtapa: string | null
+
+  @ApiProperty()
+  @column.dateTime()
+  declare busquedaEtapaEn: DateTime | null
+
+  @ApiProperty()
+  @column()
+  declare precioSugeridoMin: number | null
+
+  @ApiProperty()
+  @column()
+  declare precioSugeridoMax: number | null
+
+  /** Corte de la cancelación automática de la búsqueda (null = regla vieja por BUSQUEDA_TIMEOUT_MIN). */
+  @ApiProperty()
+  @column.dateTime()
+  declare busquedaHasta: DateTime | null
 
   @ApiProperty()
   @column()

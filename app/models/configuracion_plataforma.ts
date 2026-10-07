@@ -45,6 +45,10 @@ export default class ConfiguracionPlataforma extends BaseModel {
   @column()
   declare soporteEmail: string | null
 
+  /** Escalera de acompañamiento (tiempos, radios, porcentajes). Ver busqueda_escalera_service. */
+  @column(jsonColumn)
+  declare escalera: any
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

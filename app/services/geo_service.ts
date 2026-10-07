@@ -120,10 +120,13 @@ export default class GeoService {
         db.raw(`${distanciaSql('conductores.ultima_ubicacion_lat', 'conductores.ultima_ubicacion_lng', lat, lng)} as distancia`)
       )
       .where('online', true)
+      // Solo aprobados: los demás no pueden ofertar (offer_controller), avisarles era ruido.
+      .where('estado_verificacion', 'aprobado')
       .whereNotNull('ultimaUbicacionLat')
       .whereNotNull('ultimaUbicacionLng')
       .whereRaw(haversineSql('conductores.ultima_ubicacion_lat', 'conductores.ultima_ubicacion_lng', lat, lng, radioKm))
       .preload('usuario', (q) => q.select('id', 'nombre'))
+      .orderBy('distancia', 'asc')
       .limit(20)
 
     return conductores.map((c) => ({

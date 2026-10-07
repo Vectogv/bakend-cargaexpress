@@ -159,6 +159,11 @@ router
     router.post(':id/confirm-close', [controllers.Trip, 'confirmClose'])
       .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
     router.post(':id/cancel', [controllers.Trip, 'cancel'])
+    // Escalera de acompañamiento (cliente dueño, viaje buscando conductor).
+    router.put(':id/precio', [controllers.Trip, 'subirPrecio'])
+      .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
+    router.post(':id/seguir-esperando', [controllers.Trip, 'seguirEsperando'])
+      .use([middleware.rateLimit({ max: 5, windowMs: 60_000 }), middleware.idempotency()])
     router.post(':id/plazo', [controllers.Trip, 'pedirPlazo']) // conductor asignado a una reserva
     router.post(':id/plazo/responder', [controllers.Trip, 'responderPlazo']) // cliente dueño
     router.post(':id/request-cancellation', [controllers.Trip, 'requestCancellation'])

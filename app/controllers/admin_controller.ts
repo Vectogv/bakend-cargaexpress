@@ -43,6 +43,7 @@ import {
 } from '#services/emergency_payload'
 import { adminUpdateUserValidator } from '#validators/user'
 import { restaurarViajeTrasSos } from '#services/sos_trip_service'
+import { mezclarEscalera, validarEscalera } from '#services/busqueda_escalera_service'
 
 /** Tokens push de los conductores cuya ciudad cae en la zona (ya normalizada con claveDe). */
 export async function tokensConductoresDeZona(zona: string): Promise<string[]> {
@@ -1505,6 +1506,7 @@ export default class AdminController {
       nequiNombre: config.nequiNombre,
       soporteTelefono: config.soporteTelefono,
       soporteEmail: config.soporteEmail,
+      escalera: mezclarEscalera(config.escalera),
     })
   }
 
@@ -1514,12 +1516,20 @@ export default class AdminController {
       config = await ConfiguracionPlataforma.create({})
     }
 
-    const { nequiNumero, nequiNombre, soporteTelefono, soporteEmail } = request.only([
+    const { nequiNumero, nequiNombre, soporteTelefono, soporteEmail, escalera } = request.only([
       'nequiNumero',
       'nequiNombre',
       'soporteTelefono',
       'soporteEmail',
+      'escalera',
     ])
+
+    // Escalera de acompañamiento: acepta parciales, se valida el resultado completo.
+    if (escalera !== undefined) {
+      const resultado = validarEscalera(escalera, mezclarEscalera(config.escalera))
+      if ('error' in resultado) return response.status(422).send({ error: resultado.error })
+      config.escalera = resultado.valor
+    }
 
     // Validación blanda: solo se rechaza si viene un valor con formato inválido;
     // vacío/null limpia el campo (queda el fallback fijo de support_controller).
@@ -1544,6 +1554,7 @@ export default class AdminController {
       nequiNombre: config.nequiNombre,
       soporteTelefono: config.soporteTelefono,
       soporteEmail: config.soporteEmail,
+      escalera: mezclarEscalera(config.escalera),
     })
   }
 

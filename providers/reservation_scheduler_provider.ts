@@ -124,7 +124,11 @@ export default class ReservationSchedulerProvider {
         // Conductores con deuda de comisión vencida: suspensión por pago.
         await DriverDebtSuspensionService.suspenderVencidos()
 
-        // Búsquedas de conductor vencidas (BUSQUEDA_TIMEOUT_MIN): el sistema cancela el viaje.
+        // Escalera de acompañamiento: ampliar radio, sugerir precio, preguntar al cliente.
+        const { default: BusquedaEscaleraService } = await import('#services/busqueda_escalera_service')
+        await BusquedaEscaleraService.avanzar()
+
+        // Búsquedas de conductor vencidas (busqueda_hasta o BUSQUEDA_TIMEOUT_MIN): el sistema cancela el viaje.
         await BusquedaTimeoutService.expirarBusquedasVencidas()
 
         // Cuentas con 6 meses sin uso: archivado automático (cada 6 h basta).

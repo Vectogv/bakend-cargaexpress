@@ -42,6 +42,8 @@ export default class BusquedaTimeoutService {
     // depender de comparaciones de timestamp por dialecto (igual que las reservas).
     const candidatos = await Viaje.query().whereIn('estado', ESTADOS_BUSQUEDA)
     const vencidos = candidatos.filter((v) => {
+      // Viajes con escalera: el corte lo marca `busqueda_hasta` (cierre + respuesta, o "seguir esperando").
+      if (v.busquedaHasta) return v.busquedaHasta <= now
       const inicio = this.inicioBusqueda(v)
       return inicio !== null && inicio <= corte
     })

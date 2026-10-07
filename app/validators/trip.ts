@@ -61,6 +61,10 @@ export const tripPlazoValidator = vine.create({
   minutos: vine.number().in([15, 30, 60]),
 })
 
+export const tripPrecioValidator = vine.create({
+  precio: vine.number().positive(),
+})
+
 export const tripPlazoResponderValidator = vine.create({
   aceptar: vine.boolean(),
 })
