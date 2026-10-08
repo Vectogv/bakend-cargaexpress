@@ -7,7 +7,17 @@ import env from '#start/env'
  * archivos (avatar, fotos de vehículo, banner, foto de entrega) siguen públicos
  * porque la app los muestra a otros usuarios.
  */
-const PRIVATE_PREFIXES = ['cedula-', 'licencia-', 'comprobante-', 'dispute-', 'ticket-']
+const PRIVATE_PREFIXES = [
+  'cedula-',
+  'licencia-',
+  'comprobante-',
+  'dispute-',
+  'ticket-',
+  'empresa-',
+  'tarjeta-propiedad-',
+  'tecnomecanica-',
+  'soat-',
+]
 
 const TTL_SECONDS = 60 * 60 // 1 hora
 const UPLOADS_PREFIX = '/storage/uploads/'

@@ -240,6 +240,9 @@ router
     router.put('config', [controllers.Admin, 'updateConfig'])
     router.get('referidos', [controllers.Admin, 'referidos'])
     router.put('referidos/:id/anular', [controllers.Admin, 'anularReferido'])
+    router.get('empresas', [controllers.Admin, 'empresas'])
+    router.put('empresas/:id/approve', [controllers.Admin, 'approveEmpresa'])
+    router.put('empresas/:id/reject', [controllers.Admin, 'rejectEmpresa'])
     router.get('config/coverage', [controllers.Admin, 'coverage'])
     router.put('config/coverage', [controllers.Admin, 'updateCoverage'])
     router.put('config/banner', [controllers.Admin, 'updateBanner'])
@@ -324,6 +327,21 @@ router
   })
   .prefix('/api/payment')
   .as('payment')
+  .use(middleware.auth())
+
+// Cuentas de empresa del cliente (registro, equipo, resumen y reporte del mes).
+router
+  .group(() => {
+    router.post('', [controllers.Empresa, 'store'])
+    router.get('mia', [controllers.Empresa, 'mia'])
+    router.get('resumen', [controllers.Empresa, 'resumen'])
+    router.get('reporte', [controllers.Empresa, 'reporte'])
+    router.post('unirse', [controllers.Empresa, 'unirse'])
+    router.post('salir', [controllers.Empresa, 'salir'])
+    router.delete('miembros/:userId', [controllers.Empresa, 'quitarMiembro'])
+  })
+  .prefix('/api/empresas')
+  .as('empresas')
   .use(middleware.auth())
 
 // Alias para compatibilidad con Flutter (PaymentService usa GET /api/payments)

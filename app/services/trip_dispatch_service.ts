@@ -1,4 +1,5 @@
 import Conductor from '#models/conductor'
+import Empresa from '#models/empresa'
 import Viaje from '#models/viaje'
 import GeoService from '#services/geo_service'
 import { ESTADOS_CONDUCTOR_OCUPADO } from '#services/trip_conflict_service'
@@ -43,6 +44,9 @@ export default class TripDispatchService {
     if (conductorIds.length === 0) return 0
 
     const esProgramada = viaje.tipoProgramacion === 'programada'
+    const empresa = viaje.empresaId
+      ? await Empresa.query().where('id', viaje.empresaId).select('id', 'nombre').first()
+      : null
 
     const query = Conductor.query().whereIn('id', conductorIds).preload('usuario')
     // Viaje inmediato: no se notifica a conductores que ya atienden un servicio
@@ -75,6 +79,7 @@ export default class TripDispatchService {
       precioEstimado: Number(viaje.precioEstimado),
       type: 'new_trip',
       tipoProgramacion: viaje.tipoProgramacion ?? 'inmediata',
+      cliente: { empresa: empresa ? { nombre: empresa.nombre } : null },
       ...(esProgramada
         ? {
             fechaProgramada: viaje.fechaProgramada,
@@ -104,14 +109,16 @@ export default class TripDispatchService {
     const tokens = conductoresCercanos.map((c) => c.usuario.fcmToken).filter(Boolean) as string[]
     if (tokens.length > 0) {
       const precioFormateado = Number(viaje.precioEstimado).toLocaleString('es-CO')
+      const sello = empresa ? '🏢 Empresa verificada · ' : ''
       await sendToMultiple(
         tokens,
         esProgramada
           ? `Nueva reserva para ${viaje.fechaProgramada ?? ''} ${viaje.horaProgramada ?? ''}`
           : '🚚 Nuevo viaje cerca',
-        esProgramada
-          ? `${viaje.origenDireccion} — $${precioFormateado}`
-          : `${viaje.carga || 'Carga'} · ${viaje.origenDireccion} → ${viaje.destinoDireccion} · $${precioFormateado}`,
+        sello +
+          (esProgramada
+            ? `${viaje.origenDireccion} — $${precioFormateado}`
+            : `${viaje.carga || 'Carga'} · ${viaje.origenDireccion} → ${viaje.destinoDireccion} · $${precioFormateado}`),
         tripFcmData,
         'default',
         CANAL_PUSH_VIAJES

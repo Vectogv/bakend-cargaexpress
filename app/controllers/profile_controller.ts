@@ -9,6 +9,7 @@ import hash from '@adonisjs/core/services/hash'
 import logger from '@adonisjs/core/services/logger'
 import User from '#models/user'
 import ArchivadoCuentaService from '#services/archivado_cuenta_service'
+import EmpresaService from '#services/empresa_service'
 import { DateTime } from 'luxon'
 
 export default class ProfileController {
@@ -34,6 +35,7 @@ export default class ProfileController {
       rol: user.rol,
       esModerador: Boolean(user.esModerador),
       zonaModerador: user.zonaModerador,
+      empresa: await EmpresaService.empresaDe(user),
       calificacion: user.calificacion,
       contactoEmergenciaNombre: user.contactoEmergenciaNombre,
       contactoEmergenciaTelefono: user.contactoEmergenciaTelefono,

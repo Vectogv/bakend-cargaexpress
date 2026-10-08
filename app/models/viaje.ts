@@ -4,6 +4,7 @@ import type { BelongsTo, HasOne } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 import Conductor from './conductor.js'
 import Ganancia from './ganancia.js'
+import Empresa from './empresa.js'
 import { ApiProperty } from '@foadonis/openapi/decorators'
 
 export default class Viaje extends BaseModel {
@@ -53,6 +54,7 @@ export default class Viaje extends BaseModel {
     'finalizadoAt',
     'pendienteConfirmacionDesde',
     'moderadorNotificadoEn',
+    'empresaId',
   ] as const
   $columns = Viaje.$columns
 
@@ -236,8 +238,15 @@ export default class Viaje extends BaseModel {
   @column.dateTime()
   declare moderadorNotificadoEn: DateTime | null
 
+  /** Empresa aprobada del cliente al publicar (no cambia si después lo quitan). */
+  @column()
+  declare empresaId: number | null
+
   @belongsTo(() => User, { foreignKey: 'clienteId' })
   declare cliente: BelongsTo<typeof User>
+
+  @belongsTo(() => Empresa, { foreignKey: 'empresaId' })
+  declare empresa: BelongsTo<typeof Empresa>
 
   @belongsTo(() => Conductor, { foreignKey: 'conductorId' })
   declare conductor: BelongsTo<typeof Conductor>

@@ -28,6 +28,7 @@ import GeoService, { distanciaKm } from '#services/geo_service'
 import { rutaDelViaje, payloadRuta } from '#services/trip_route_service'
 import CoverageService, { claveDe } from '#services/coverage_service'
 import TripDispatchService from '#services/trip_dispatch_service'
+import EmpresaService from '#services/empresa_service'
 import TripConflictService, { ESTADOS_CONDUCTOR_OCUPADO, ORDEN_CONDUCTOR_OCUPADO_SQL } from '#services/trip_conflict_service'
 import OfferExpiryService from '#services/offer_expiry_service'
 import Oferta from '#models/oferta'
@@ -280,6 +281,8 @@ export default class TripController {
     // Escalera de acompañamiento: etapa 'publicado' y corte de cancelación (cierre + respuesta).
     const esc = await escaleraConfig()
     const ahora = DateTime.now()
+    // Sello "Empresa verificada": solo si la empresa del cliente está aprobada.
+    const empresaId = await EmpresaService.idAprobadaDe(user)
 
     // Verificación + INSERT atómicos: el FOR UPDATE sobre la fila del cliente
     // serializa solicitudes simultáneas (doble tap, reintentos sin
@@ -292,6 +295,7 @@ export default class TripController {
       const nuevo = await Viaje.create(
         {
           clienteId: user.id,
+          empresaId,
           estado: 'creado',
           origenDireccion: data.origen.direccion,
           origenLat: data.origen.lat,
@@ -425,6 +429,8 @@ export default class TripController {
       .minus({ minutes: reservationConfig.dispatchLeadMinutes })
       .setZone(DateTime.now().zone)
 
+    const empresaId = await EmpresaService.idAprobadaDe(user)
+
     // Verificaciones + INSERT atómicos (FOR UPDATE sobre la fila del cliente):
     // dos reservas simultáneas no pueden pasar ambas las verificaciones.
     const creada = await db.transaction(async (trx) => {
@@ -460,6 +466,7 @@ export default class TripController {
       const nueva = await Viaje.create(
         {
           clienteId: user.id,
+          empresaId,
           estado: 'reservado',
           tipoProgramacion: 'programada',
           fechaProgramada: data.fechaProgramada,

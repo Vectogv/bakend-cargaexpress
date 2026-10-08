@@ -103,6 +103,10 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
   @column.dateTime()
   declare archivadaAt: DateTime | null
 
+  /** Empresa a la que pertenece (dueño o empleado); reglas en empresa_service. */
+  @column()
+  declare empresaId: number | null
+
   get initials() {
     const nombre = this.nombre || ''
     const apellido = this.apellido || ''

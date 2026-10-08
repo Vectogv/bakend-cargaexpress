@@ -13,6 +13,7 @@ export const controllers = {
   Driver: () => import('#controllers/driver_controller'),
   EmergencyChat: () => import('#controllers/emergency_chat_controller'),
   Emergency: () => import('#controllers/emergency_controller'),
+  Empresa: () => import('#controllers/empresa_controller'),
   FavoriteRoute: () => import('#controllers/favorite_route_controller'),
   FraudAlert: () => import('#controllers/fraud_alert_controller'),
   Gerencia: () => import('#controllers/gerencia_controller'),

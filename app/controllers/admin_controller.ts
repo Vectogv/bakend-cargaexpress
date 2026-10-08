@@ -45,6 +45,7 @@ import { adminUpdateUserValidator } from '#validators/user'
 import { restaurarViajeTrasSos } from '#services/sos_trip_service'
 import { mezclarEscalera, validarEscalera } from '#services/busqueda_escalera_service'
 import ReferidosService, { mezclarReferidos, validarReferidos } from '#services/referidos_service'
+import EmpresaService from '#services/empresa_service'
 
 /** Tokens push de los conductores cuya ciudad cae en la zona (ya normalizada con claveDe). */
 export async function tokensConductoresDeZona(zona: string): Promise<string[]> {
@@ -1577,6 +1578,30 @@ export default class AdminController {
     const referido = await ReferidosService.anular(Number(params.id))
     if (!referido) return response.status(404).send({ error: 'Referido no encontrado' })
     return serialize.withoutWrapping({ id: referido.id, estado: referido.estado })
+  }
+
+  /** Cuentas de empresa: lista paginada con URL firmadas de RUT y Cámara de Comercio. */
+  async empresas({ request, serialize }: HttpContext) {
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    const estado = String(request.input('estado', '') || '').trim() || null
+    return serialize.withoutWrapping(await EmpresaService.listaAdmin(estado, page, limit))
+  }
+
+  async approveEmpresa({ params, response, serialize }: HttpContext) {
+    const empresa = await EmpresaService.aprobar(Number(params.id))
+    if (!empresa) return response.status(404).send({ error: 'Empresa no encontrada' })
+    return serialize.withoutWrapping({ id: empresa.id, estado: empresa.estadoVerificacion })
+  }
+
+  async rejectEmpresa({ params, request, response, serialize }: HttpContext) {
+    const empresa = await EmpresaService.rechazar(Number(params.id), request.input('nota'))
+    if (!empresa) return response.status(404).send({ error: 'Empresa no encontrada' })
+    return serialize.withoutWrapping({
+      id: empresa.id,
+      estado: empresa.estadoVerificacion,
+      notaRechazo: empresa.notaRechazo,
+    })
   }
 
   /** Zonas de operación tal como las edita el admin (incluye las inactivas). */

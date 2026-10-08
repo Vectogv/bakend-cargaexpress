@@ -75,6 +75,7 @@ export default class GeoService {
       .whereNotIn('id', idsConOfertaAceptada)
       .whereRaw(haversineSql('viajes.origen_lat', 'viajes.origen_lng', lat, lng, radioKm))
       .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'calificacion'))
+      .preload('empresa', (q) => q.select('id', 'nombre'))
       .limit(20)
 
     return viajes.map((v) => ({
@@ -99,6 +100,8 @@ export default class GeoService {
         _id: String(v.cliente.id),
         nombre: `${v.cliente.nombre || ''} ${v.cliente.apellido || ''}`.trim(),
         calificacion: Number(v.cliente.calificacion ?? 5.0),
+        // Sello "Empresa verificada" (viajes.empresa_id solo se llena con empresa aprobada).
+        empresa: v.empresa ? { nombre: v.empresa.nombre } : null,
       },
       origen: {
         direccion: v.origenDireccion,

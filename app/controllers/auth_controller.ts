@@ -12,6 +12,7 @@ import {
 import CodigoRecuperacion from '#models/codigo_recuperacion'
 import SessionService from '#services/session_service'
 import ReferidosService, { CodigoReferidoInvalido } from '#services/referidos_service'
+import EmpresaService from '#services/empresa_service'
 import { enviarCorreo } from '#services/mail_service'
 import env from '#start/env'
 import logger from '@adonisjs/core/services/logger'
@@ -220,6 +221,7 @@ export default class AuthController {
       token: token.value!.release(),
       refreshToken: refreshTokenValue,
       perfilCompleto: perfilCompleto(user),
+      empresa: await EmpresaService.empresaDe(user),
     })
   }
 
@@ -266,6 +268,7 @@ export default class AuthController {
       token: token.value!.release(),
       refreshToken: refreshTokenValue,
       perfilCompleto: perfilCompleto(user),
+      empresa: await EmpresaService.empresaDe(user),
     })
   }
 
@@ -344,6 +347,7 @@ export default class AuthController {
       refreshToken: refreshTokenValue,
       cuentaNueva: false,
       perfilCompleto: perfilCompleto(user),
+      empresa: await EmpresaService.empresaDe(user),
     })
   }
 
