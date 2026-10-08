@@ -298,7 +298,7 @@ export default class EmpresaService {
       doc.fontSize(9).font('Helvetica-Bold')
       doc.text('Fecha', 50, top, { width: 60 })
       doc.text('Solicitó', 110, top, { width: 90 })
-      doc.text('Origen → Destino', 200, top, { width: 190 })
+      doc.text('Origen » Destino', 200, top, { width: 190 })
       doc.text('Conductor', 390, top, { width: 90 })
       doc.text('Valor', 480, top, { width: 70, align: 'right' })
       doc.moveDown()
@@ -308,7 +308,7 @@ export default class EmpresaService {
       for (const v of resumen.detalle) {
         doc.text(DateTime.fromISO(v.fecha!).setZone(ZONA).toFormat('dd/MM/yy'), 50, y, { width: 60 })
         doc.text(v.solicitante, 110, y, { width: 90, ellipsis: true, height: 12 })
-        doc.text(`${v.origen} → ${v.destino}`, 200, y, { width: 190, ellipsis: true, height: 12 })
+        doc.text(`${v.origen} » ${v.destino}`, 200, y, { width: 190, ellipsis: true, height: 12 })
         doc.text(v.conductor, 390, y, { width: 90, ellipsis: true, height: 12 })
         doc.text(pesos(v.valor), 480, y, { width: 70, align: 'right' })
         y += 18
