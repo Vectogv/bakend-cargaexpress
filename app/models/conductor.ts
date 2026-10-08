@@ -11,8 +11,24 @@ function fechaTexto(v: unknown): string | null {
   return String(v).slice(0, 10)
 }
 
-/** Apagado por ahora (decisión del gerente): si es true, aprobar a un conductor exige SOAT válido. */
-export const SOAT_OBLIGATORIO = false
+/** Si es true, aprobar a un conductor exige SOAT válido (o excepción aprobada). Encendido otra vez el 2026-10-08. */
+export const SOAT_OBLIGATORIO = true
+
+/**
+ * Documentos que debe tener un conductor para ser aprobado (decisión del gerente, 2026-10-08).
+ * La foto de la cédula ya no se pide: en su lugar va el número de cédula (5 a 20 dígitos).
+ */
+export const DOCUMENTOS_REQUERIDOS = {
+  licencia: 'licencia',
+  soat: 'SOAT',
+  tecnomecanica: 'tecnomecánica',
+  tarjeta_propiedad: 'tarjeta de propiedad',
+  foto_vehiculo: 'foto del vehículo',
+  foto_conductor: 'foto del conductor',
+  numero_cedula: 'número de cédula',
+} as const
+export type DocumentoRequerido = keyof typeof DOCUMENTOS_REQUERIDOS
+export const CEDULA_REGEX = /^\d{5,20}$/
 
 export default class Conductor extends BaseModel {
   static table = 'conductores'
@@ -172,9 +188,23 @@ export default class Conductor extends BaseModel {
     return !!this.fotoSoat && !!this.soatVence && this.soatVence >= DateTime.now().toISODate()!
   }
 
+  /** Claves de DOCUMENTOS_REQUERIDOS que faltan para poder aprobarlo. */
+  documentosFaltantes(): DocumentoRequerido[] {
+    const faltan: DocumentoRequerido[] = []
+    if (!this.fotoLicencia) faltan.push('licencia')
+    if (SOAT_OBLIGATORIO && !this.soatValido) faltan.push('soat')
+    if (!this.fotoTecnomecanica) faltan.push('tecnomecanica')
+    if (!this.fotoTarjetaPropiedad) faltan.push('tarjeta_propiedad')
+    if (!this.fotoVehiculo) faltan.push('foto_vehiculo')
+    if (!this.fotoConductor) faltan.push('foto_conductor')
+    if (!CEDULA_REGEX.test(String(this.cedula ?? '').trim())) faltan.push('numero_cedula')
+    return faltan
+  }
+
   /** Campos de los documentos nuevos, con las fotos firmadas, para perfil/admin. */
   documentosExtra(sign: (p: string | null) => string | null) {
     return {
+      faltantes: this.documentosFaltantes(),
       fotoCedulaReverso: sign(this.fotoCedulaReverso),
       fotoTarjetaPropiedad: sign(this.fotoTarjetaPropiedad),
       fotoTecnomecanica: sign(this.fotoTecnomecanica),
@@ -202,4 +232,12 @@ export default class Conductor extends BaseModel {
 
   @belongsTo(() => User, { foreignKey: 'usuarioId' })
   declare usuario: BelongsTo<typeof User>
+}
+
+/** Cuerpo del 422 al aprobar sin todos los documentos: "Falta: licencia, SOAT". */
+export function errorFaltantes(faltantes: DocumentoRequerido[]) {
+  return {
+    error: `Falta: ${faltantes.map((f) => DOCUMENTOS_REQUERIDOS[f]).join(', ')}`,
+    faltantes,
+  }
 }

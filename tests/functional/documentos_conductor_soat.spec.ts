@@ -3,13 +3,16 @@ import testUtils from '@adonisjs/core/services/test_utils'
 import { DateTime } from 'luxon'
 import Conductor, { SOAT_OBLIGATORIO } from '#models/conductor'
 import User from '#models/user'
+import { documentosCompletos } from '../helpers/documentos.js'
 
 /**
  * Documentos nuevos de verificación (cédula reverso, tarjeta de propiedad,
  * tecnomecánica y SOAT con vencimiento) y la excepción del SOAT:
  *  - la fecha vencida da 422;
  *  - el conductor pide la excepción y el admin la aprueba o rechaza;
- *  - el admin solo puede aprobar con SOAT vigente o excepción aprobada.
+ *  - el admin solo puede aprobar con SOAT vigente o excepción aprobada;
+ *  - aprobar exige licencia, SOAT, tecnomecánica, tarjeta de propiedad, foto del
+ *    vehículo, foto del conductor y número de cédula (la foto de la cédula ya no).
  */
 
 const uniq = () => `${Date.now()}${Math.floor(Math.random() * 1e6)}`
@@ -34,7 +37,7 @@ async function crearUsuario(client: any, datos: Record<string, unknown>) {
   return { user, token: login.body().token as string }
 }
 
-async function crearConductor(client: any) {
+async function crearConductor(client: any, extra: Record<string, unknown> = {}) {
   const { user, token } = await crearUsuario(client, { rol: 'conductor' })
   const conductor = await Conductor.create({
     usuarioId: user.id,
@@ -44,6 +47,7 @@ async function crearConductor(client: any) {
     capacidad: '1 tonelada',
     ciudad: 'popayan',
     estadoVerificacion: 'pendiente',
+    ...extra,
   } as any)
   return { user, token, conductor }
 }
@@ -94,20 +98,24 @@ test.group('Documentos del conductor y excepción del SOAT', (group) => {
     assert.equal(perfil.body().conductor.tecnomecanicaVence, manana())
   })
 
-  test('SOAT apagado: el admin aprueba aunque no haya SOAT', async ({ client }) => {
+  test('sin ningún documento el admin no aprueba y el 422 dice qué falta', async ({ client, assert }) => {
     const admin = await crearUsuario(client, { rol: 'admin' })
     const { conductor } = await crearConductor(client)
     const res = await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)
-    res.assertStatus(SOAT_OBLIGATORIO ? 422 : 200)
+    res.assertStatus(422)
+    assert.deepEqual(res.body().faltantes, ['licencia', 'soat', 'tecnomecanica', 'tarjeta_propiedad', 'foto_vehiculo', 'foto_conductor'])
+    assert.equal(res.body().error, 'Falta: licencia, SOAT, tecnomecánica, tarjeta de propiedad, foto del vehículo, foto del conductor')
   })
 
   test('el admin no aprueba sin SOAT vigente, y sí con SOAT', async ({ client, assert }) => {
     const admin = await crearUsuario(client, { rol: 'admin' })
-    const { token, conductor } = await crearConductor(client)
+    const { fotoSoat: _s, soatVence: _v, ...sinSoatDocs } = documentosCompletos()
+    const { token, conductor } = await crearConductor(client, sinSoatDocs)
 
     const sinSoat = await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)
     sinSoat.assertStatus(422)
     assert.include(sinSoat.body().error, 'SOAT')
+    assert.deepEqual(sinSoat.body().faltantes, ['soat'])
 
     ;(await subir(client, token, 'soat', manana())).assertStatus(200)
     const conSoat = await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)
@@ -115,9 +123,48 @@ test.group('Documentos del conductor y excepción del SOAT', (group) => {
     assert.equal(conSoat.body().estadoVerificacion, 'aprobado')
   }).skip(!SOAT_OBLIGATORIO, 'SOAT apagado (SOAT_OBLIGATORIO = false)')
 
+  test('aprobar sin tarjeta de propiedad da 422 (admin y moderador)', async ({ client, assert }) => {
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const mod = await crearUsuario(client, { rol: 'moderador', esModerador: true, zonaModerador: 'popayan' })
+    const { fotoTarjetaPropiedad: _t, ...sinTarjeta } = documentosCompletos()
+    const { conductor } = await crearConductor(client, sinTarjeta)
+
+    const res = await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)
+    res.assertStatus(422)
+    assert.equal(res.body().error, 'Falta: tarjeta de propiedad')
+    const resMod = await client.post(`/api/moderator/drivers/${conductor.id}/approve`).bearerToken(mod.token)
+    resMod.assertStatus(422)
+    assert.deepEqual(resMod.body().faltantes, ['tarjeta_propiedad'])
+  })
+
+  test('aprobar sin número de cédula válido da 422', async ({ client, assert }) => {
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const { conductor } = await crearConductor(client, { ...documentosCompletos(), cedula: 'ab' })
+    const res = await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)
+    res.assertStatus(422)
+    assert.deepEqual(res.body().faltantes, ['numero_cedula'])
+  })
+
+  test('con todos los documentos, sin foto de la cédula, se aprueba (200) y perfil/lista traen faltantes vacíos', async ({ client, assert }) => {
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const { token, conductor } = await crearConductor(client, documentosCompletos())
+    assert.isNotOk(conductor.fotoCedula)
+
+    const perfil = await client.get('/api/users/profile').bearerToken(token)
+    assert.deepEqual(perfil.body().conductor.faltantes, [])
+    const lista = await client.get('/api/admin/verifications?limit=100').bearerToken(admin.token)
+    const item = (lista.body() as any[]).find((c) => Number(c.id) === Number(conductor.id))
+    assert.deepEqual(item.faltantes, [])
+
+    const res = await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)
+    res.assertStatus(200)
+    assert.equal(res.body().estadoVerificacion, 'aprobado')
+  })
+
   test('excepción del SOAT: el conductor la pide, el admin la aprueba y ya se puede aprobar al conductor', async ({ client, assert }) => {
     const admin = await crearUsuario(client, { rol: 'admin' })
-    const { token, conductor } = await crearConductor(client)
+    const { fotoSoat: _s, soatVence: _v, ...sinSoatDocs } = documentosCompletos()
+    const { token, conductor } = await crearConductor(client, sinSoatDocs)
 
     // Sin excepción pendiente, el admin no tiene nada que resolver.
     ;(await client.put(`/api/admin/verifications/${conductor.id}/soat-exception`).bearerToken(admin.token).json({ aprobar: true })).assertStatus(409)
@@ -155,7 +202,8 @@ test.group('Documentos del conductor y excepción del SOAT', (group) => {
 
   test('excepción del SOAT rechazada: sigue sin poder aprobarse', async ({ client, assert }) => {
     const admin = await crearUsuario(client, { rol: 'admin' })
-    const { token, conductor } = await crearConductor(client)
+    const { fotoSoat: _s, soatVence: _v, ...sinSoatDocs } = documentosCompletos()
+    const { token, conductor } = await crearConductor(client, sinSoatDocs)
 
     ;(await client.post('/api/drivers/verification-soat/excepcion').bearerToken(token).json({})).assertStatus(200)
     const rechazada = await client

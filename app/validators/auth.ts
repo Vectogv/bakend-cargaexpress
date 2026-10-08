@@ -17,7 +17,8 @@ export const registerValidator = vine.create({
   // H3: mayor de 18. Obligatoria para el conductor (lo exige el controlador);
   // el cliente la completa después, en el asistente (PUT /api/users/profile).
   edad: vine.number().min(18).max(120).optional(),
-  cedula: vine.string().maxLength(20).nullable().optional(),
+  // Número de cédula: solo dígitos, 5 a 20. Obligatoria para el conductor (lo exige el controlador).
+  cedula: vine.string().trim().regex(/^\d{5,20}$/).nullable().optional(),
   placa: vine.string().maxLength(20).nullable().optional(),
   tipoVehiculo: vine.string().maxLength(50).nullable().optional(),
   capacidad: vine.string().maxLength(50).nullable().optional(),

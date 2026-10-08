@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { documentosCompletos } from '../helpers/documentos.js'
 import testUtils from '@adonisjs/core/services/test_utils'
 import { DateTime } from 'luxon'
 import Conductor from '#models/conductor'
@@ -56,6 +57,8 @@ async function adminToken(client: any) {
 async function conductorListo(client: any, admin: string) {
   const usuario = await cuenta(client, 'conductor', 'Carlos')
   const conductor = await Conductor.findByOrFail('usuario_id', usuario.id)
+  conductor.merge(documentosCompletos())
+  await conductor.save()
   ;(await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin)).assertStatus(200)
   conductor.ultimaUbicacionLat = ORIGEN.lat
   conductor.ultimaUbicacionLng = ORIGEN.lng

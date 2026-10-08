@@ -4,6 +4,7 @@ import testUtils from '@adonisjs/core/services/test_utils'
 import AlertaEmergencia from '#models/alerta_emergencia'
 import Conductor from '#models/conductor'
 import Disputa from '#models/disputa'
+import Notificacion from '#models/notificacion'
 import TicketSoporte from '#models/ticket_soporte'
 import User from '#models/user'
 import Viaje from '#models/viaje'
@@ -128,6 +129,8 @@ test.group('Moderador: directorio y ficha de conductores', (group) => {
     assert.equal(b.usuario.nombre, 'Pedro Pérez')
     assert.property(b.usuario, 'contactoEmergenciaTelefono')
     assert.property(b.documentos, 'fotoCedula')
+    assert.include(b.documentos.faltantes, 'licencia')
+    assert.notInclude(b.documentos.faltantes, 'foto_vehiculo')
     assert.deepEqual(ids(b.viajes), [Number(viaje.id)])
     assert.equal(b.viajes[0].cliente.nombre, 'Laura G.')
     assert.lengthOf(b.disputas, 1)
@@ -277,5 +280,26 @@ test.group('Moderador: disputas de su zona', (group) => {
   test('sin zona asignada responde 403', async ({ client }) => {
     const mod = await crearModerador(client, null)
     ;(await client.get('/api/moderator/disputes').bearerToken(mod.token)).assertStatus(403)
+  })
+
+  test('Notificar con documentos crea el aviso de la bandeja aunque el conductor no tenga token FCM; uno inválido da 422', async ({ client, assert }) => {
+    const mod = await crearModerador(client, 'popayan')
+    const driver = await crearConductor(client, 'Popayán', { estadoVerificacion: 'pendiente' })
+
+    const res = await client
+      .post(`/api/moderator/drivers/${driver.conductor.id}/notify`)
+      .bearerToken(mod.token)
+      .json({ documentos: ['licencia', 'soat'], mensaje: 'La licencia salió borrosa' })
+    res.assertStatus(200)
+    const aviso = await Notificacion.query().where('usuario_id', driver.user.id).where('tipo', 'documentos_faltantes').firstOrFail()
+    assert.equal(aviso.titulo, 'Faltan documentos')
+    assert.equal(
+      aviso.mensaje,
+      'Te falta subir: licencia, SOAT. Los demás documentos están en revisión. Súbelos desde Perfil → Documentos.\nNota del moderador: La licencia salió borrosa'
+    )
+
+    ;(await client.post(`/api/moderator/drivers/${driver.conductor.id}/notify`).bearerToken(mod.token).json({ documentos: ['pasaporte'] })).assertStatus(422)
+    // Sin cuerpo sigue siendo el recordatorio de inactividad: sin token FCM da 422.
+    ;(await client.post(`/api/moderator/drivers/${driver.conductor.id}/notify`).bearerToken(mod.token)).assertStatus(422)
   })
 })

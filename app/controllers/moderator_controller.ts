@@ -1,5 +1,5 @@
 import User from '#models/user'
-import Conductor, { SOAT_OBLIGATORIO } from '#models/conductor'
+import Conductor, { DOCUMENTOS_REQUERIDOS, errorFaltantes } from '#models/conductor'
 import Comunicado from '#models/comunicado'
 import Encuesta from '#models/encuesta'
 import RespuestaEncuesta from '#models/respuesta_encuesta'
@@ -12,6 +12,8 @@ import Ganancia from '#models/ganancia'
 import Disputa from '#models/disputa'
 import Reporte from '#models/reporte'
 import LogFraude from '#models/log_fraude'
+import Notificacion from '#models/notificacion'
+import { notifyDriverValidator } from '#validators/driver'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
@@ -287,8 +289,9 @@ export default class ModeratorController {
     )
   }
 
-  async notifyDriver({ auth, params, response, serialize }: HttpContext) {
+  async notifyDriver({ auth, params, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
+    const { documentos, mensaje } = await request.validateUsing(notifyDriverValidator)
     const conductor = await Conductor.find(params.id)
     if (!conductor) {
       return response
@@ -310,6 +313,28 @@ export default class ModeratorController {
     }
 
     const usuario = await User.find(conductor.usuarioId)
+
+    // Con `documentos`: aviso de documentos faltantes (push + bandeja, aunque no tenga token FCM).
+    if (documentos?.length) {
+      const titulo = 'Faltan documentos'
+      const lista = documentos.map((d) => DOCUMENTOS_REQUERIDOS[d]).join(', ')
+      const cuerpo =
+        `Te falta subir: ${lista}. Los demás documentos están en revisión. Súbelos desde Perfil → Documentos.` +
+        (mensaje ? `
+Nota del moderador: ${mensaje}` : '')
+      await Notificacion.create({
+        usuarioId: conductor.usuarioId,
+        tipo: 'documentos_faltantes',
+        titulo,
+        mensaje: cuerpo,
+        leido: false,
+      })
+      if (usuario?.fcmToken) {
+        await sendToMultiple([usuario.fcmToken], titulo, cuerpo, { tipo: 'documentos_faltantes' })
+      }
+      return serialize.withoutWrapping({ success: true, conductorId: conductor.id, documentos })
+    }
+
     if (!usuario?.fcmToken) {
       return response
         .status(422)
@@ -399,12 +424,9 @@ export default class ModeratorController {
     }
 
     // Misma regla que el admin: solo al aprobar, no afecta a los ya aprobados.
-    if (SOAT_OBLIGATORIO && !conductor.soatValido) {
-      return response.status(422).send(
-        await serialize.withoutWrapping({
-          error: 'El conductor necesita un SOAT vigente o una excepción de SOAT aprobada',
-        })
-      )
+    const faltantes = conductor.documentosFaltantes()
+    if (faltantes.length) {
+      return response.status(422).send(await serialize.withoutWrapping(errorFaltantes(faltantes)))
     }
 
     conductor.estadoVerificacion = 'aprobado'
@@ -1975,6 +1997,7 @@ function resumenConductor(c: Conductor) {
     estadoVerificacion: c.estadoVerificacion,
     fotoCedula: SignedUploadService.sign(c.fotoCedula),
     fotoLicencia: SignedUploadService.sign(c.fotoLicencia),
+    faltantes: c.documentosFaltantes(),
     notaRechazo: c.notaRechazo,
     usuario: c.usuario
       ? {

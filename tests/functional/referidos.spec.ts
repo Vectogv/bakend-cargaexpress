@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { documentosCompletos } from '../helpers/documentos.js'
 import { DateTime } from 'luxon'
 import ConfiguracionPlataforma from '#models/configuracion_plataforma'
 import Conductor from '#models/conductor'
@@ -66,6 +67,8 @@ async function activarPrograma(client: any, admin: string, referidos: Record<str
 async function conductorListo(client: any, admin: string, codigoReferido?: string) {
   const usuario = await cuenta(client, 'conductor', codigoReferido ? { codigoReferido } : {})
   const conductor = await Conductor.findByOrFail('usuario_id', usuario.id)
+  conductor.merge(documentosCompletos())
+  await conductor.save()
   ;(await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin)).assertStatus(200)
   conductor.ultimaUbicacionLat = ORIGEN.lat
   conductor.ultimaUbicacionLng = ORIGEN.lng

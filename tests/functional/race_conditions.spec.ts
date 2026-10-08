@@ -20,7 +20,7 @@ test.group('Race Condition: Double Trip Acceptance', (group) => {
       nombre: 'Driver A', apellido: 'Test',
       email: `race-driver-a-${Date.now()}@test.com`,
       password: '123456', rol: 'conductor', edad: 30,
-      cedula: `A-${Date.now()}`, placa: `RA-${Date.now()}`,
+      cedula: `1${Date.now()}`, placa: `RA-${Date.now()}`,
       tipoVehiculo: 'camioneta', capacidad: '1000 kg',
     })
     driverAReg.assertStatus(200)
@@ -32,7 +32,7 @@ test.group('Race Condition: Double Trip Acceptance', (group) => {
       nombre: 'Driver B', apellido: 'Test',
       email: `race-driver-b-${Date.now()}@test.com`,
       password: '123456', rol: 'conductor', edad: 30,
-      cedula: `B-${Date.now()}`, placa: `RB-${Date.now()}`,
+      cedula: `2${Date.now()}`, placa: `RB-${Date.now()}`,
       tipoVehiculo: 'camioneta', capacidad: '1000 kg',
     })
     driverBReg.assertStatus(200)
