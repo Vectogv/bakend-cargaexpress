@@ -1,5 +1,6 @@
 import { test } from '@japa/runner'
 import { io, type Socket } from 'socket.io-client'
+import TicketSoporte from '#models/ticket_soporte'
 import User from '#models/user'
 
 /**
@@ -15,6 +16,11 @@ const uniq = () => `${Date.now()}${Math.floor(Math.random() * 1e6)}`
 // Puerto real del servidor de tests: `node ace test` usa otro aleatorio si
 // el 3333 está ocupado (p. ej. por un `node ace serve` de desarrollo).
 const URL = `http://localhost:${process.env.PORT ?? 3333}`
+
+const ticketsCreados: number[] = []
+const limpiarTickets = async () => {
+  if (ticketsCreados.length) await TicketSoporte.query().whereIn('id', ticketsCreados.splice(0)).delete()
+}
 
 async function registrar(client: any, rol: 'cliente' | 'admin' | 'moderador') {
   const res = await client.post('/api/auth/register').json({
@@ -32,6 +38,12 @@ async function registrar(client: any, rol: 'cliente' | 'admin' | 'moderador') {
   if (rol === 'moderador') {
     await User.query().where('id', id).update({ es_moderador: true, zona_moderador: 'popayan' })
   }
+  // El moderador solo puede abrir chat con un cliente que tenga un caso en su zona.
+  // Sin transacción global (el socket comparte la base): se borran al terminar.
+  if (rol === 'cliente') {
+    const t = await TicketSoporte.create({ usuarioId: id, categoria: 'otro', asunto: 'Prueba', descripcion: 'Prueba de chat', estado: 'abierto', zona: 'popayan' } as any)
+    ticketsCreados.push(t.id)
+  }
   return { token: body.token, id }
 }
 
@@ -46,7 +58,8 @@ function conectar(token: string): Promise<Socket> {
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-test.group('Conversatorio en tiempo real', () => {
+test.group('Conversatorio en tiempo real', (group) => {
+  group.each.teardown(limpiarTickets)
   test('admin y moderador reciben el mensaje una sola vez', async ({ client, assert }) => {
     const admin = await registrar(client, 'admin')
     const moderador = await registrar(client, 'moderador')

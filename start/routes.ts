@@ -415,6 +415,7 @@ router
     router.get('comunicados', [controllers.Moderator, 'myComunicados'])
     router.get('drivers', [controllers.Moderator, 'driversList'])
     router.get('drivers/inactive', [controllers.Moderator, 'inactiveDrivers'])
+    router.get('drivers/:id', [controllers.Moderator, 'driverShow'])
     router.post('drivers/:id/notify', [controllers.Moderator, 'notifyDriver'])
     router.post('drivers/:id/report', [controllers.Moderator, 'reportDriver'])
     router.post('drivers/:id/approve', [controllers.Moderator, 'approveDriver'])
@@ -426,6 +427,7 @@ router
     router.get('reports', [controllers.Moderator, 'myReports'])
     router.get('dashboard', [controllers.Moderator, 'dashboard'])
     router.get('trips', [controllers.Moderator, 'trips'])
+    router.get('disputes', [controllers.Moderator, 'disputes'])
     router.get('trips/:id', [controllers.Moderator, 'tripShow'])
     // H1: Moderador resuelve un cierre que el cliente no confirmó a tiempo.
     router.post('trips/:id/resolve-close', [controllers.Moderator, 'resolvePendingClose'])

@@ -6,6 +6,7 @@ import db from '@adonisjs/lucid/services/db'
 import { getIO } from '#start/socket'
 import { sendToToken } from '#services/push_notification_service'
 import { claveDe } from '#services/coverage_service'
+import { clienteContactablePorModerador } from '#services/moderador_acceso_cliente'
 
 /** Antirrebote de push por conversación y destinatario. */
 export const PUSH_CONVERSACION_ANTIRREBOTE_MS = 20_000
@@ -167,6 +168,18 @@ export default class ConversacionController {
     const rol = destinatario.rol
     if (!['cliente', 'conductor', 'admin'].includes(rol ?? '') && !destinatario.esModerador) {
       return response.status(422).send(await serialize.withoutWrapping({ error: 'Solo se puede contactar a clientes, conductores, moderadores o administradores' }))
+    }
+    // El moderador no trata con clientes salvo que un caso los relacione
+    // (ticket de su zona, SOS o disputa con un conductor de su zona).
+    if (rol === 'cliente' && !destinatario.esModerador && !this.isAdmin(user)) {
+      const zona = claveDe(user.zonaModerador || '')
+      if (!zona || !(await clienteContactablePorModerador(destinatario.id, zona))) {
+        return response.status(403).send(
+          await serialize.withoutWrapping({
+            error: 'Solo puedes contactar a un cliente con un ticket, un SOS o una disputa en tu zona',
+          })
+        )
+      }
     }
 
     let conversacion = await Conversacion.query()
@@ -373,11 +386,10 @@ export default class ConversacionController {
     const q = (request.input('q') || '').toString().trim()
     const limit = Math.min(Number(request.input('limit') || 50), 100)
 
-    // Admin: cualquier usuario. Moderador: staff + conductores de su ciudad; los
-    // clientes solo aparecen al buscar (≥3 caracteres), nunca en un listado masivo.
+    // Admin: cualquier usuario. Moderador: staff + conductores de su ciudad; nunca
+    // clientes (a ellos los contacta desde el ticket, el SOS o la disputa).
     const esAdmin = this.isAdmin(user)
     const zona = user.zonaModerador
-    const buscaClientes = q.length >= 3
 
     // `conductores.ciudad` es texto libre ('Popayán', 'POPAYAN'): se compara
     // normalizada con claveDe en memoria (portable entre SQLite y Postgres).
@@ -401,7 +413,6 @@ export default class ConversacionController {
         if (conductoresZona.length > 0) {
           w.orWhereIn('id', conductoresZona)
         }
-        if (buscaClientes) w.orWhere('rol', 'cliente')
       })
       .whereNot('id', user.id)
       .orderBy('nombre', 'asc')

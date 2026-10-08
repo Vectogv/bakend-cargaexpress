@@ -427,6 +427,12 @@ export default class DriverController {
 
     conductor.fotoConductor = `/storage/uploads/${fileName}`
     await conductor.save()
+    // La foto pedida en el registro es también la del perfil: si el usuario no
+    // tiene avatar propio, queda esta (el panel la muestra en la ficha).
+    if (!user.avatar) {
+      user.avatar = conductor.fotoConductor
+      await user.save()
+    }
 
     return serialize.withoutWrapping({ fotoConductor: conductor.fotoConductor })
   }

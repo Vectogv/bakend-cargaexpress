@@ -10,6 +10,7 @@ import AlertaEmergencia from '#models/alerta_emergencia'
 import Oferta from '#models/oferta'
 import Ganancia from '#models/ganancia'
 import Disputa from '#models/disputa'
+import Reporte from '#models/reporte'
 import LogFraude from '#models/log_fraude'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
@@ -43,6 +44,13 @@ import SignedUploadService from '#services/signed_upload_service'
 import CoverageService, { claveDe, type Zona } from '#services/coverage_service'
 import { restaurarViajeTrasSos } from '#services/sos_trip_service'
 import antifraudeConfig from '#config/antifraude'
+import {
+  conductoresDeZona,
+  casosPorViaje,
+  casoVacio,
+  hayCaso,
+  nombreCorto,
+} from '#services/moderador_acceso_cliente'
 
 export default class ModeratorController {
   async storeComunicado({ auth, request, response, serialize }: HttpContext) {
@@ -112,6 +120,7 @@ export default class ModeratorController {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const estado = request.input('estado') || null
+    const buscar = String(request.input('buscar') || '').trim()
     const ciudad = esAdmin ? request.input('ciudad') || null : user.zonaModerador
     // La ciudad del conductor se guarda sin normalizar (puede traer tildes o
     // mayúsculas distintas a la zona del moderador): se compara con claveDe en
@@ -122,47 +131,114 @@ export default class ModeratorController {
 
     const candidatos = await Conductor.query()
       .if(estado, (q) => q.where('estado_verificacion', estado!))
-      .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email'))
+      .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email', 'avatar', 'estado_cuenta'))
       .orderBy('created_at', 'desc')
 
-    const filtrados = claveEsperada
-      ? candidatos.filter((c) => claveDe(c.ciudad || '') === claveEsperada)
-      : candidatos
+    const filtrados = candidatos
+      .filter((c) => !claveEsperada || claveDe(c.ciudad || '') === claveEsperada)
+      .filter((c) => !buscar || coincideConductor(c, buscar))
     const inicio = (page - 1) * limit
     const pagina = filtrados.slice(inicio, inicio + limit)
 
-    return serialize.withoutWrapping(
-      pagina.map((c) => ({
-        id: c.id,
-        usuarioId: c.usuarioId,
-        cedula: c.cedula,
-        placa: c.placa,
-        tipoVehiculo: c.tipoVehiculo,
-        capacidad: c.capacidad,
-        ciudad: c.ciudad,
-        fotoConductor: c.fotoConductor,
-        fotoVehiculo: c.fotoVehiculo,
-        online: c.online,
-        calificacion: c.calificacion,
-        totalViajes: c.totalViajes,
-        horasActivo: c.horasActivo,
-        ultimaUbicacion: c.ultimaUbicacionLat
-          ? { lat: c.ultimaUbicacionLat, lng: c.ultimaUbicacionLng }
-          : null,
-        estadoVerificacion: c.estadoVerificacion,
+    return serialize.withoutWrapping(pagina.map(resumenConductor))
+  }
+
+  /** Ficha completa de un conductor de la zona (perfil, vehículo, documentos, viajes, reportes). */
+  async driverShow({ auth, params, request, response, serialize }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const zona = zonaDeConsulta(user, request.input('ciudad'))
+    if (zona === false) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ message: 'No tienes una zona asignada' }))
+    }
+    const c = await Conductor.query().where('id', params.id).preload('usuario').first()
+    if (!c) {
+      return response.status(404).send(await serialize.withoutWrapping({ message: 'Conductor no encontrado' }))
+    }
+    if (zona && claveDe(c.ciudad || '') !== zona) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ message: 'Este conductor no pertenece a tu zona' }))
+    }
+
+    const [viajes, reportesClientes, reportesModerador, disputas] = await Promise.all([
+      Viaje.query()
+        .where('conductor_id', c.id)
+        .preload('cliente', (q) => q.select('id', 'nombre', 'apellido'))
+        .orderBy('created_at', 'desc')
+        .limit(10),
+      Reporte.query().where('conductor_id', c.id).where('reportado_por', 'cliente').orderBy('created_at', 'desc').limit(20),
+      ReporteModerador.query()
+        .where('conductor_id', c.id)
+        .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
+        .orderBy('created_at', 'desc')
+        .limit(20),
+      Disputa.query().where('conductor_id', c.id).orderBy('created_at', 'desc').limit(20),
+    ])
+    const u = c.usuario
+
+    return serialize.withoutWrapping({
+      ...resumenConductor(c),
+      penalizacionCancelacion: Number(c.penalizacionCancelacion || 0),
+      ubicacionActualizadaEn: c.ubicacionActualizadaEn?.toISO() ?? null,
+      usuario: u
+        ? {
+            id: u.id,
+            nombre: `${u.nombre || ''} ${u.apellido || ''}`.trim(),
+            telefono: u.telefono,
+            email: u.email,
+            avatar: u.avatar,
+            edad: u.edad,
+            cedula: u.cedula,
+            contactoEmergenciaNombre: u.contactoEmergenciaNombre,
+            contactoEmergenciaTelefono: u.contactoEmergenciaTelefono,
+            calificacion: u.calificacion,
+            estadoCuenta: u.estadoCuenta,
+            suspendido: u.suspendido,
+            tieneDeudaActiva: u.tieneDeudaActiva,
+            montoDeuda: u.montoDeuda !== null ? Number(u.montoDeuda) : null,
+            createdAt: u.createdAt?.toISO() ?? null,
+          }
+        : null,
+      documentos: {
         fotoCedula: SignedUploadService.sign(c.fotoCedula),
         fotoLicencia: SignedUploadService.sign(c.fotoLicencia),
-        notaRechazo: c.notaRechazo,
-        usuario: c.usuario
-          ? {
-              nombre: `${c.usuario.nombre || ''} ${c.usuario.apellido || ''}`.trim(),
-              telefono: c.usuario.telefono,
-              email: c.usuario.email,
-            }
-          : null,
-        createdAt: c.createdAt.toISO(),
-      }))
-    )
+        ...c.documentosExtra((p) => SignedUploadService.sign(p)),
+      },
+      viajes: viajes.map((t) => ({
+        id: t.id,
+        estado: t.estado,
+        estadoLabel: getTripEstadoLabel(t.estado),
+        origenDireccion: t.origenDireccion,
+        destinoDireccion: t.destinoDireccion,
+        precioFinal: t.precioFinal !== null ? Number(t.precioFinal) : null,
+        cliente: t.cliente ? { id: t.cliente.id, nombre: nombreCorto(t.cliente) } : null,
+        createdAt: t.createdAt.toISO(),
+      })),
+      reportes: reportesClientes.map((r) => ({
+        id: r.id,
+        viajeId: r.viajeId,
+        motivo: r.motivo,
+        descripcion: r.descripcion,
+        estado: r.estado,
+        createdAt: r.createdAt.toISO(),
+      })),
+      reportesModerador: reportesModerador.map((r) => ({
+        id: r.id,
+        descripcion: r.descripcion,
+        estado: r.estado,
+        moderador: r.moderador ? `${r.moderador.nombre || ''} ${r.moderador.apellido || ''}`.trim() : null,
+        createdAt: r.createdAt.toISO(),
+      })),
+      disputas: disputas.map((d) => ({
+        id: d.id,
+        viajeId: d.viajeId,
+        estado: d.estado,
+        resultado: d.resultado,
+        createdAt: d.createdAt.toISO(),
+      })),
+    })
   }
 
   async inactiveDrivers({ auth, request, response, serialize }: HttpContext) {
@@ -179,15 +255,23 @@ export default class ModeratorController {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
 
+    // Solo aprobados con más de 7 días de registro: un pendiente o un recién
+    // registrado no es "inactivo", todavía no ha podido trabajar.
     const candidatos = await Conductor.query()
+      .select('conductores.*')
+      .select(
+        db.from('viajes').max('created_at').whereRaw('viajes.conductor_id = conductores.id').as('ultimo_viaje_at')
+      )
+      .where('estado_verificacion', 'aprobado')
+      .where('conductores.created_at', '<', fechaLimite)
       .whereNotExists((qb) => {
         qb.from('viajes')
           .whereRaw('viajes.conductor_id = conductores.id')
           .where('viajes.created_at', '>=', fechaLimite)
       })
       .where('online', false)
-      .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email'))
-      .orderBy('created_at', 'desc')
+      .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email', 'avatar', 'estado_cuenta'))
+      .orderBy('conductores.created_at', 'desc')
 
     const filtrados = claveEsperada
       ? candidatos.filter((c) => claveDe(c.ciudad || '') === claveEsperada)
@@ -197,34 +281,8 @@ export default class ModeratorController {
 
     return serialize.withoutWrapping(
       pagina.map((c) => ({
-        id: c.id,
-        usuarioId: c.usuarioId,
-        cedula: c.cedula,
-        placa: c.placa,
-        tipoVehiculo: c.tipoVehiculo,
-        capacidad: c.capacidad,
-        ciudad: c.ciudad,
-        fotoConductor: c.fotoConductor,
-        fotoVehiculo: c.fotoVehiculo,
-        online: c.online,
-        calificacion: c.calificacion,
-        totalViajes: c.totalViajes,
-        horasActivo: c.horasActivo,
-        ultimaUbicacion: c.ultimaUbicacionLat
-          ? { lat: c.ultimaUbicacionLat, lng: c.ultimaUbicacionLng }
-          : null,
-        estadoVerificacion: c.estadoVerificacion,
-        fotoCedula: SignedUploadService.sign(c.fotoCedula),
-        fotoLicencia: SignedUploadService.sign(c.fotoLicencia),
-        notaRechazo: c.notaRechazo,
-        usuario: c.usuario
-          ? {
-              nombre: `${c.usuario.nombre || ''} ${c.usuario.apellido || ''}`.trim(),
-              telefono: c.usuario.telefono,
-              email: c.usuario.email,
-            }
-          : null,
-        createdAt: c.createdAt.toISO(),
+        ...resumenConductor(c),
+        ultimoViajeAt: fechaSql(c.$extras.ultimo_viaje_at),
       }))
     )
   }
@@ -877,13 +935,26 @@ export default class ModeratorController {
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
 
+    // El moderador solo ve el contacto del cliente cuando el viaje tiene un caso
+    // (SOS, disputa o ticket); si no, apenas el nombre corto. El admin lo ve siempre.
+    const esAdmin = user.rol === 'admin'
+    const casos = await casosPorViaje(resultado.all().map((t) => Number(t.id)))
+
     return serialize.withoutWrapping(
-      resultado.all().map((t) => ({
+      resultado.all().map((t) => {
+        const caso = casos.get(Number(t.id)) ?? casoVacio
+        const contactoVisible = esAdmin || hayCaso(caso)
+        return {
         id: t.id,
         clienteId: t.clienteId,
         conductorId: t.conductorId,
         estado: t.estado,
         estadoLabel: getTripEstadoLabel(t.estado),
+        tieneSos: caso.tieneSos,
+        tieneDisputa: Boolean(caso.disputa),
+        disputaId: caso.disputa?.id ?? null,
+        tieneTicket: caso.tickets.length > 0,
+        contactoVisible,
         origenDireccion: t.origenDireccion,
         origen: { lat: t.origenLat, lng: t.origenLng },
         destinoDireccion: t.destinoDireccion,
@@ -898,16 +969,19 @@ export default class ModeratorController {
         motivoCancelacion: t.motivoCancelacion,
         calificacionCliente: t.calificacionCliente,
         cliente: t.cliente
-          ? {
-              id: t.cliente.id,
-              nombre: `${t.cliente.nombre || ''} ${t.cliente.apellido || ''}`.trim(),
-              telefono: t.cliente.telefono,
-              email: t.cliente.email,
-            }
+          ? contactoVisible
+            ? {
+                id: t.cliente.id,
+                nombre: `${t.cliente.nombre || ''} ${t.cliente.apellido || ''}`.trim(),
+                telefono: t.cliente.telefono,
+                email: t.cliente.email,
+              }
+            : { id: t.cliente.id, nombre: nombreCorto(t.cliente), telefono: null, email: null }
           : null,
         conductor: t.conductor
           ? {
               id: t.conductor.id,
+              usuarioId: t.conductor.usuarioId,
               placa: t.conductor.placa,
               tipoVehiculo: t.conductor.tipoVehiculo,
               ciudad: t.conductor.ciudad,
@@ -921,8 +995,84 @@ export default class ModeratorController {
         completadoAt: t.completadoAt?.toISO() ?? null,
         finalizadoAt: t.finalizadoAt?.toISO() ?? null,
         canceladoAt: t.canceladoAt?.toISO() ?? null,
-      }))
+        }
+      })
     )
+  }
+
+  /** Disputas de los conductores de la zona (solo lectura: las cierra el admin). */
+  async disputes({ auth, request, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const zona = zonaDeConsulta(user, request.input('ciudad'))
+    if (zona === false) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
+    }
+    const conductorIds = zona ? (await conductoresDeZona(zona)).conductorIds : null
+    const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
+    const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    const estado = String(request.input('estado', '') || '')
+
+    const resultado = await Disputa.query()
+      .if(conductorIds, (q) => q.whereIn('conductor_id', conductorIds!))
+      .if(estado, (q) => q.whereIn('estado', estado.split(',')))
+      .preload('viaje', (q) => q.select('id', 'estado', 'origen_direccion', 'destino_direccion', 'precio_final'))
+      .preload('conductor', (q) =>
+        q.select('id', 'usuario_id', 'placa').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido'))
+      )
+      .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
+      .orderBy('created_at', 'desc')
+      .paginate(page, limit)
+
+    return serialize.withoutWrapping({
+      total: resultado.total,
+      page: resultado.currentPage,
+      data: resultado.all().map((d) => ({
+        id: d.id,
+        viajeId: d.viajeId,
+        conductorId: d.conductorId,
+        clienteId: d.clienteId,
+        numero: d.numero,
+        problema: d.problema,
+        descripcion: d.descripcion,
+        versionConductor: d.versionConductor,
+        versionCliente: d.versionCliente,
+        soporteCliente: SignedUploadService.sign(d.soporteCliente),
+        fotos: SignedUploadService.sign(Array.isArray(d.fotos) ? d.fotos : []),
+        estado: d.estado,
+        resultado: d.resultado,
+        reembolso: d.reembolso !== null ? Number(d.reembolso) : null,
+        comentarioAdmin: d.comentarioAdmin,
+        viaje: d.viaje
+          ? {
+              id: d.viaje.id,
+              estado: d.viaje.estado,
+              origen: d.viaje.origenDireccion,
+              destino: d.viaje.destinoDireccion,
+              montoFinal: d.viaje.precioFinal !== null ? Number(d.viaje.precioFinal) : null,
+            }
+          : null,
+        conductor: d.conductor
+          ? {
+              id: d.conductor.id,
+              usuarioId: d.conductor.usuarioId,
+              nombre: `${d.conductor.usuario?.nombre || ''} ${d.conductor.usuario?.apellido || ''}`.trim(),
+              placa: d.conductor.placa,
+            }
+          : null,
+        // La disputa ya relaciona al cliente con la zona: el contacto sí se muestra.
+        cliente: d.cliente
+          ? {
+              id: d.cliente.id,
+              nombre: `${d.cliente.nombre || ''} ${d.cliente.apellido || ''}`.trim(),
+              telefono: d.cliente.telefono,
+            }
+          : null,
+        createdAt: d.createdAt.toISO(),
+        resueltaAt: d.resueltaAt?.toISO() ?? null,
+      })),
+    })
   }
 
   async tripShow({ auth, params, request, serialize, response }: HttpContext) {
@@ -967,23 +1117,31 @@ export default class ModeratorController {
         .preload('moderadorResolvio', (q) => q.select('id', 'nombre', 'apellido')),
       Ganancia.query().where('viaje_id', viaje.id).orderBy('created_at', 'desc'),
     ])
+    const caso = (await casosPorViaje([Number(viaje.id)])).get(Number(viaje.id)) ?? casoVacio
+    const contactoVisible = user.rol === 'admin' || hayCaso(caso)
 
     return serialize.withoutWrapping({
       id: Number(viaje.id),
       estado: viaje.estado,
       estadoLabel: getTripEstadoLabel(viaje.estado),
+      disputa: caso.disputa,
+      tickets: caso.tickets,
+      contactoVisible,
       cliente: viaje.cliente
-        ? {
-            id: viaje.cliente.id,
-            nombre: `${viaje.cliente.nombre || ''} ${viaje.cliente.apellido || ''}`.trim(),
-            telefono: viaje.cliente.telefono,
-            email: viaje.cliente.email,
-            avatar: viaje.cliente.avatar,
-          }
+        ? contactoVisible
+          ? {
+              id: viaje.cliente.id,
+              nombre: `${viaje.cliente.nombre || ''} ${viaje.cliente.apellido || ''}`.trim(),
+              telefono: viaje.cliente.telefono,
+              email: viaje.cliente.email,
+              avatar: viaje.cliente.avatar,
+            }
+          : { id: viaje.cliente.id, nombre: nombreCorto(viaje.cliente), telefono: null, email: null, avatar: null }
         : null,
       conductor: viaje.conductor
         ? {
             id: viaje.conductor.id,
+            usuarioId: viaje.conductor.usuarioId,
             nombre: `${viaje.conductor.usuario?.nombre || ''} ${viaje.conductor.usuario?.apellido || ''}`.trim(),
             telefono: viaje.conductor.usuario?.telefono,
             email: viaje.conductor.usuario?.email,
@@ -1796,19 +1954,50 @@ function zonaDeConsulta(user: User, ciudadQuery: unknown): string | null | false
   return clave || false
 }
 
-/**
- * Conductores cuya ciudad (texto libre: 'Popayán', 'POPAYAN ') corresponde a la
- * zona dada. Se normaliza con claveDe en memoria porque SQLite (tests) y
- * Postgres (prod) no comparten una forma portable de quitar tildes en SQL.
- * Solo trae id, usuario_id y ciudad.
- */
-async function conductoresDeZona(zona: string) {
-  const filas = await Conductor.query().select('id', 'usuario_id', 'ciudad').whereNotNull('ciudad')
-  const enZona = filas.filter((c) => claveDe(c.ciudad || '') === zona)
+/** Fila del conductor para los listados del moderador (verificación, inactivos, directorio). */
+function resumenConductor(c: Conductor) {
   return {
-    conductorIds: enZona.map((c) => c.id),
-    usuarioIds: enZona.map((c) => c.usuarioId),
+    id: c.id,
+    usuarioId: c.usuarioId,
+    cedula: c.cedula,
+    placa: c.placa,
+    tipoVehiculo: c.tipoVehiculo,
+    capacidad: c.capacidad,
+    modeloVehiculo: c.modeloVehiculo,
+    ciudad: c.ciudad,
+    fotoConductor: c.fotoConductor || c.usuario?.avatar || null,
+    fotoVehiculo: c.fotoVehiculo,
+    online: c.online,
+    calificacion: c.calificacion,
+    totalViajes: c.totalViajes,
+    horasActivo: c.horasActivo,
+    ultimaUbicacion: c.ultimaUbicacionLat ? { lat: c.ultimaUbicacionLat, lng: c.ultimaUbicacionLng } : null,
+    estadoVerificacion: c.estadoVerificacion,
+    fotoCedula: SignedUploadService.sign(c.fotoCedula),
+    fotoLicencia: SignedUploadService.sign(c.fotoLicencia),
+    notaRechazo: c.notaRechazo,
+    usuario: c.usuario
+      ? {
+          id: c.usuario.id,
+          nombre: `${c.usuario.nombre || ''} ${c.usuario.apellido || ''}`.trim(),
+          telefono: c.usuario.telefono,
+          email: c.usuario.email,
+          avatar: c.usuario.avatar,
+          estadoCuenta: c.usuario.estadoCuenta,
+        }
+      : null,
+    createdAt: c.createdAt.toISO(),
   }
+}
+
+/** Filtro de texto del directorio: nombre, apellido, cédula o placa. */
+function coincideConductor(c: Conductor, buscar: string) {
+  const q = buscar.toLowerCase()
+  return (
+    `${c.usuario?.nombre || ''} ${c.usuario?.apellido || ''}`.toLowerCase().includes(q) ||
+    (c.cedula || '').toLowerCase().includes(q) ||
+    (c.placa || '').toLowerCase().includes(q)
+  )
 }
 
 /**
@@ -1823,4 +2012,11 @@ function puedeActuarEnZona(user: User, zona: string | null): boolean {
 
 function numeroLatLng(val: unknown): number | null {
   return typeof val === 'string' && val.trim() !== '' ? Number(val) : (val as number | null)
+}
+
+/** Fecha de un agregado SQL crudo: Date en Postgres, texto en SQLite. */
+function fechaSql(val: unknown): string | null {
+  if (!val) return null
+  const dt = val instanceof Date ? DateTime.fromJSDate(val) : DateTime.fromSQL(String(val))
+  return dt.isValid ? dt.toISO() : null
 }

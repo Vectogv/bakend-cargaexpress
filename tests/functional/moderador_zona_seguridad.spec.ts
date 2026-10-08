@@ -415,11 +415,11 @@ test.group('Conversaciones del moderador', (group) => {
 
   test('store ignora ?ciudad del moderador y usa su zona', async ({ client, assert }) => {
     const mod = await crearModerador(client, 'popayan')
-    const cliente = await crearUsuario(client, { rol: 'cliente' })
+    const driver = await crearConductor(client, 'Popayán')
     const res = await client
       .post('/api/moderator/conversations')
       .bearerToken(mod.token)
-      .json({ usuarioId: cliente.user.id, ciudad: 'cali' })
+      .json({ usuarioId: driver.user.id, ciudad: 'cali' })
     res.assertStatus(200)
     assert.equal(res.body().ciudad, 'popayan')
   })
