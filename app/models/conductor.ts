@@ -19,13 +19,13 @@ export const SOAT_OBLIGATORIO = true
  * La foto de la cédula ya no se pide: en su lugar va el número de cédula (5 a 20 dígitos).
  */
 export const DOCUMENTOS_REQUERIDOS = {
-  licencia: 'licencia',
+  licencia: 'Licencia',
   soat: 'SOAT',
-  tecnomecanica: 'tecnomecánica',
-  tarjeta_propiedad: 'tarjeta de propiedad',
-  foto_vehiculo: 'foto del vehículo',
-  foto_conductor: 'foto del conductor',
-  numero_cedula: 'número de cédula',
+  tecnomecanica: 'Tecnomecánica',
+  tarjeta_propiedad: 'Tarjeta de propiedad',
+  foto_vehiculo: 'Foto del vehículo',
+  foto_conductor: 'Foto del conductor',
+  numero_cedula: 'Número de cédula',
 } as const
 export type DocumentoRequerido = keyof typeof DOCUMENTOS_REQUERIDOS
 export const CEDULA_REGEX = /^\d{5,20}$/
@@ -234,7 +234,7 @@ export default class Conductor extends BaseModel {
   declare usuario: BelongsTo<typeof User>
 }
 
-/** Cuerpo del 422 al aprobar sin todos los documentos: "Falta: licencia, SOAT". */
+/** Cuerpo del 422 al aprobar sin todos los documentos: "Falta: Licencia, SOAT". */
 export function errorFaltantes(faltantes: DocumentoRequerido[]) {
   return {
     error: `Falta: ${faltantes.map((f) => DOCUMENTOS_REQUERIDOS[f]).join(', ')}`,

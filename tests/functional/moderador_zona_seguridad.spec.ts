@@ -440,20 +440,6 @@ test.group('Conversaciones del moderador', (group) => {
   })
 })
 
-test.group('Encuestas: responder sin perfil de conductor', (group) => {
-  group.each.setup(() => testUtils.db().withGlobalTransaction())
-
-  test('un moderador sin perfil de conductor recibe 403 JSON, no un 500', async ({ client, assert }) => {
-    const mod = await crearModerador(client, 'popayan')
-    const res = await client
-      .post('/api/moderator/encuestas/999999/answer')
-      .bearerToken(mod.token)
-      .json({ opcionElegida: 'a' })
-    res.assertStatus(403)
-    assert.isString(res.body().error)
-  })
-})
-
 test.group('Tickets: tomado por otro moderador', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 

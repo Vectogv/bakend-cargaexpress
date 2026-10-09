@@ -54,6 +54,20 @@ import {
   nombreCorto,
 } from '#services/moderador_acceso_cliente'
 
+/** Estados que el panel del moderador cuenta como "viaje activo". */
+const ESTADOS_VIAJE_ACTIVO_PANEL = [
+  'sos',
+  'pendiente_confirmacion',
+  'en_curso',
+  'entregado',
+  'esperando_confirmacion',
+  'conductor_llegada',
+  'conductor_en_camino',
+  'aceptado',
+]
+
+const ESTADO_REPORTE_LABEL: Record<string, string> = { pendiente: 'Pendiente', resuelto: 'Resuelto' }
+
 export default class ModeratorController {
   async storeComunicado({ auth, request, response, serialize }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -142,7 +156,7 @@ export default class ModeratorController {
     const inicio = (page - 1) * limit
     const pagina = filtrados.slice(inicio, inicio + limit)
 
-    return serialize.withoutWrapping(pagina.map(resumenConductor))
+    return serialize.withoutWrapping({ data: pagina.map(resumenConductor), total: filtrados.length, page, limit })
   }
 
   /** Ficha completa de un conductor de la zona (perfil, vehículo, documentos, viajes, reportes). */
@@ -183,7 +197,6 @@ export default class ModeratorController {
     return serialize.withoutWrapping({
       ...resumenConductor(c),
       penalizacionCancelacion: Number(c.penalizacionCancelacion || 0),
-      ubicacionActualizadaEn: c.ubicacionActualizadaEn?.toISO() ?? null,
       usuario: u
         ? {
             id: u.id,
@@ -281,12 +294,15 @@ export default class ModeratorController {
     const inicio = (page - 1) * limit
     const pagina = filtrados.slice(inicio, inicio + limit)
 
-    return serialize.withoutWrapping(
-      pagina.map((c) => ({
+    return serialize.withoutWrapping({
+      data: pagina.map((c) => ({
         ...resumenConductor(c),
         ultimoViajeAt: fechaSql(c.$extras.ultimo_viaje_at),
-      }))
-    )
+      })),
+      total: filtrados.length,
+      page,
+      limit,
+    })
   }
 
   async notifyDriver({ auth, params, request, response, serialize }: HttpContext) {
@@ -335,19 +351,24 @@ Nota del moderador: ${mensaje}` : '')
       return serialize.withoutWrapping({ success: true, conductorId: conductor.id, documentos })
     }
 
-    if (!usuario?.fcmToken) {
-      return response
-        .status(422)
-        .send(await serialize.withoutWrapping({ error: 'El conductor no tiene token FCM' }))
+    // Sin documentos: recordatorio de inactividad. Siempre queda en la bandeja;
+    // el push es best-effort (sin token FCM igual responde 200).
+    const titulo = 'Recordatorio CargaExpress'
+    const cuerpo =
+      'Hemos notado que no has realizado viajes recientemente. ¡Los clientes te esperan!' +
+      (mensaje ? `\nNota del moderador: ${mensaje}` : '')
+    await Notificacion.create({
+      usuarioId: conductor.usuarioId,
+      tipo: 'recordatorio_actividad',
+      titulo,
+      mensaje: cuerpo,
+      leido: false,
+    })
+    if (usuario?.fcmToken) {
+      await sendToMultiple([usuario.fcmToken], titulo, cuerpo, { tipo: 'recordatorio_actividad' })
     }
 
-    await sendToMultiple(
-      [usuario.fcmToken],
-      'Recordatorio CargaExpress',
-      'Hemos notado que no has realizado viajes recientemente. ¡Los clientes te esperan!'
-    )
-
-    return serialize.withoutWrapping({ success: true, conductorId: conductor.id })
+    return serialize.withoutWrapping({ success: true, conductorId: conductor.id, push: Boolean(usuario?.fcmToken) })
   }
 
   async reportDriver({ auth, params, request, response, serialize }: HttpContext) {
@@ -593,61 +614,6 @@ Nota del moderador: ${mensaje}` : '')
     })
   }
 
-  async answerEncuesta({ auth, params, request, response, serialize }: HttpContext) {
-    const user = auth.getUserOrFail()
-    // Ruta de moderador: sin perfil de conductor no hay nada que responder
-    // (antes lanzaba E_ROW_NOT_FOUND).
-    const conductor = await Conductor.findBy('usuario_id', user.id)
-    if (!conductor) {
-      return response
-        .status(403)
-        .send(await serialize.withoutWrapping({ error: 'Solo conductores pueden responder encuestas' }))
-    }
-
-    const encuesta = await Encuesta.find(params.id)
-    if (!encuesta) {
-      return response
-        .status(404)
-        .send(await serialize.withoutWrapping({ error: 'Encuesta no encontrada' }))
-    }
-    if (encuesta.estado !== 'activa') {
-      return response
-        .status(422)
-        .send(await serialize.withoutWrapping({ error: 'La encuesta no está activa' }))
-    }
-
-    const existe = await RespuestaEncuesta.query()
-      .where('encuesta_id', encuesta.id)
-      .where('conductor_id', conductor.id)
-      .first()
-    if (existe) {
-      return response
-        .status(400)
-        .send(await serialize.withoutWrapping({ error: 'Ya respondiste esta encuesta' }))
-    }
-
-    const { opcionElegida } = request.only(['opcionElegida'])
-    const opciones = Array.isArray(encuesta.opciones)
-      ? encuesta.opciones
-      : JSON.parse(encuesta.opciones || '[]')
-    if (!opcionElegida || !opciones.includes(opcionElegida)) {
-      return response.status(422).send(await serialize.withoutWrapping({ error: 'Opción inválida' }))
-    }
-
-    const respuesta = await RespuestaEncuesta.create({
-      encuestaId: encuesta.id,
-      conductorId: conductor.id,
-      opcionElegida,
-    })
-
-    return serialize.withoutWrapping({
-      id: respuesta.id,
-      encuestaId: respuesta.encuestaId,
-      opcionElegida: respuesta.opcionElegida,
-      createdAt: respuesta.createdAt.toISO(),
-    })
-  }
-
   /**
    * Zonas de avisos visibles para el usuario: la suya (normalizada) más las
    * generales. Admin: todas, o ?ciudad + generales. Moderador: su zona.
@@ -719,7 +685,7 @@ Nota del moderador: ${mensaje}` : '')
     if (user.rol !== 'conductor' && !user.esModerador && user.rol !== 'admin') {
       return response
         .status(403)
-        .send(await serialize.withoutWrapping({ error: 'Solo conductores pueden publicar avisos' }))
+        .send(await serialize.withoutWrapping({ error: 'No tienes permiso para publicar avisos' }))
     }
 
     const { contenido } = request.only(['contenido'])
@@ -868,6 +834,9 @@ Nota del moderador: ${mensaje}` : '')
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const reportes = await ReporteModerador.query()
       .where('moderador_id', user.id)
+      .preload('conductor', (q) =>
+        q.select('id', 'usuario_id', 'placa').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido'))
+      )
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
 
@@ -875,8 +844,11 @@ Nota del moderador: ${mensaje}` : '')
       reportes.all().map((r) => ({
         id: r.id,
         conductorId: r.conductorId,
+        conductorNombre: `${r.conductor?.usuario?.nombre || ''} ${r.conductor?.usuario?.apellido || ''}`.trim() || null,
+        placa: r.conductor?.placa ?? null,
         descripcion: r.descripcion,
         estado: r.estado,
+        estadoLabel: ESTADO_REPORTE_LABEL[r.estado] ?? r.estado,
         createdAt: r.createdAt.toISO(),
       }))
     )
@@ -892,10 +864,23 @@ Nota del moderador: ${mensaje}` : '')
     const fechaLimite = DateTime.now().minus({ days: 7 }).toSQL()
     // `conductores.ciudad` es texto libre: se compara normalizado (claveDe).
     const clave = ciudad ? claveDe(ciudad) : null
-    const conductorIds = clave ? (await conductoresDeZona(clave)).conductorIds : null
+    const deZona = clave ? await conductoresDeZona(clave) : null
+    const conductorIds = deZona ? deZona.conductorIds : null
 
-    const [totalDrivers, inactiveDrivers, onlineDrivers, totalComunicados, totalAvisos, totalReports] =
-      await Promise.all([
+    const [
+      totalDrivers,
+      inactiveDrivers,
+      onlineDrivers,
+      totalComunicados,
+      totalAvisos,
+      totalReports,
+      pendientesVerificacion,
+      viajesActivos,
+      enCurso,
+      emergenciasActivas,
+      emergenciasPendientes,
+      comunicadosPendientes,
+    ] = await Promise.all([
         Conductor.query().if(conductorIds, (q) => q.whereIn('id', conductorIds!)).count('* as total').first(),
         Conductor.query()
           .if(conductorIds, (q) => q.whereIn('id', conductorIds!))
@@ -915,16 +900,52 @@ Nota del moderador: ${mensaje}` : '')
         Comunicado.query().where('moderador_id', user.id).count('* as total').first(),
         Aviso.query().where('zona', clave || 'general').count('* as total').first(),
         ReporteModerador.query().where('moderador_id', user.id).count('* as total').first(),
+        Conductor.query()
+          .if(conductorIds, (q) => q.whereIn('id', conductorIds!))
+          .where('estado_verificacion', 'pendiente')
+          .count('* as total')
+          .first(),
+        Viaje.query()
+          .whereNotNull('conductor_id')
+          .if(conductorIds, (q) => q.whereIn('conductor_id', conductorIds!))
+          .whereIn('estado', ESTADOS_VIAJE_ACTIVO_PANEL)
+          .count('* as total')
+          .first(),
+        Viaje.query()
+          .whereNotNull('conductor_id')
+          .if(conductorIds, (q) => q.whereIn('conductor_id', conductorIds!))
+          .where('estado', 'en_curso')
+          .count('* as total')
+          .first(),
+        AlertaEmergencia.query()
+          .if(deZona, (q) => q.where(this.ciudadDeEmergencia(deZona!)))
+          .whereIn('estado', ['pendiente', 'atendida'])
+          .count('* as total')
+          .first(),
+        AlertaEmergencia.query()
+          .if(deZona, (q) => q.where(this.ciudadDeEmergencia(deZona!)))
+          .where('estado', 'pendiente')
+          .count('* as total')
+          .first(),
+        Comunicado.query().where('moderador_id', user.id).where('estado', 'pendiente').count('* as total').first(),
       ])
 
+    const n = (fila: { $extras?: { total?: unknown } } | null) => Number(fila?.$extras?.total || 0)
     return serialize.withoutWrapping({
       ciudad: ciudad || null,
-      totalDrivers: Number(totalDrivers?.$extras?.total || 0),
-      inactiveDrivers: Number(inactiveDrivers?.$extras?.total || 0),
-      onlineDrivers: Number(onlineDrivers?.$extras?.total || 0),
-      totalComunicados: Number(totalComunicados?.$extras?.total || 0),
-      totalAvisos: Number(totalAvisos?.$extras?.total || 0),
-      totalReports: Number(totalReports?.$extras?.total || 0),
+      totalDrivers: n(totalDrivers),
+      inactiveDrivers: n(inactiveDrivers),
+      onlineDrivers: n(onlineDrivers),
+      totalComunicados: n(totalComunicados),
+      totalAvisos: n(totalAvisos),
+      totalReports: n(totalReports),
+      // Conteos que antes la web calculaba pidiendo 6 listas.
+      pendientesVerificacion: n(pendientesVerificacion),
+      viajesActivos: n(viajesActivos),
+      enCurso: n(enCurso),
+      emergenciasActivas: n(emergenciasActivas),
+      emergenciasPendientes: n(emergenciasPendientes),
+      comunicadosPendientes: n(comunicadosPendientes),
     })
   }
 
@@ -1570,13 +1591,21 @@ Nota del moderador: ${mensaje}` : '')
     const inicio = (page - 1) * limit
     const pagina = enCiudad.slice(inicio, inicio + limit)
 
+    // Mismo criterio que en `trips`: el contacto del cliente solo con caso abierto (o admin).
+    const esAdmin = user.rol === 'admin'
+    const casos = await casosPorViaje(pagina.map((t) => Number(t.id)))
+
     return serialize.withoutWrapping({
-      data: pagina.map((t) => ({
+      data: pagina.map((t) => {
+        const caso = casos.get(Number(t.id)) ?? casoVacio
+        const contactoVisible = esAdmin || hayCaso(caso)
+        return {
         id: t.id,
         clienteId: t.clienteId,
         conductorId: t.conductorId,
         estado: t.estado,
         estadoLabel: getTripEstadoLabel(t.estado),
+        contactoVisible,
         tipoProgramacion: t.tipoProgramacion ?? 'programada',
         fechaProgramada: t.fechaProgramada,
         horaProgramada: t.horaProgramada,
@@ -1594,12 +1623,14 @@ Nota del moderador: ${mensaje}` : '')
         precioFinal: t.precioFinal,
         motivoCancelacion: t.motivoCancelacion,
         cliente: t.cliente
-          ? {
-              id: t.cliente.id,
-              nombre: `${t.cliente.nombre || ''} ${t.cliente.apellido || ''}`.trim(),
-              telefono: t.cliente.telefono,
-              email: t.cliente.email,
-            }
+          ? contactoVisible
+            ? {
+                id: t.cliente.id,
+                nombre: `${t.cliente.nombre || ''} ${t.cliente.apellido || ''}`.trim(),
+                telefono: t.cliente.telefono,
+                email: t.cliente.email,
+              }
+            : { id: t.cliente.id, nombre: nombreCorto(t.cliente), telefono: null, email: null }
           : null,
         conductor: t.conductor
           ? {
@@ -1615,7 +1646,8 @@ Nota del moderador: ${mensaje}` : '')
         aceptadoAt: t.aceptadoAt?.toISO() ?? null,
         finalizadoAt: t.finalizadoAt?.toISO() ?? null,
         canceladoAt: t.canceladoAt?.toISO() ?? null,
-      })),
+        }
+      }),
       total,
       page,
       limit,
@@ -1713,8 +1745,10 @@ Nota del moderador: ${mensaje}` : '')
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
 
-    return serialize.withoutWrapping(
-      alertas.all().map((a) => {
+    // La ubicación del conductor solo la ve gerencia (admin); el moderador no.
+    const esAdmin = user.rol === 'admin'
+    return serialize.withoutWrapping({
+      data: alertas.all().map((a) => {
         const mapa = datosMapaSos(a)
         return {
           id: a.id,
@@ -1749,7 +1783,7 @@ Nota del moderador: ${mensaje}` : '')
                   : null,
               }
             : null,
-          conductorUbicacion: mapa.conductorUbicacion,
+          conductorUbicacion: esAdmin ? mapa.conductorUbicacion : null,
           sos: mapa.sos,
           observacion: a.observacion,
           administrador: a.moderadorAtendio
@@ -1766,8 +1800,11 @@ Nota del moderador: ${mensaje}` : '')
             : null,
           createdAt: a.createdAt.toISO(),
         }
-      })
-    )
+      }),
+      total: alertas.total,
+      page,
+      limit,
+    })
   }
 
   async emergencyAcknowledge({ auth, params, response, serialize }: HttpContext) {
@@ -1993,7 +2030,8 @@ function resumenConductor(c: Conductor) {
     calificacion: c.calificacion,
     totalViajes: c.totalViajes,
     horasActivo: c.horasActivo,
-    ultimaUbicacion: c.ultimaUbicacionLat ? { lat: c.ultimaUbicacionLat, lng: c.ultimaUbicacionLng } : null,
+    // Solo la fecha: el moderador no ve dónde está el conductor.
+    ultimaActividadAt: c.ubicacionActualizadaEn?.toISO() ?? null,
     estadoVerificacion: c.estadoVerificacion,
     fotoCedula: SignedUploadService.sign(c.fotoCedula),
     fotoLicencia: SignedUploadService.sign(c.fotoLicencia),

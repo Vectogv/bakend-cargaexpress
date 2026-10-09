@@ -295,11 +295,134 @@ test.group('Moderador: disputas de su zona', (group) => {
     assert.equal(aviso.titulo, 'Faltan documentos')
     assert.equal(
       aviso.mensaje,
-      'Te falta subir: licencia, SOAT. Los demás documentos están en revisión. Súbelos desde Perfil → Documentos.\nNota del moderador: La licencia salió borrosa'
+      'Te falta subir: Licencia, SOAT. Los demás documentos están en revisión. Súbelos desde Perfil → Documentos.\nNota del moderador: La licencia salió borrosa'
     )
 
     ;(await client.post(`/api/moderator/drivers/${driver.conductor.id}/notify`).bearerToken(mod.token).json({ documentos: ['pasaporte'] })).assertStatus(422)
-    // Sin cuerpo sigue siendo el recordatorio de inactividad: sin token FCM da 422.
-    ;(await client.post(`/api/moderator/drivers/${driver.conductor.id}/notify`).bearerToken(mod.token)).assertStatus(422)
+    // Sin cuerpo es el recordatorio de inactividad: queda en la bandeja y responde 200 aunque no haya token FCM.
+    const rec = await client.post(`/api/moderator/drivers/${driver.conductor.id}/notify`).bearerToken(mod.token)
+    rec.assertStatus(200)
+    assert.isFalse(rec.body().push)
+    const recordatorio = await Notificacion.query().where('usuario_id', driver.user.id).where('tipo', 'recordatorio_actividad').firstOrFail()
+    assert.equal(recordatorio.titulo, 'Recordatorio CargaExpress')
+  })
+})
+
+test.group('Moderador: privacidad, paginación y dashboard', (group) => {
+  group.each.setup(() => testUtils.db().withGlobalTransaction())
+
+  const ubicado = { ultimaUbicacionLat: 2.44, ultimaUbicacionLng: -76.6, ubicacionActualizadaEn: DateTime.now() }
+
+  test('el directorio y los inactivos devuelven {data,total,page,limit} y solo la fecha de la última actividad', async ({ client, assert }) => {
+    const mod = await crearModerador(client, 'zona_pag')
+    const creados = []
+    for (let i = 0; i < 3; i++) creados.push(await crearConductor(client, 'Zona Pag', { online: false, ...ubicado }))
+    await Conductor.query()
+      .whereIn('id', creados.map((c) => c.conductor.id))
+      .update({ created_at: DateTime.now().minus({ days: 30 }).toSQL() })
+
+    const res = await client.get('/api/moderator/drivers?limit=2&page=2').bearerToken(mod.token)
+    res.assertStatus(200)
+    assert.equal(res.body().total, 3)
+    assert.equal(res.body().page, 2)
+    assert.lengthOf(res.body().data, 1)
+    assert.isString(res.body().data[0].ultimaActividadAt)
+    assert.notProperty(res.body().data[0], 'ultimaUbicacion')
+
+    const inactivos = await client.get('/api/moderator/drivers/inactive?limit=2').bearerToken(mod.token)
+    inactivos.assertStatus(200)
+    assert.equal(inactivos.body().total, 3)
+    assert.lengthOf(inactivos.body().data, 2)
+    assert.notProperty(inactivos.body().data[0], 'ultimaUbicacion')
+
+    const ficha = await client.get(`/api/moderator/drivers/${creados[0].conductor.id}`).bearerToken(mod.token)
+    ficha.assertStatus(200)
+    assert.isString(ficha.body().ultimaActividadAt)
+    assert.notProperty(ficha.body(), 'ultimaUbicacion')
+    assert.notProperty(ficha.body(), 'ubicacionActualizadaEn')
+  })
+
+  test('en reservas el cliente sale con nombre corto y sin contacto, salvo que haya un caso', async ({ client, assert }) => {
+    const mod = await crearModerador(client, 'popayan')
+    const driver = await crearConductor(client, 'Popayán')
+    const cliente = await crearUsuario(client, { rol: 'cliente', nombre: 'Laura', apellido: 'Gómez', telefono: '3001234567' })
+    const base = { tipoProgramacion: 'programada', estado: 'reservado', horaProgramada: '08:00', fechaProgramada: '2030-02-01' }
+    const normal = await crearViaje(cliente.user.id, driver.conductor.id, base)
+    const conCaso = await crearViaje(cliente.user.id, driver.conductor.id, base)
+    await crearDisputa(conCaso, driver.conductor.id, cliente.user.id)
+
+    const res = await client.get('/api/moderator/reservations?limit=100').bearerToken(mod.token)
+    res.assertStatus(200)
+    const filaNormal = items(res.body()).find((t: any) => Number(t.id) === Number(normal.id))
+    const filaCaso = items(res.body()).find((t: any) => Number(t.id) === Number(conCaso.id))
+    assert.isFalse(filaNormal.contactoVisible)
+    assert.equal(filaNormal.cliente.nombre, 'Laura G.')
+    assert.isNull(filaNormal.cliente.telefono)
+    assert.isNull(filaNormal.cliente.email)
+    assert.isTrue(filaCaso.contactoVisible)
+    assert.equal(filaCaso.cliente.telefono, '3001234567')
+  })
+
+  test('el SOS del moderador sale paginado y sin la ubicación del conductor; el admin sí la recibe', async ({ client, assert }) => {
+    const mod = await crearModerador(client, 'popayan')
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const driver = await crearConductor(client, 'Popayán', ubicado)
+    const cliente = await crearUsuario(client, { rol: 'cliente' })
+    const viaje = await crearViaje(cliente.user.id, driver.conductor.id)
+    const alerta = await AlertaEmergencia.create({ userId: driver.user.id, viajeId: viaje.id, lat: 2.44, lng: -76.6, motivo: 'Prueba', estado: 'pendiente', atendida: false } as any)
+
+    const res = await client.get('/api/moderator/emergency?limit=100').bearerToken(mod.token)
+    res.assertStatus(200)
+    assert.isNumber(res.body().total)
+    const fila = res.body().data.find((a: any) => Number(a.id) === Number(alerta.id))
+    assert.exists(fila)
+    assert.isNull(fila.conductorUbicacion)
+
+    const deAdmin = await client.get('/api/moderator/emergency?limit=100&ciudad=popayan').bearerToken(admin.token)
+    deAdmin.assertStatus(200)
+    const filaAdmin = deAdmin.body().data.find((a: any) => Number(a.id) === Number(alerta.id))
+    assert.closeTo(filaAdmin.conductorUbicacion.lat, 2.44, 0.0001)
+  })
+
+  test('mis reportes traen el nombre del conductor y la etiqueta del estado', async ({ client, assert }) => {
+    const mod = await crearModerador(client, 'popayan')
+    const driver = await crearConductor(client, 'Popayán')
+    const creado = await client
+      .post(`/api/moderator/drivers/${driver.conductor.id}/report`)
+      .bearerToken(mod.token)
+      .json({ descripcion: 'Conduce sin documentos al día' })
+    creado.assertStatus(200)
+
+    const res = await client.get('/api/moderator/reports?limit=100').bearerToken(mod.token)
+    res.assertStatus(200)
+    const fila = items(res.body()).find((r: any) => Number(r.conductorId) === Number(driver.conductor.id))
+    assert.exists(fila)
+    assert.equal(fila.conductorNombre, 'Pedro Pérez')
+    assert.equal(fila.placa, driver.conductor.placa)
+    assert.equal(fila.estadoLabel, 'Pendiente')
+  })
+
+  test('el dashboard trae los conteos del panel en una sola llamada', async ({ client, assert }) => {
+    const mod = await crearModerador(client, 'zona_dash')
+    const aprobado = await crearConductor(client, 'Zona Dash')
+    await crearConductor(client, 'Zona Dash', { estadoVerificacion: 'pendiente' })
+    await crearConductor(client, 'Cali', { estadoVerificacion: 'pendiente' })
+    const cliente = await crearUsuario(client, { rol: 'cliente' })
+    const enCurso = await crearViaje(cliente.user.id, aprobado.conductor.id)
+    await crearViaje(cliente.user.id, aprobado.conductor.id, { estado: 'aceptado' })
+    await crearViaje(cliente.user.id, aprobado.conductor.id, { estado: 'finalizado' })
+    await AlertaEmergencia.create({ userId: aprobado.user.id, viajeId: enCurso.id, lat: 2.44, lng: -76.6, motivo: 'Prueba', estado: 'pendiente', atendida: false } as any)
+    ;(await client.post('/api/moderator/comunicados').bearerToken(mod.token).json({ titulo: 'Hola', contenido: 'Contenido de prueba' })).assertStatus(200)
+
+    const res = await client.get('/api/moderator/dashboard').bearerToken(mod.token)
+    res.assertStatus(200)
+    const b = res.body()
+    assert.equal(b.totalDrivers, 2)
+    assert.equal(b.pendientesVerificacion, 1)
+    assert.equal(b.viajesActivos, 2)
+    assert.equal(b.enCurso, 1)
+    assert.equal(b.emergenciasActivas, 1)
+    assert.equal(b.emergenciasPendientes, 1)
+    assert.equal(b.comunicadosPendientes, 1)
   })
 })

@@ -129,7 +129,7 @@ async function viajeConSos(client: any, tokenCliente: string, driver: { token: s
 }
 
 function alertaDe(body: any, alertaId: number) {
-  const lista = Array.isArray(body) ? body : []
+  const lista = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : []
   return lista.find((a: any) => Number(a.id) === Number(alertaId))
 }
 
@@ -184,7 +184,7 @@ test.group('Emergencias con mapa del SOS', (group) => {
     assert.isAtMost(alerta.sos.avanceRuta, 1)
   })
 
-  test('el moderador de la zona recibe los mismos datos del mapa', async ({ client, assert }) => {
+  test('el moderador de la zona recibe el mapa del SOS sin la ubicación del conductor', async ({ client, assert }) => {
     const tokenCliente = await registrarCliente(client)
     const driver = await registrarConductor(client)
     const moderador = await registrarModerador(client)
@@ -209,9 +209,8 @@ test.group('Emergencias con mapa del SOS', (group) => {
     assert.closeTo(alerta.viaje.destinoCoords.lat, DESTINO.lat, 0.0001)
     assert.closeTo(alerta.viaje.destinoCoords.lng, DESTINO.lng, 0.0001)
 
-    assert.closeTo(alerta.conductorUbicacion.lat, SOS.lat, 0.0001)
-    assert.closeTo(alerta.conductorUbicacion.lng, SOS.lng, 0.0001)
-    assert.isString(alerta.conductorUbicacion.actualizadaEn)
+    // El moderador NO ve dónde está el conductor; las distancias del SOS sí.
+    assert.isNull(alerta.conductorUbicacion)
 
     const esperadoOrigen = Math.round(distanciaKm(ORIGEN.lat, ORIGEN.lng, SOS.lat, SOS.lng) * 10) / 10
     const esperadoDestino = Math.round(distanciaKm(SOS.lat, SOS.lng, DESTINO.lat, DESTINO.lng) * 10) / 10

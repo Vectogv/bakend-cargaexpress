@@ -104,7 +104,7 @@ test.group('Documentos del conductor y excepción del SOAT', (group) => {
     const res = await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)
     res.assertStatus(422)
     assert.deepEqual(res.body().faltantes, ['licencia', 'soat', 'tecnomecanica', 'tarjeta_propiedad', 'foto_vehiculo', 'foto_conductor'])
-    assert.equal(res.body().error, 'Falta: licencia, SOAT, tecnomecánica, tarjeta de propiedad, foto del vehículo, foto del conductor')
+    assert.equal(res.body().error, 'Falta: Licencia, SOAT, Tecnomecánica, Tarjeta de propiedad, Foto del vehículo, Foto del conductor')
   })
 
   test('el admin no aprueba sin SOAT vigente, y sí con SOAT', async ({ client, assert }) => {
@@ -131,7 +131,7 @@ test.group('Documentos del conductor y excepción del SOAT', (group) => {
 
     const res = await client.put(`/api/admin/verifications/${conductor.id}/approve`).bearerToken(admin.token)
     res.assertStatus(422)
-    assert.equal(res.body().error, 'Falta: tarjeta de propiedad')
+    assert.equal(res.body().error, 'Falta: Tarjeta de propiedad')
     const resMod = await client.post(`/api/moderator/drivers/${conductor.id}/approve`).bearerToken(mod.token)
     resMod.assertStatus(422)
     assert.deepEqual(resMod.body().faltantes, ['tarjeta_propiedad'])

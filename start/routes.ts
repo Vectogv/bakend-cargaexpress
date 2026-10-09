@@ -422,7 +422,6 @@ router
     router.post('drivers/:id/reject', [controllers.Moderator, 'rejectDriver'])
     router.post('encuestas', [controllers.Moderator, 'storeEncuesta'])
     router.get('encuestas/:id/results', [controllers.Moderator, 'encuestaResults'])
-    router.post('encuestas/:id/answer', [controllers.Moderator, 'answerEncuesta'])
     router.get('encuestas', [controllers.Moderator, 'myEncuestas'])
     router.get('reports', [controllers.Moderator, 'myReports'])
     router.get('dashboard', [controllers.Moderator, 'dashboard'])
