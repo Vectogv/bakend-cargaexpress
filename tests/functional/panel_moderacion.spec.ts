@@ -307,3 +307,38 @@ test.group('Panel: configuración y documentos requeridos', (group) => {
     assert.equal(res.body().find((d: any) => d.clave === 'soat').etiqueta, 'SOAT')
   })
 })
+
+test.group('Panel: perfil del cliente', (group) => {
+  group.each.setup(() => testUtils.db().withGlobalTransaction())
+
+  test('admin completo; moderador reducido sin caso y completo con disputa en su zona', async ({ client, assert }) => {
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const mod = await crearUsuario(client, { rol: 'moderador', esModerador: true, zonaModerador: 'popayan' })
+    const cliente = await crearUsuario(client, { rol: 'cliente', nombre: 'Laura', apellido: 'Gómez', avatar: '/storage/uploads/laura.png' })
+    const pop = await crearConductor(client, 'Popayán')
+    const viaje = await crearViaje(cliente.user.id, pop.conductor.id, { estado: 'finalizado', precioFinal: 50000 })
+
+    const full = await client.get(`/api/moderator/clients/${cliente.user.id}`).bearerToken(admin.token)
+    full.assertStatus(200)
+    assert.isTrue(full.body().completo)
+    assert.equal(full.body().email, cliente.user.email)
+    assert.equal(full.body().totalViajes, 1)
+    assert.equal(full.body().viajes[0].id, viaje.id)
+
+    const reducido = await client.get(`/api/moderator/clients/${cliente.user.id}`).bearerToken(mod.token)
+    reducido.assertStatus(200)
+    assert.isFalse(reducido.body().completo)
+    assert.equal(reducido.body().nombre, 'Laura G.')
+    assert.equal(reducido.body().avatar, '/storage/uploads/laura.png')
+    assert.isUndefined(reducido.body().email)
+
+    await Disputa.create({ viajeId: viaje.id, conductorId: pop.conductor.id, clienteId: cliente.user.id, estado: 'abierta', versionConductor: 'a' } as any)
+    const conCaso = await client.get(`/api/moderator/clients/${cliente.user.id}`).bearerToken(mod.token)
+    conCaso.assertStatus(200)
+    assert.isTrue(conCaso.body().completo)
+    assert.equal(conCaso.body().disputas.length, 1)
+
+    const noExiste = await client.get('/api/moderator/clients/999999999').bearerToken(admin.token)
+    noExiste.assertStatus(404)
+  })
+})

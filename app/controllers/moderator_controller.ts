@@ -4,6 +4,7 @@ import Comunicado from '#models/comunicado'
 import Encuesta from '#models/encuesta'
 import RespuestaEncuesta from '#models/respuesta_encuesta'
 import ReporteModerador from '#models/reporte_moderador'
+import TicketSoporte from '#models/ticket_soporte'
 import Aviso from '#models/aviso'
 import Viaje from '#models/viaje'
 import AlertaEmergencia from '#models/alerta_emergencia'
@@ -54,6 +55,7 @@ import {
   hayCaso,
   nombreCorto,
   filtroAlertasDeZona,
+  clienteContactablePorModerador,
 } from '#services/moderador_acceso_cliente'
 
 /** Estados que el panel del moderador cuenta como "viaje activo". */
@@ -162,6 +164,98 @@ export default class ModeratorController {
     const pagina = filtrados.slice(inicio, inicio + limit)
 
     return serialize.withoutWrapping({ data: pagina.map(resumenConductor), total: filtrados.length, page, limit })
+  }
+
+  /**
+   * Perfil de un cliente para el panel. Admin: completo. Moderador: completo
+   * solo con un caso abierto en su zona (ticket, SOS o disputa); si no,
+   * reducido (foto + nombre corto), igual que en viajes.
+   */
+  async clientShow({ auth, params, response, serialize }: HttpContext) {
+    const user = auth.user!
+    const esAdmin = user.rol === 'admin'
+    if (!esAdmin && !user.zonaModerador) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ message: 'No tienes una zona asignada' }))
+    }
+    const cliente = await User.query().where('id', params.id).where('rol', 'cliente').first()
+    if (!cliente) {
+      return response.status(404).send(await serialize.withoutWrapping({ message: 'Cliente no encontrado' }))
+    }
+    const completo = esAdmin || (await clienteContactablePorModerador(cliente.id, claveDe(user.zonaModerador!)))
+    if (!completo) {
+      return serialize.withoutWrapping({ id: cliente.id, nombre: nombreCorto(cliente), avatar: cliente.avatar, completo: false })
+    }
+    const [viajes, disputas, tickets, totales] = await Promise.all([
+      Viaje.query()
+        .where('cliente_id', cliente.id)
+        .orderBy('created_at', 'desc')
+        .limit(20)
+        .preload('conductor', (q) =>
+          q.select('id', 'usuario_id', 'placa').preload('usuario', (u) => u.select('id', 'nombre', 'apellido'))
+        ),
+      Disputa.query().where('cliente_id', cliente.id).orderBy('created_at', 'desc').limit(10),
+      TicketSoporte.query().where('usuario_id', cliente.id).orderBy('created_at', 'desc').limit(10),
+      Viaje.query().where('cliente_id', cliente.id).select('estado').count('* as total').groupBy('estado'),
+    ])
+    const viajesPorEstado: Record<string, number> = Object.fromEntries(
+      totales.map((r: any) => [r.estado, Number(r.$extras.total)])
+    )
+    return serialize.withoutWrapping({
+      id: cliente.id,
+      completo: true,
+      nombre: `${cliente.nombre || ''} ${cliente.apellido || ''}`.trim(),
+      email: cliente.email,
+      telefono: cliente.telefono,
+      avatar: cliente.avatar,
+      edad: cliente.edad,
+      cedula: cliente.cedula,
+      calificacion: cliente.calificacion,
+      estadoCuenta: cliente.estadoCuenta,
+      suspendido: cliente.suspendido,
+      tieneDeudaActiva: cliente.tieneDeudaActiva,
+      montoDeuda: cliente.montoDeuda,
+      deudaFechaLimite: cliente.deudaFechaLimite?.toISO() ?? null,
+      contactoEmergencia: cliente.contactoEmergenciaNombre
+        ? { nombre: cliente.contactoEmergenciaNombre, telefono: cliente.contactoEmergenciaTelefono }
+        : null,
+      empresaId: cliente.empresaId,
+      createdAt: cliente.createdAt?.toISO() ?? null,
+      viajesPorEstado,
+      totalViajes: Object.values(viajesPorEstado).reduce((a, b) => a + b, 0),
+      viajes: viajes.map((v) => ({
+        id: v.id,
+        estado: v.estado,
+        estadoLabel: getTripEstadoLabel(v.estado),
+        origen: v.origenDireccion,
+        destino: v.destinoDireccion,
+        precioFinal: v.precioFinal,
+        precioEstimado: v.precioEstimado,
+        createdAt: v.createdAt?.toISO() ?? null,
+        conductor: v.conductor
+          ? {
+              id: v.conductor.id,
+              nombre: `${v.conductor.usuario?.nombre || ''} ${v.conductor.usuario?.apellido || ''}`.trim(),
+              placa: v.conductor.placa,
+            }
+          : null,
+      })),
+      disputas: disputas.map((d) => ({
+        id: d.id,
+        viajeId: d.viajeId,
+        estado: d.estado,
+        resultado: d.resultado,
+        createdAt: d.createdAt?.toISO() ?? null,
+      })),
+      tickets: tickets.map((t) => ({
+        id: t.id,
+        asunto: t.asunto,
+        estado: t.estado,
+        zona: t.zona,
+        createdAt: t.createdAt?.toISO() ?? null,
+      })),
+    })
   }
 
   /** Ficha completa de un conductor de la zona (perfil, vehículo, documentos, viajes, reportes). */
@@ -1011,7 +1105,7 @@ export default class ModeratorController {
                 telefono: t.cliente.telefono,
                 email: t.cliente.email,
               }
-            : { id: t.cliente.id, nombre: nombreCorto(t.cliente), telefono: null, email: null }
+            : { id: t.cliente.id, nombre: nombreCorto(t.cliente), telefono: null, email: null, avatar: t.cliente.avatar }
           : null,
         conductor: t.conductor
           ? {
@@ -1185,7 +1279,7 @@ export default class ModeratorController {
               email: viaje.cliente.email,
               avatar: viaje.cliente.avatar,
             }
-          : { id: viaje.cliente.id, nombre: nombreCorto(viaje.cliente), telefono: null, email: null, avatar: null }
+          : { id: viaje.cliente.id, nombre: nombreCorto(viaje.cliente), telefono: null, email: null, avatar: viaje.cliente.avatar }
         : null,
       conductor: viaje.conductor
         ? {

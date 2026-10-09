@@ -427,6 +427,7 @@ router
     router.get('drivers', [controllers.Moderator, 'driversList'])
     router.get('drivers/inactive', [controllers.Moderator, 'inactiveDrivers'])
     router.get('drivers/:id', [controllers.Moderator, 'driverShow'])
+    router.get('clients/:id', [controllers.Moderator, 'clientShow'])
     router.post('drivers/:id/notify', [controllers.Moderator, 'notifyDriver'])
     router.post('drivers/:id/report', [controllers.Moderator, 'reportDriver'])
     router.post('drivers/:id/approve', [controllers.Moderator, 'approveDriver'])
