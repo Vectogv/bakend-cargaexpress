@@ -94,6 +94,7 @@ async function ubicar(conductorId: number, lat: number, lng: number) {
   conductor.ultimaUbicacionLat = lat
   conductor.ultimaUbicacionLng = lng
   conductor.ubicacionActualizadaEn = DateTime.now()
+  conductor.online = true // solo un conductor conectado entrega coordenadas
   await conductor.save()
 }
 
@@ -184,7 +185,7 @@ test.group('Emergencias con mapa del SOS', (group) => {
     assert.isAtMost(alerta.sos.avanceRuta, 1)
   })
 
-  test('el moderador de la zona recibe el mapa del SOS sin la ubicación del conductor', async ({ client, assert }) => {
+  test('el moderador de la zona recibe el mapa del SOS con la ubicación del conductor conectado', async ({ client, assert }) => {
     const tokenCliente = await registrarCliente(client)
     const driver = await registrarConductor(client)
     const moderador = await registrarModerador(client)
@@ -209,8 +210,9 @@ test.group('Emergencias con mapa del SOS', (group) => {
     assert.closeTo(alerta.viaje.destinoCoords.lat, DESTINO.lat, 0.0001)
     assert.closeTo(alerta.viaje.destinoCoords.lng, DESTINO.lng, 0.0001)
 
-    // El moderador NO ve dónde está el conductor; las distancias del SOS sí.
-    assert.isNull(alerta.conductorUbicacion)
+    // El moderador ve dónde está el conductor de su zona mientras esté conectado.
+    assert.closeTo(alerta.conductorUbicacion.lat, SOS.lat, 0.0001)
+    assert.closeTo(alerta.conductorUbicacion.lng, SOS.lng, 0.0001)
 
     const esperadoOrigen = Math.round(distanciaKm(ORIGEN.lat, ORIGEN.lng, SOS.lat, SOS.lng) * 10) / 10
     const esperadoDestino = Math.round(distanciaKm(SOS.lat, SOS.lng, DESTINO.lat, DESTINO.lng) * 10) / 10

@@ -46,6 +46,8 @@ import { restaurarViajeTrasSos } from '#services/sos_trip_service'
 import { mezclarEscalera, validarEscalera } from '#services/busqueda_escalera_service'
 import ReferidosService, { mezclarReferidos, validarReferidos } from '#services/referidos_service'
 import EmpresaService from '#services/empresa_service'
+import { filtroAlertasDeZona, zonaDelAdmin } from '#services/moderador_acceso_cliente'
+import { payloadRecorrido, ubicacionSiConectado } from '#services/viaje_recorrido_service'
 
 /** Tokens push de los conductores cuya ciudad cae en la zona (ya normalizada con claveDe). */
 export async function tokensConductoresDeZona(zona: string): Promise<string[]> {
@@ -184,15 +186,21 @@ export default class AdminController {
     )
   }
 
-  async drivers({ request, serialize }: HttpContext) {
+  /** `?zona=` y `?online=1` (mapa en vivo: solo conectados). Respuesta: array; total en X-Total-Count. */
+  async drivers({ request, response, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    const deZona = await zonaDelAdmin(request.input('zona'))
+    const soloOnline = ['1', 'true'].includes(String(request.input('online') || ''))
     const result = await Conductor.query()
+      .if(deZona, (q) => q.whereIn('id', deZona!.conductorIds))
+      .if(soloOnline, (q) => q.where('online', true))
       .preload('usuario', (q) =>
-        q.select('id', 'nombre', 'apellido', 'email', 'telefono', 'suspendido', 'es_lider')
+        q.select('id', 'nombre', 'apellido', 'email', 'telefono', 'suspendido', 'es_lider', 'avatar')
       )
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
+    response.header('X-Total-Count', String(result.total))
 
     return serialize.withoutWrapping(
       result.all().map((d) => ({
@@ -207,15 +215,15 @@ export default class AdminController {
         calificacion: d.calificacion,
         totalViajes: d.totalViajes,
         horasActivo: d.horasActivo,
-        ultimaUbicacion: d.ultimaUbicacionLat
-          ? { lat: d.ultimaUbicacionLat, lng: d.ultimaUbicacionLng }
-          : null,
+        // Solo un conductor conectado entrega coordenadas (regla del panel).
+        ultimaUbicacion: ubicacionSiConectado(d),
         estadoVerificacion: d.estadoVerificacion,
         fotoCedula: SignedUploadService.sign(d.fotoCedula),
         fotoLicencia: SignedUploadService.sign(d.fotoLicencia),
         notaRechazo: d.notaRechazo,
         fotoConductor: d.fotoConductor,
         fotoVehiculo: d.fotoVehiculo,
+        avatar: d.fotoConductor || d.usuario?.avatar || null,
         usuario: d.usuario
           ? {
               nombre: d.usuario.nombre,
@@ -224,6 +232,7 @@ export default class AdminController {
               telefono: d.usuario.telefono,
               suspendido: d.usuario.suspendido,
               esLider: d.usuario.esLider,
+              avatar: d.usuario.avatar,
             }
           : null,
         createdAt: d.createdAt.toISO(),
@@ -231,10 +240,18 @@ export default class AdminController {
     )
   }
 
-  async trips({ request, serialize }: HttpContext) {
+  /** `?zona=` (conductores de la zona) y `?estado=a,b` (CSV). Array; total en X-Total-Count. */
+  async trips({ request, response, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    const deZona = await zonaDelAdmin(request.input('zona'))
+    const estados = String(request.input('estado', '') || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
     const result = await Viaje.query()
+      .if(deZona, (q) => q.whereIn('conductor_id', deZona!.conductorIds))
+      .if(estados.length > 0, (q) => q.whereIn('estado', estados))
       .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'email'))
       .preload('conductor', (q) =>
         q
@@ -243,6 +260,7 @@ export default class AdminController {
       )
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
+    response.header('X-Total-Count', String(result.total))
 
     return serialize.withoutWrapping(
       result.all().map((t) => ({
@@ -713,8 +731,10 @@ export default class AdminController {
   async pendingVerifications({ request, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    const deZona = await zonaDelAdmin(request.input('zona'))
     const conductores = await Conductor.query()
       .where('estado_verificacion', 'pendiente')
+      .if(deZona, (q) => q.whereIn('id', deZona!.conductorIds))
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'email', 'telefono'))
       .orderBy('created_at', 'asc')
       .paginate(page, limit)
@@ -879,7 +899,9 @@ export default class AdminController {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
+    const deZona = await zonaDelAdmin(request.input('zona'))
     const alertas = await AlertaEmergencia.query()
+      .if(deZona, (q) => q.where(filtroAlertasDeZona(deZona!)))
       .if(
         estados.length > 0,
         (q) => q.whereIn('estado', estados),
@@ -1034,8 +1056,10 @@ export default class AdminController {
   async disputes({ request, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    const deZona = await zonaDelAdmin(request.input('zona'))
     const disputas = await Disputa.query()
       .whereIn('estado', ['abierta', 'en_revision'])
+      .if(deZona, (q) => q.whereIn('conductor_id', deZona!.conductorIds))
       .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion', 'precio_final'))
       .preload('conductor', (q) => q.select('id', 'placa', 'usuario_id').preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido')))
       .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'email'))
@@ -1508,6 +1532,7 @@ export default class AdminController {
       soporteEmail: config.soporteEmail,
       escalera: mezclarEscalera(config.escalera),
       referidos: mezclarReferidos(config.referidos),
+      inactividadDias: config.inactividadDias ?? 7,
     })
   }
 
@@ -1517,14 +1542,24 @@ export default class AdminController {
       config = await ConfiguracionPlataforma.create({})
     }
 
-    const { nequiNumero, nequiNombre, soporteTelefono, soporteEmail, escalera, referidos } = request.only([
-      'nequiNumero',
-      'nequiNombre',
-      'soporteTelefono',
-      'soporteEmail',
-      'escalera',
-      'referidos',
-    ])
+    const { nequiNumero, nequiNombre, soporteTelefono, soporteEmail, escalera, referidos, inactividadDias } =
+      request.only([
+        'nequiNumero',
+        'nequiNombre',
+        'soporteTelefono',
+        'soporteEmail',
+        'escalera',
+        'referidos',
+        'inactividadDias',
+      ])
+
+    if (inactividadDias !== undefined) {
+      const n = Number(inactividadDias)
+      if (!Number.isInteger(n) || n < 1 || n > 365) {
+        return response.status(422).send({ error: 'Los días de inactividad deben ser un entero entre 1 y 365' })
+      }
+      config.inactividadDias = n
+    }
 
     // Escalera de acompañamiento: acepta parciales, se valida el resultado completo.
     if (escalera !== undefined) {
@@ -1563,7 +1598,22 @@ export default class AdminController {
       soporteEmail: config.soporteEmail,
       escalera: mezclarEscalera(config.escalera),
       referidos: mezclarReferidos(config.referidos),
+      inactividadDias: config.inactividadDias ?? 7,
     })
+  }
+
+  /** Ruta planeada + recorrido real del viaje (todas las zonas). */
+  async tripRecorrido({ params, response, serialize }: HttpContext) {
+    const viaje = await Viaje.query()
+      .where('id', params.id)
+      .preload('conductor', (q) =>
+        q.select('id', 'online', 'ultima_ubicacion_lat', 'ultima_ubicacion_lng', 'ubicacion_actualizada_en')
+      )
+      .first()
+    if (!viaje) {
+      return response.status(404).send(await serialize.withoutWrapping({ error: 'Viaje no encontrado' }))
+    }
+    return serialize.withoutWrapping(await payloadRecorrido(viaje, viaje.conductor ?? null))
   }
 
   /** Programa de referidos: lista completa y comisión no cobrada del mes. */
@@ -1882,16 +1932,22 @@ export default class AdminController {
     })
   }
 
+  /** `?zona=`: los de esa zona (claveDe) y los generales. */
   async listComunicados({ request, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
-    const comunicados = await Comunicado.query()
+    const zona = claveDe(String(request.input('zona') ?? ''))
+    const consulta = Comunicado.query()
       .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('created_at', 'desc')
-      .paginate(page, limit)
+    // ponytail: la zona es texto libre, se filtra en memoria como conductoresDeZona.
+    const filas =
+      zona && zona !== 'general'
+        ? (await consulta).filter((c) => !c.zona || ['general', zona].includes(claveDe(c.zona))).slice((page - 1) * limit, page * limit)
+        : (await consulta.paginate(page, limit)).all()
 
     return serialize.withoutWrapping(
-      comunicados.all().map((c) => ({
+      filas.map((c) => ({
         id: c.id,
         title: c.titulo,
         body: c.contenido,

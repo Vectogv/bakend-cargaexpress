@@ -12,13 +12,14 @@ import Ganancia from '#models/ganancia'
 import Disputa from '#models/disputa'
 import Reporte from '#models/reporte'
 import LogFraude from '#models/log_fraude'
-import Notificacion from '#models/notificacion'
 import { notifyDriverValidator } from '#validators/driver'
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
 import db from '@adonisjs/lucid/services/db'
 import { sendToMultiple, sendToToken } from '#services/push_notification_service'
+import { notificarConductor } from '#services/notificar_conductor'
+import { diasInactividad, payloadRecorrido, ubicacionSiConectado } from '#services/viaje_recorrido_service'
 import TripFinalizationService from '#services/trip_finalization_service'
 import ReferidosService from '#services/referidos_service'
 import {
@@ -52,6 +53,7 @@ import {
   casoVacio,
   hayCaso,
   nombreCorto,
+  filtroAlertasDeZona,
 } from '#services/moderador_acceso_cliente'
 
 /** Estados que el panel del moderador cuenta como "viaje activo". */
@@ -137,6 +139,8 @@ export default class ModeratorController {
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const estado = request.input('estado') || null
     const buscar = String(request.input('buscar') || '').trim()
+    // ?online=1: solo conectados (mapa en vivo de la zona).
+    const soloOnline = ['1', 'true'].includes(String(request.input('online') || ''))
     const ciudad = esAdmin ? request.input('ciudad') || null : user.zonaModerador
     // La ciudad del conductor se guarda sin normalizar (puede traer tildes o
     // mayúsculas distintas a la zona del moderador): se compara con claveDe en
@@ -147,6 +151,7 @@ export default class ModeratorController {
 
     const candidatos = await Conductor.query()
       .if(estado, (q) => q.where('estado_verificacion', estado!))
+      .if(soloOnline, (q) => q.where('online', true))
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email', 'avatar', 'estado_cuenta'))
       .orderBy('created_at', 'desc')
 
@@ -266,12 +271,13 @@ export default class ModeratorController {
     }
     const ciudad = esAdmin ? request.input('ciudad') || null : user.zonaModerador
     const claveEsperada = ciudad ? claveDe(ciudad) : null
-    const fechaLimite = DateTime.now().minus({ days: 7 }).toSQL()
+    const dias = await diasInactividad()
+    const fechaLimite = DateTime.now().minus({ days: dias }).toSQL()
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
 
-    // Solo aprobados con más de 7 días de registro: un pendiente o un recién
-    // registrado no es "inactivo", todavía no ha podido trabajar.
+    // Solo aprobados con más de `dias` (configuración) de registro: un pendiente o
+    // un recién registrado no es "inactivo", todavía no ha podido trabajar.
     const candidatos = await Conductor.query()
       .select('conductores.*')
       .select(
@@ -302,6 +308,7 @@ export default class ModeratorController {
       total: filtrados.length,
       page,
       limit,
+      inactividadDias: dias,
     })
   }
 
@@ -328,47 +335,32 @@ export default class ModeratorController {
       }
     }
 
-    const usuario = await User.find(conductor.usuarioId)
+    // Un solo camino para avisar a un conductor: bandeja + push + correo (notificar_conductor).
+    // Con `documentos`: aviso de documentos faltantes; sin ellos: recordatorio de inactividad.
+    const nota = mensaje ? `\nNota del moderador: ${mensaje}` : ''
+    const aviso = documentos?.length
+      ? {
+          tipo: 'documentos_faltantes',
+          titulo: 'Faltan documentos',
+          cuerpo:
+            `Te falta subir: ${documentos.map((d) => DOCUMENTOS_REQUERIDOS[d]).join(', ')}. ` +
+            `Los demás documentos están en revisión. Súbelos desde Perfil → Documentos.` +
+            nota,
+        }
+      : {
+          tipo: 'recordatorio_actividad',
+          titulo: 'Recordatorio CargaExpress',
+          cuerpo: 'Hemos notado que no has realizado viajes recientemente. ¡Los clientes te esperan!' + nota,
+        }
+    const canales = await notificarConductor(conductor.usuarioId, aviso)
 
-    // Con `documentos`: aviso de documentos faltantes (push + bandeja, aunque no tenga token FCM).
-    if (documentos?.length) {
-      const titulo = 'Faltan documentos'
-      const lista = documentos.map((d) => DOCUMENTOS_REQUERIDOS[d]).join(', ')
-      const cuerpo =
-        `Te falta subir: ${lista}. Los demás documentos están en revisión. Súbelos desde Perfil → Documentos.` +
-        (mensaje ? `
-Nota del moderador: ${mensaje}` : '')
-      await Notificacion.create({
-        usuarioId: conductor.usuarioId,
-        tipo: 'documentos_faltantes',
-        titulo,
-        mensaje: cuerpo,
-        leido: false,
-      })
-      if (usuario?.fcmToken) {
-        await sendToMultiple([usuario.fcmToken], titulo, cuerpo, { tipo: 'documentos_faltantes' })
-      }
-      return serialize.withoutWrapping({ success: true, conductorId: conductor.id, documentos })
-    }
-
-    // Sin documentos: recordatorio de inactividad. Siempre queda en la bandeja;
-    // el push es best-effort (sin token FCM igual responde 200).
-    const titulo = 'Recordatorio CargaExpress'
-    const cuerpo =
-      'Hemos notado que no has realizado viajes recientemente. ¡Los clientes te esperan!' +
-      (mensaje ? `\nNota del moderador: ${mensaje}` : '')
-    await Notificacion.create({
-      usuarioId: conductor.usuarioId,
-      tipo: 'recordatorio_actividad',
-      titulo,
-      mensaje: cuerpo,
-      leido: false,
+    return serialize.withoutWrapping({
+      success: true,
+      conductorId: conductor.id,
+      ...(documentos?.length ? { documentos } : {}),
+      push: canales.push,
+      canales,
     })
-    if (usuario?.fcmToken) {
-      await sendToMultiple([usuario.fcmToken], titulo, cuerpo, { tipo: 'recordatorio_actividad' })
-    }
-
-    return serialize.withoutWrapping({ success: true, conductorId: conductor.id, push: Boolean(usuario?.fcmToken) })
   }
 
   async reportDriver({ auth, params, request, response, serialize }: HttpContext) {
@@ -580,8 +572,8 @@ Nota del moderador: ${mensaje}` : '')
         .send(await serialize.withoutWrapping({ error: 'Encuesta no encontrada' }))
     }
     // Un moderador solo ve resultados de encuestas de su zona (o las generales).
-    const zonaEncuesta = String(encuesta.zona || '').trim().toLowerCase()
-    const zonaUsuario = String(user.zonaModerador || '').trim().toLowerCase()
+    const zonaEncuesta = claveDe(encuesta.zona || '')
+    const zonaUsuario = claveDe(user.zonaModerador || '')
     if (user.rol !== 'admin' && zonaEncuesta && zonaEncuesta !== 'general' && zonaEncuesta !== zonaUsuario) {
       return response
         .status(403)
@@ -861,7 +853,7 @@ Nota del moderador: ${mensaje}` : '')
       : user.rol === 'admin'
         ? request.input('ciudad') || null
         : null
-    const fechaLimite = DateTime.now().minus({ days: 7 }).toSQL()
+    const fechaLimite = DateTime.now().minus({ days: await diasInactividad() }).toSQL()
     // `conductores.ciudad` es texto libre: se compara normalizado (claveDe).
     const clave = ciudad ? claveDe(ciudad) : null
     const deZona = clave ? await conductoresDeZona(clave) : null
@@ -1134,8 +1126,22 @@ Nota del moderador: ${mensaje}` : '')
       .preload('cliente', (q) => q.select('id', 'nombre', 'apellido', 'telefono', 'email', 'avatar'))
       .preload('conductor', (q) =>
         q
-          .select('id', 'usuario_id', 'placa', 'tipo_vehiculo', 'foto_vehiculo', 'ciudad', 'calificacion', 'total_viajes', 'online')
-          .preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono', 'email'))
+          .select(
+            'id',
+            'usuario_id',
+            'placa',
+            'tipo_vehiculo',
+            'foto_vehiculo',
+            'foto_conductor',
+            'ciudad',
+            'calificacion',
+            'total_viajes',
+            'online',
+            'ultima_ubicacion_lat',
+            'ultima_ubicacion_lng',
+            'ubicacion_actualizada_en'
+          )
+          .preload('usuario', (uq) => uq.select('id', 'nombre', 'apellido', 'telefono', 'email', 'avatar'))
       )
       .first()
 
@@ -1195,8 +1201,11 @@ Nota del moderador: ${mensaje}` : '')
             calificacion: viaje.conductor.calificacion,
             totalViajes: viaje.conductor.totalViajes,
             online: viaje.conductor.online,
+            avatar: viaje.conductor.fotoConductor || viaje.conductor.usuario?.avatar || null,
           }
         : null,
+      // Solo un conductor conectado y en viaje activo entrega su ubicación.
+      conductorUbicacion: ubicacionSiConectado(viaje.conductor, ESTADOS_VIAJE_ACTIVO_PANEL.includes(viaje.estado)),
       origen: {
         direccion: viaje.origenDireccion,
         lat: Number(viaje.origenLat),
@@ -1276,6 +1285,34 @@ Nota del moderador: ${mensaje}` : '')
         comisionPagadaAt: g.comisionPagadaAt?.toISO() ?? null,
       })),
     })
+  }
+
+  /**
+   * Recorrido real del viaje (puntos guardados desde PUT /drivers/location),
+   * ruta planeada y último punto con su hora. Moderador: solo viajes de su zona.
+   */
+  async tripRecorrido({ auth, params, request, serialize, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const zona = zonaDeConsulta(user, request.input('ciudad'))
+    if (zona === false) {
+      return response
+        .status(403)
+        .send(await serialize.withoutWrapping({ error: 'No tienes ciudad asignada' }))
+    }
+    const conductorIds = zona ? (await conductoresDeZona(zona)).conductorIds : null
+    const viaje = await Viaje.query()
+      .where('id', params.id)
+      .if(conductorIds, (q) => q.whereIn('conductor_id', conductorIds!))
+      .preload('conductor', (q) =>
+        q.select('id', 'online', 'ultima_ubicacion_lat', 'ultima_ubicacion_lng', 'ubicacion_actualizada_en')
+      )
+      .first()
+    if (!viaje) {
+      return response
+        .status(404)
+        .send(await serialize.withoutWrapping({ error: 'Viaje no encontrado en tu ciudad' }))
+    }
+    return serialize.withoutWrapping(await payloadRecorrido(viaje, viaje.conductor ?? null))
   }
 
   @ApiOperation({
@@ -1669,15 +1706,8 @@ Nota del moderador: ${mensaje}` : '')
    * lanzadas por un conductor de la zona. La ciudad del conductor se compara
    * normalizada (ver conductoresDeZona).
    */
-  private ciudadDeEmergencia({ conductorIds, usuarioIds }: { conductorIds: number[]; usuarioIds: number[] }) {
-    return (q: any) => {
-      q.whereExists((sub: any) => {
-        sub
-          .from('viajes')
-          .whereRaw('viajes.id = alertas_emergencia.viaje_id')
-          .whereIn('viajes.conductor_id', conductorIds)
-      }).orWhereIn('alertas_emergencia.user_id', usuarioIds)
-    }
+  private ciudadDeEmergencia(deZona: { conductorIds: number[]; usuarioIds: number[] }) {
+    return filtroAlertasDeZona(deZona)
   }
 
   async emergencyCount({ auth, request, serialize, response }: HttpContext) {
@@ -1745,8 +1775,6 @@ Nota del moderador: ${mensaje}` : '')
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
 
-    // La ubicación del conductor solo la ve gerencia (admin); el moderador no.
-    const esAdmin = user.rol === 'admin'
     return serialize.withoutWrapping({
       data: alertas.all().map((a) => {
         const mapa = datosMapaSos(a)
@@ -1783,7 +1811,8 @@ Nota del moderador: ${mensaje}` : '')
                   : null,
               }
             : null,
-          conductorUbicacion: esAdmin ? mapa.conductorUbicacion : null,
+          // Ya filtrado en datosMapaSos: solo si el conductor está conectado.
+          conductorUbicacion: mapa.conductorUbicacion,
           sos: mapa.sos,
           observacion: a.observacion,
           administrador: a.moderadorAtendio
@@ -2030,8 +2059,9 @@ function resumenConductor(c: Conductor) {
     calificacion: c.calificacion,
     totalViajes: c.totalViajes,
     horasActivo: c.horasActivo,
-    // Solo la fecha: el moderador no ve dónde está el conductor.
     ultimaActividadAt: c.ubicacionActualizadaEn?.toISO() ?? null,
+    // Solo un conductor conectado entrega dónde está (regla del panel, 2026-10-08).
+    ultimaUbicacion: ubicacionSiConectado(c),
     estadoVerificacion: c.estadoVerificacion,
     fotoCedula: SignedUploadService.sign(c.fotoCedula),
     fotoLicencia: SignedUploadService.sign(c.fotoLicencia),

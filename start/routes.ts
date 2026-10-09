@@ -210,6 +210,7 @@ router
     router.get('users', [controllers.Admin, 'users'])
     router.get('drivers', [controllers.Admin, 'drivers'])
     router.get('trips', [controllers.Admin, 'trips'])
+    router.get('trips/:id/recorrido', [controllers.Admin, 'tripRecorrido'])
     router.get('earnings', [controllers.Admin, 'earnings'])
     router.put('users/:id', [controllers.Admin, 'updateUser'])
     router.put('users/:id/suspend', [controllers.Admin, 'toggleSuspendUser'])
@@ -398,6 +399,16 @@ router.get('/api/config/coverage', async ({ serialize }) => {
 
 router.get('/api/config/mapbox', [controllers.Mapbox, 'token']).use(middleware.auth())
 
+// Documentos que se le exigen al conductor, con su etiqueta (panel: Notificar, ficha, verificaciones).
+router
+  .get('/api/config/documentos-conductor', async ({ serialize }) => {
+    const { DOCUMENTOS_REQUERIDOS } = await import('#models/conductor')
+    return serialize.withoutWrapping(
+      Object.entries(DOCUMENTOS_REQUERIDOS).map(([clave, etiqueta]) => ({ clave, etiqueta }))
+    )
+  })
+  .use(middleware.auth())
+
 // Reglas que la app cliente muestra al usuario; salen de la misma config que aplica el backend.
 router
   .get('/api/config/cliente', async ({ serialize }) => {
@@ -428,6 +439,7 @@ router
     router.get('trips', [controllers.Moderator, 'trips'])
     router.get('disputes', [controllers.Moderator, 'disputes'])
     router.get('trips/:id', [controllers.Moderator, 'tripShow'])
+    router.get('trips/:id/recorrido', [controllers.Moderator, 'tripRecorrido'])
     // H1: Moderador resuelve un cierre que el cliente no confirmó a tiempo.
     router.post('trips/:id/resolve-close', [controllers.Moderator, 'resolvePendingClose'])
     router.get('reservations', [controllers.Moderator, 'reservations'])

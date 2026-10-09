@@ -175,11 +175,11 @@ export async function sendToToken(
   data?: Record<string, string>,
   sound?: string,
   tag?: string
-) {
+): Promise<boolean> {
   await guardarEnBandeja(token, title, body, data)
 
   ensureInit()
-  if (!messaging) return
+  if (!messaging) return false
 
   const message = armarMensaje(token, title, body, data, sound, tag)
 
@@ -188,12 +188,14 @@ export async function sendToToken(
   try {
     await messaging.send(message)
     logger.info(`FCM enviado a ${dispositivo}: ${title}`)
+    return true
   } catch (err: any) {
     if (err.code === 'messaging/registration-token-not-registered') {
       logger.warn(`FCM token no registrado (${dispositivo}): la app debe volver a registrarlo`)
-      return
+      return false
     }
     logger.error(`FCM send error (${dispositivo}): ${err.message}`)
+    return false
   }
 }
 

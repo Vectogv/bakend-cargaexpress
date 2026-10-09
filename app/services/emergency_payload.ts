@@ -51,6 +51,7 @@ export const COLUMNAS_CONDUCTOR_MAPA_SOS = [
   'ultima_ubicacion_lat',
   'ultima_ubicacion_lng',
   'ubicacion_actualizada_en',
+  'online',
 ] as const
 
 /** SQLite/MySQL devuelven los decimales como texto según el driver. */
@@ -83,10 +84,12 @@ export function datosMapaSos(alerta: AlertaEmergencia): DatosMapaSos {
   const origenCoords = viaje ? coordenada(viaje.origenLat, viaje.origenLng) : null
   const destinoCoords = viaje ? coordenada(viaje.destinoLat, viaje.destinoLng) : null
 
+  // Solo un conductor conectado entrega coordenadas (regla del panel, 2026-10-08).
   const conductor = viaje ? (viaje.conductor as Conductor | null | undefined) : null
-  const conductorCoords = conductor
-    ? coordenada(conductor.ultimaUbicacionLat, conductor.ultimaUbicacionLng)
-    : null
+  const conductorCoords =
+    conductor && conductor.online
+      ? coordenada(conductor.ultimaUbicacionLat, conductor.ultimaUbicacionLng)
+      : null
   const conductorUbicacion: ConductorUbicacion | null =
     conductorCoords && conductor
       ? {

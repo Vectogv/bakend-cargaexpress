@@ -313,7 +313,7 @@ test.group('Moderador: privacidad, paginación y dashboard', (group) => {
 
   const ubicado = { ultimaUbicacionLat: 2.44, ultimaUbicacionLng: -76.6, ubicacionActualizadaEn: DateTime.now() }
 
-  test('el directorio y los inactivos devuelven {data,total,page,limit} y solo la fecha de la última actividad', async ({ client, assert }) => {
+  test('el directorio y los inactivos devuelven {data,total,page,limit}; un desconectado no entrega ubicación', async ({ client, assert }) => {
     const mod = await crearModerador(client, 'zona_pag')
     const creados = []
     for (let i = 0; i < 3; i++) creados.push(await crearConductor(client, 'Zona Pag', { online: false, ...ubicado }))
@@ -327,19 +327,35 @@ test.group('Moderador: privacidad, paginación y dashboard', (group) => {
     assert.equal(res.body().page, 2)
     assert.lengthOf(res.body().data, 1)
     assert.isString(res.body().data[0].ultimaActividadAt)
-    assert.notProperty(res.body().data[0], 'ultimaUbicacion')
+    assert.isNull(res.body().data[0].ultimaUbicacion)
 
     const inactivos = await client.get('/api/moderator/drivers/inactive?limit=2').bearerToken(mod.token)
     inactivos.assertStatus(200)
     assert.equal(inactivos.body().total, 3)
     assert.lengthOf(inactivos.body().data, 2)
-    assert.notProperty(inactivos.body().data[0], 'ultimaUbicacion')
+    assert.isNull(inactivos.body().data[0].ultimaUbicacion)
 
     const ficha = await client.get(`/api/moderator/drivers/${creados[0].conductor.id}`).bearerToken(mod.token)
     ficha.assertStatus(200)
     assert.isString(ficha.body().ultimaActividadAt)
-    assert.notProperty(ficha.body(), 'ultimaUbicacion')
-    assert.notProperty(ficha.body(), 'ubicacionActualizadaEn')
+    assert.isNull(ficha.body().ultimaUbicacion)
+  })
+
+  test('un conductor conectado de la zona sí entrega su ubicación; ?online=1 deja solo a los conectados', async ({ client, assert }) => {
+    const mod = await crearModerador(client, 'zona_mapa')
+    const conectado = await crearConductor(client, 'Zona Mapa', { online: true, ...ubicado })
+    const apagado = await crearConductor(client, 'Zona Mapa', { online: false, ...ubicado })
+
+    const res = await client.get('/api/moderator/drivers?online=1').bearerToken(mod.token)
+    res.assertStatus(200)
+    assert.deepEqual(ids(res.body()), [conectado.conductor.id])
+    assert.closeTo(res.body().data[0].ultimaUbicacion.lat, 2.44, 0.0001)
+    assert.isString(res.body().data[0].ultimaUbicacion.actualizadaEn)
+
+    const todos = await client.get('/api/moderator/drivers').bearerToken(mod.token)
+    assert.includeMembers(ids(todos.body()), [conectado.conductor.id, apagado.conductor.id])
+    const ficha = await client.get(`/api/moderator/drivers/${conectado.conductor.id}`).bearerToken(mod.token)
+    assert.closeTo(ficha.body().ultimaUbicacion.lng, -76.6, 0.0001)
   })
 
   test('en reservas el cliente sale con nombre corto y sin contacto, salvo que haya un caso', async ({ client, assert }) => {
@@ -363,10 +379,10 @@ test.group('Moderador: privacidad, paginación y dashboard', (group) => {
     assert.equal(filaCaso.cliente.telefono, '3001234567')
   })
 
-  test('el SOS del moderador sale paginado y sin la ubicación del conductor; el admin sí la recibe', async ({ client, assert }) => {
+  test('el SOS del moderador sale paginado con la ubicación del conductor conectado; el admin también', async ({ client, assert }) => {
     const mod = await crearModerador(client, 'popayan')
     const admin = await crearUsuario(client, { rol: 'admin' })
-    const driver = await crearConductor(client, 'Popayán', ubicado)
+    const driver = await crearConductor(client, 'Popayán', { online: true, ...ubicado })
     const cliente = await crearUsuario(client, { rol: 'cliente' })
     const viaje = await crearViaje(cliente.user.id, driver.conductor.id)
     const alerta = await AlertaEmergencia.create({ userId: driver.user.id, viajeId: viaje.id, lat: 2.44, lng: -76.6, motivo: 'Prueba', estado: 'pendiente', atendida: false } as any)
@@ -376,7 +392,7 @@ test.group('Moderador: privacidad, paginación y dashboard', (group) => {
     assert.isNumber(res.body().total)
     const fila = res.body().data.find((a: any) => Number(a.id) === Number(alerta.id))
     assert.exists(fila)
-    assert.isNull(fila.conductorUbicacion)
+    assert.closeTo(fila.conductorUbicacion.lat, 2.44, 0.0001)
 
     const deAdmin = await client.get('/api/moderator/emergency?limit=100&ciudad=popayan').bearerToken(admin.token)
     deAdmin.assertStatus(200)

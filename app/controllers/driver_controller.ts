@@ -16,6 +16,7 @@ import { DateTime } from 'luxon'
 import { ApiOperation, ApiBody, ApiResponse } from '@foadonis/openapi/decorators'
 import { emitToClient, emitToAdmin, emitToDriver } from '#start/socket'
 import { rutaDelViaje, payloadRuta, distanciaM } from '#services/trip_route_service'
+import { guardarPuntoRecorrido } from '#services/viaje_recorrido_service'
 import ReferidosService from '#services/referidos_service'
 
 /**
@@ -305,6 +306,8 @@ export default class DriverController {
         lat: data.lat,
         lng: data.lng,
       })
+      // Recorrido real del viaje para el panel (≥15 s o ≥30 m entre puntos); nunca bloquea.
+      await guardarPuntoRecorrido(viajeActivo.id, data.lat, data.lng).catch(() => null)
 
       // Ruta y ETA calculados aquí para ambos (trip_route_service: Mapbox con
       // tráfico, cacheado por fase; la línea sólo viaja cuando cambia).

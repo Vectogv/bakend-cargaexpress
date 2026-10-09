@@ -53,6 +53,10 @@ export default class ConfiguracionPlataforma extends BaseModel {
   @column(jsonColumn)
   declare referidos: any
 
+  /** Días sin viajes para contar a un conductor como inactivo (panel). */
+  @column()
+  declare inactividadDias: number
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

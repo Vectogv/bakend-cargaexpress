@@ -31,6 +31,24 @@ export async function conductoresDeZona(zona: string) {
   }
 }
 
+/** Alertas SOS de una zona: del viaje de un conductor de la zona o lanzadas por uno de ellos. */
+export function filtroAlertasDeZona({ conductorIds, usuarioIds }: { conductorIds: number[]; usuarioIds: number[] }) {
+  return (q: any) => {
+    q.whereExists((sub: any) => {
+      sub
+        .from('viajes')
+        .whereRaw('viajes.id = alertas_emergencia.viaje_id')
+        .whereIn('viajes.conductor_id', conductorIds)
+    }).orWhereIn('alertas_emergencia.user_id', usuarioIds)
+  }
+}
+
+/** `?zona=` de los listados del admin: {conductorIds, usuarioIds} o null sin filtro. */
+export async function zonaDelAdmin(zonaQuery: unknown) {
+  const clave = claveDe(String(zonaQuery ?? ''))
+  return clave && clave !== 'general' ? conductoresDeZona(clave) : null
+}
+
 /** SOS, disputa y tickets de cada viaje, en tres consultas por lote. */
 export async function casosPorViaje(viajeIds: number[]): Promise<Map<number, CasosViaje>> {
   const mapa = new Map<number, CasosViaje>()
