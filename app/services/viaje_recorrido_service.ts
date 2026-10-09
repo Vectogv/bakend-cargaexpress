@@ -3,8 +3,42 @@ import Viaje from '#models/viaje'
 import Conductor from '#models/conductor'
 import ViajeRecorrido from '#models/viaje_recorrido'
 import ConfiguracionPlataforma from '#models/configuracion_plataforma'
-import { distanciaM, mapboxDirections, rutaDelViaje, type Punto } from '#services/trip_route_service'
+import { distanciaM, faseDe, osrmDirections, rutaGuardada, type Punto } from '#services/trip_route_service'
 import { ESTADOS_CONDUCTOR_OCUPADO } from '#services/trip_conflict_service'
+
+/**
+ * Ruta planeada de un viaje cerrado (origen→destino), o de uno activo sin
+ * ruta guardada: el panel de moderación/admin no debe consumir Mapbox (eso
+ * lo paga solo la app), así que se pide a OSRM (público, sin token) y se
+ * cachea por viajeId con un TTL largo, porque un viaje cerrado no cambia de
+ * ruta. Si OSRM falla, queda sin ruta planeada (nunca cae a Mapbox).
+ */
+const CACHE_CERRADA_TOPE = 500
+const CACHE_CERRADA_TTL_MS = 24 * 60 * 60_000
+const cacheCerrada = new Map<number, { coords: Punto[]; expiraEn: number }>()
+
+function leerCacheCerrada(viajeId: number): Punto[] | null {
+  const entrada = cacheCerrada.get(viajeId)
+  if (!entrada) return null
+  if (Date.now() > entrada.expiraEn) {
+    cacheCerrada.delete(viajeId)
+    return null
+  }
+  return entrada.coords
+}
+
+function guardarCacheCerrada(viajeId: number, coords: Punto[]) {
+  if (cacheCerrada.size >= CACHE_CERRADA_TOPE && !cacheCerrada.has(viajeId)) {
+    const primero = cacheCerrada.keys().next().value
+    if (primero !== undefined) cacheCerrada.delete(primero)
+  }
+  cacheCerrada.set(viajeId, { coords, expiraEn: Date.now() + CACHE_CERRADA_TTL_MS })
+}
+
+/** Solo para pruebas. */
+export function limpiarCacheRutaCerrada() {
+  cacheCerrada.clear()
+}
 
 /** Se guarda un punto nuevo solo si pasaron ≥ 15 s o se movió ≥ 30 m. */
 export const RECORRIDO_MIN_SEG = 15
@@ -50,17 +84,33 @@ export async function payloadRecorrido(viaje: Viaje, conductor: Conductor | null
   const destino: Punto = [Number(viaje.destinoLat), Number(viaje.destinoLng)]
   const hayCoords = origen.every(Number.isFinite) && destino.every(Number.isFinite)
 
-  // Planeada: en un viaje activo es la de la fase actual (misma caché que la app);
-  // en uno cerrado, origen→destino.
+  // Planeada: en un viaje activo, la de la fase actual, pero SOLO leyendo lo
+  // que la app ya guardó (sin forzar un recálculo de Mapbox desde el panel);
+  // si no hay nada guardado, o el viaje está cerrado, se pide a OSRM.
   let planeada: { coords: Punto[]; fase: string | null; fuente: string } | null = null
   if (hayCoords) {
     if (activo && ultimoPunto) {
-      const estado = await rutaDelViaje(viaje, [ultimoPunto.lat, ultimoPunto.lng])
-      if (estado) planeada = { coords: estado.ruta.coords, fase: estado.ruta.fase, fuente: estado.ruta.fuente }
+      const fase = faseDe(viaje.estado)
+      const guardada = fase ? rutaGuardada(viaje.id) : null
+      if (guardada && guardada.fase === fase) {
+        planeada = { coords: guardada.coords, fase: guardada.fase, fuente: guardada.fuente }
+      } else if (fase) {
+        const hasta = fase === 'recogida' ? origen : destino
+        const r = await osrmDirections([ultimoPunto.lat, ultimoPunto.lng], hasta)
+        planeada = r ? { coords: r.coords, fase, fuente: 'osrm' } : null
+      }
     }
     if (!planeada) {
-      const r = await mapboxDirections(origen, destino)
-      planeada = r ? { coords: r.coords, fase: null, fuente: 'mapbox' } : null
+      const cacheada = leerCacheCerrada(viaje.id)
+      if (cacheada) {
+        planeada = { coords: cacheada, fase: null, fuente: 'osrm' }
+      } else {
+        const r = await osrmDirections(origen, destino)
+        if (r) {
+          guardarCacheCerrada(viaje.id, r.coords)
+          planeada = { coords: r.coords, fase: null, fuente: 'osrm' }
+        }
+      }
     }
   }
 

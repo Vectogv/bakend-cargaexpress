@@ -289,6 +289,7 @@ test.group('Cancelación durante SOS requiere revisión', (group) => {
     const res = await client
       .put(`/api/admin/emergencies/${alerta.id}/resolve`)
       .bearerToken(adminToken)
+      .json({ tipoCierre: 'falsa_alarma', observacion: 'Se verificó con el conductor, todo en orden' })
     res.assertStatus(200)
     res.assertBodyContains({ estadoViaje: 'en_curso' })
     const viaje = await db.from('viajes').where('id', tripId).first()
@@ -319,6 +320,7 @@ test.group('Cancelación durante SOS requiere revisión', (group) => {
     const res = await client
       .put(`/api/admin/emergencies/${primera.id}/resolve`)
       .bearerToken(adminToken)
+      .json({ tipoCierre: 'falsa_alarma', observacion: 'Se verificó con el conductor, todo en orden' })
     res.assertStatus(200)
     const viaje = await db.from('viajes').where('id', tripId).first()
     assert.equal(viaje.estado, 'sos')

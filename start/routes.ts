@@ -409,6 +409,16 @@ router
   })
   .use(middleware.auth())
 
+// Tipos de caso con los que se cierra un SOS (panel: resolver una emergencia).
+router
+  .get('/api/config/tipos-cierre-sos', async ({ serialize }) => {
+    const { TIPOS_CIERRE_SOS } = await import('#models/alerta_emergencia')
+    return serialize.withoutWrapping(
+      Object.entries(TIPOS_CIERRE_SOS).map(([clave, etiqueta]) => ({ clave, etiqueta }))
+    )
+  })
+  .use(middleware.auth())
+
 // Reglas que la app cliente muestra al usuario; salen de la misma config que aplica el backend.
 router
   .get('/api/config/cliente', async ({ serialize }) => {

@@ -33,7 +33,8 @@ import {
 } from '#start/socket'
 import { ApiOperation, ApiResponse } from '@foadonis/openapi/decorators'
 import { getTripEstadoLabel } from '#services/trip_status_labels'
-import { getAlertaEstadoLabel } from '#services/emergency_status_labels'
+import { getAlertaEstadoLabel, getTipoCierreLabel } from '#services/emergency_status_labels'
+import { validarCierreSos } from '#services/emergency_cierre_validation'
 import {
   COLUMNAS_CONDUCTOR_MAPA_SOS,
   COLUMNAS_VIAJE_MAPA_SOS,
@@ -1667,12 +1668,13 @@ export default class ModeratorController {
 
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
-    const estado = request.input('estado', '')
+    const proximas = request.input('proximas')
+    // Por defecto solo las reservas vigentes; las canceladas: ?estado=cancelado.
+    const estado = request.input('estado', '') || (proximas ? '' : 'reservado')
     const fecha = request.input('fecha')
     const origen = request.input('origen')
     const destino = request.input('destino')
     const conductorId = request.input('conductorId')
-    const proximas = request.input('proximas')
 
     // Con zona, las reservas con conductor se acotan en SQL a los conductores
     // de la zona (ciudad normalizada); las que aún no tienen conductor se
@@ -1908,6 +1910,8 @@ export default class ModeratorController {
           // Ya filtrado en datosMapaSos: solo si el conductor está conectado.
           conductorUbicacion: mapa.conductorUbicacion,
           sos: mapa.sos,
+          tipoCierre: a.tipoCierre,
+          tipoCierreLabel: getTipoCierreLabel(a.tipoCierre),
           observacion: a.observacion,
           administrador: a.moderadorAtendio
             ? `${a.moderadorAtendio.nombre || ''} ${a.moderadorAtendio.apellido || ''}`.trim()
@@ -2005,14 +2009,19 @@ export default class ModeratorController {
         .send(await serialize.withoutWrapping({ error: 'La emergencia pertenece a otra ciudad' }))
     }
 
+    // Para la auditoría: no se resuelve un SOS sin el tipo de caso y la
+    // gestión realizada (pedido del usuario, 2026-10-09).
+    const validacion = validarCierreSos(request.input('tipoCierre'), request.input('observacion'))
+    if (!validacion.ok) {
+      return response.status(422).send(await serialize.withoutWrapping({ error: validacion.error }))
+    }
+
     alerta.estado = 'resuelta'
     alerta.atendida = true
     alerta.moderadorResolvioId = user.id
     alerta.resueltaAt = DateTime.now()
-    const observacion = request.input('observacion', null)
-    if (observacion && String(observacion).trim()) {
-      alerta.observacion = String(observacion).trim()
-    }
+    alerta.tipoCierre = validacion.valor.tipoCierre
+    alerta.observacion = validacion.valor.observacion
     if (!alerta.moderadorAtendioId) {
       alerta.moderadorAtendioId = user.id
       alerta.atendidaAt = DateTime.now()
@@ -2041,6 +2050,8 @@ export default class ModeratorController {
       motivo: alerta.motivo,
       lat: alerta.lat !== null ? Number(alerta.lat) : null,
       lng: alerta.lng !== null ? Number(alerta.lng) : null,
+      tipoCierre: alerta.tipoCierre,
+      tipoCierreLabel: getTipoCierreLabel(alerta.tipoCierre),
       observacion: alerta.observacion,
       usuario: alerta.usuario
         ? {
@@ -2102,6 +2113,8 @@ export default class ModeratorController {
       estadoLabel: getAlertaEstadoLabel(alerta.estado),
       resueltoPor: `${user.nombre} ${user.apellido}`.trim(),
       resueltaAt: alerta.resueltaAt?.toISO() ?? null,
+      tipoCierre: alerta.tipoCierre,
+      tipoCierreLabel: getTipoCierreLabel(alerta.tipoCierre),
       observacion: alerta.observacion,
     })
 
@@ -2116,6 +2129,8 @@ export default class ModeratorController {
       atendidaAt: alerta.atendidaAt?.toISO() ?? null,
       resueltoPor: `${user.nombre} ${user.apellido}`.trim(),
       resueltaAt: alerta.resueltaAt?.toISO() ?? null,
+      tipoCierre: alerta.tipoCierre,
+      tipoCierreLabel: getTipoCierreLabel(alerta.tipoCierre),
       observacion: alerta.observacion,
     })
   }

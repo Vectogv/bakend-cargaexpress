@@ -143,6 +143,37 @@ export const mapboxDirections: ProveedorRuta = async (desde, hasta) => {
 }
 
 // ---------------------------------------------------------------------------
+// OSRM (routing público, sin token): lo usa el panel de moderación/admin, que
+// no debe consumir Mapbox (eso lo paga solo la app).
+// ---------------------------------------------------------------------------
+
+export const osrmDirections: ProveedorRuta = async (desde, hasta) => {
+  const url =
+    `https://router.project-osrm.org/route/v1/driving/` +
+    `${desde[1]},${desde[0]};${hasta[1]},${hasta[0]}` +
+    `?overview=full&geometries=geojson`
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    if (!res.ok) {
+      logger.warn(`OSRM respondió ${res.status}`)
+      return null
+    }
+    const body: any = await res.json()
+    const r = body?.routes?.[0]
+    const linea: [number, number][] | undefined = r?.geometry?.coordinates
+    if (!r || !linea || linea.length < 2) return null
+    return {
+      coords: linea.map(([lng, lat]) => [lat, lng] as Punto),
+      distanciaM: Number(r.distance) || 0,
+      duracionSeg: Number(r.duration) || 0,
+    }
+  } catch (err: any) {
+    logger.warn(`OSRM falló: ${err?.message ?? err}`)
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Caché por viaje.
 // ---------------------------------------------------------------------------
 
@@ -152,6 +183,15 @@ export let llamadasMapbox = 0
 
 export function olvidarRuta(viajeId: number) {
   cache.delete(viajeId)
+}
+
+/**
+ * Lee la ruta ya calculada para el viaje sin pedir una nueva (no recalcula,
+ * no llama a ningún proveedor). La usa el panel para no forzar un recálculo
+ * de Mapbox cuando solo quiere ver lo que la app ya trae guardado.
+ */
+export function rutaGuardada(viajeId: number): Ruta | null {
+  return cache.get(viajeId) ?? null
 }
 
 /** Sólo para pruebas. */

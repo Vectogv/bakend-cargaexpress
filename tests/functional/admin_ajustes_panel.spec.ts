@@ -150,7 +150,7 @@ test.group('Admin: ajustes del panel', (group) => {
     const res = await client
       .put(`/api/admin/emergencies/${alerta.id}/resolve`)
       .bearerToken(admin.token)
-      .json({ observacion: 'Se llamó al usuario, todo en orden' })
+      .json({ tipoCierre: 'accidente', observacion: 'Se llamó al usuario, todo en orden' })
     res.assertStatus(200)
     assert.equal(res.body().estado, 'resuelta')
 
@@ -159,11 +159,54 @@ test.group('Admin: ajustes del panel', (group) => {
     assert.isTrue(Boolean(alerta.atendida))
     assert.isNotNull(alerta.resueltaAt)
     assert.equal(alerta.observacion, 'Se llamó al usuario, todo en orden')
+    assert.equal(alerta.tipoCierre, 'accidente')
     assert.equal(alerta.moderadorResolvioId, admin.user.id)
 
     const lista = await client.get('/api/admin/emergencies?limit=100').bearerToken(admin.token)
     lista.assertStatus(200)
     assert.isUndefined((lista.body() as any[]).find((a) => Number(a.id) === Number(alerta.id)))
+  })
+
+  test('resolver desde admin sin tipoCierre ni observación exige ambos campos (auditoría)', async ({
+    client,
+    assert,
+  }) => {
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const cliente = await crearUsuario(client, { rol: 'cliente' })
+    const alerta = await AlertaEmergencia.create({
+      userId: cliente.user.id,
+      motivo: 'Accidente',
+      estado: 'pendiente',
+      atendida: false,
+    } as any)
+
+    const sinTipo = await client
+      .put(`/api/admin/emergencies/${alerta.id}/resolve`)
+      .bearerToken(admin.token)
+      .json({ observacion: 'Observación con más de veinte caracteres' })
+    sinTipo.assertStatus(422)
+    assert.equal(sinTipo.body().error, 'Elige el tipo de caso')
+
+    const observacionCorta = await client
+      .put(`/api/admin/emergencies/${alerta.id}/resolve`)
+      .bearerToken(admin.token)
+      .json({ tipoCierre: 'salud', observacion: 'Muy corta' })
+    observacionCorta.assertStatus(422)
+    assert.equal(observacionCorta.body().error, 'Escribe la gestión realizada (mínimo 20 caracteres)')
+
+    const ok = await client
+      .put(`/api/admin/emergencies/${alerta.id}/resolve`)
+      .bearerToken(admin.token)
+      .json({ tipoCierre: 'salud', observacion: 'Se llamó a una ambulancia y se acompañó' })
+    ok.assertStatus(200)
+    assert.equal(ok.body().tipoCierre, 'salud')
+    assert.equal(ok.body().tipoCierreLabel, 'Salud')
+
+    // Ya resuelta: 409, sin exigir campos ni cambiar nada.
+    const yaResuelta = await client
+      .put(`/api/admin/emergencies/${alerta.id}/resolve`)
+      .bearerToken(admin.token)
+    yaResuelta.assertStatus(409)
   })
 
   test('la lista por defecto incluye las atendidas por un moderador', async ({ client, assert }) => {

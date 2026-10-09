@@ -10,7 +10,8 @@ import Notificacion from '#models/notificacion'
 import User from '#models/user'
 import Viaje from '#models/viaje'
 import ViajeRecorrido from '#models/viaje_recorrido'
-import { guardarPuntoRecorrido } from '#services/viaje_recorrido_service'
+import { guardarPuntoRecorrido, limpiarCacheRutaCerrada } from '#services/viaje_recorrido_service'
+import { limpiarCacheRutas } from '#services/trip_route_service'
 
 /**
  * Panel de moderación (2026-10-09):
@@ -88,6 +89,38 @@ function simularBrevo() {
   }
 }
 
+/**
+ * Simula OSRM (routing público que usa el panel en vez de Mapbox) para que
+ * las pruebas no salgan a internet. Por defecto responde con una ruta de 2
+ * puntos; `fallar: true` simula que OSRM no respondió.
+ */
+function simularOsrm(opts: { fallar?: boolean } = {}) {
+  const llamadas: string[] = []
+  const original = globalThis.fetch
+  globalThis.fetch = (async (url: any) => {
+    llamadas.push(String(url))
+    if (opts.fallar) return new Response('error', { status: 500 })
+    return new Response(
+      JSON.stringify({
+        routes: [
+          {
+            geometry: { coordinates: [[-76.6063, 2.4419], [-76.5952, 2.4569]] },
+            distance: 1500,
+            duration: 180,
+          },
+        ],
+      }),
+      { status: 200 }
+    )
+  }) as typeof fetch
+  return {
+    llamadas,
+    restaurar: () => {
+      globalThis.fetch = original
+    },
+  }
+}
+
 test.group('Panel: notificar al conductor por bandeja, push y correo', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
@@ -139,6 +172,11 @@ test.group('Panel: notificar al conductor por bandeja, push y correo', (group) =
 
 test.group('Panel: recorrido real del viaje', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  group.each.setup(() => limpiarCacheRutaCerrada())
+  // SQLite reutiliza los id tras el rollback de cada prueba: sin esto, una
+  // ruta Mapbox cacheada por una prueba (p. ej. PUT /drivers/location) se le
+  // puede "pegar" a un viaje nuevo de otra prueba con el mismo id.
+  group.each.setup(() => limpiarCacheRutas())
 
   test('se guarda un punto solo si pasaron 15 s o se movió 30 m', async ({ client, assert }) => {
     const cliente = await crearUsuario(client, { rol: 'cliente' })
@@ -168,42 +206,94 @@ test.group('Panel: recorrido real del viaje', (group) => {
     assert.closeTo(puntos[0].lat, 2.4419, 0.0001)
   })
 
-  test('el admin y el moderador de la zona reciben planeada, recorrido y último punto; otra zona 404', async ({ client, assert }) => {
-    const admin = await crearUsuario(client, { rol: 'admin' })
-    const mod = await crearUsuario(client, { rol: 'moderador', esModerador: true, zonaModerador: 'popayan' })
-    const modCali = await crearUsuario(client, { rol: 'moderador', esModerador: true, zonaModerador: 'cali' })
-    const cliente = await crearUsuario(client, { rol: 'cliente' })
-    const driver = await crearConductor(client, 'Popayán', ubicado)
-    const viaje = await crearViaje(cliente.user.id, driver.conductor.id)
-    await ViajeRecorrido.create({ viajeId: viaje.id, lat: 2.4419, lng: -76.6063 })
-    await ViajeRecorrido.create({ viajeId: viaje.id, lat: 2.445, lng: -76.6 })
+  test('el admin y el moderador de la zona reciben planeada (por OSRM, no Mapbox), recorrido y último punto; otra zona 404', async ({
+    client,
+    assert,
+  }) => {
+    const osrm = simularOsrm()
+    try {
+      const admin = await crearUsuario(client, { rol: 'admin' })
+      const mod = await crearUsuario(client, { rol: 'moderador', esModerador: true, zonaModerador: 'popayan' })
+      const modCali = await crearUsuario(client, { rol: 'moderador', esModerador: true, zonaModerador: 'cali' })
+      const cliente = await crearUsuario(client, { rol: 'cliente' })
+      const driver = await crearConductor(client, 'Popayán', ubicado)
+      const viaje = await crearViaje(cliente.user.id, driver.conductor.id)
+      await ViajeRecorrido.create({ viajeId: viaje.id, lat: 2.4419, lng: -76.6063 })
+      await ViajeRecorrido.create({ viajeId: viaje.id, lat: 2.445, lng: -76.6 })
 
-    const deAdmin = await client.get(`/api/admin/trips/${viaje.id}/recorrido`).bearerToken(admin.token)
-    deAdmin.assertStatus(200)
-    const b = deAdmin.body()
-    assert.equal(b.viajeId, viaje.id)
-    assert.isTrue(b.activo)
-    assert.closeTo(b.origen.lat, 2.4419, 0.0001)
-    assert.closeTo(b.destino.lng, -76.5952, 0.0001)
-    assert.lengthOf(b.recorrido, 2)
-    assert.closeTo(b.ultimoPunto.lat, 2.445, 0.0001)
-    assert.isString(b.ultimoPunto.at)
-    assert.closeTo(b.conductorUbicacion.lat, 2.44, 0.0001)
-    assert.property(b, 'planeada') // null sin token de Mapbox en tests
+      const deAdmin = await client.get(`/api/admin/trips/${viaje.id}/recorrido`).bearerToken(admin.token)
+      deAdmin.assertStatus(200)
+      const b = deAdmin.body()
+      assert.equal(b.viajeId, viaje.id)
+      assert.isTrue(b.activo)
+      assert.closeTo(b.origen.lat, 2.4419, 0.0001)
+      assert.closeTo(b.destino.lng, -76.5952, 0.0001)
+      assert.lengthOf(b.recorrido, 2)
+      assert.closeTo(b.ultimoPunto.lat, 2.445, 0.0001)
+      assert.isString(b.ultimoPunto.at)
+      assert.closeTo(b.conductorUbicacion.lat, 2.44, 0.0001)
+      assert.isNotNull(b.planeada)
+      assert.equal(b.planeada.fuente, 'osrm')
+      assert.lengthOf(b.planeada.coords, 2)
+      assert.isTrue(osrm.llamadas.every((u) => u.includes('router.project-osrm.org')))
+      assert.isTrue(osrm.llamadas.every((u) => !u.toLowerCase().includes('mapbox')))
 
-    const deMod = await client.get(`/api/moderator/trips/${viaje.id}/recorrido`).bearerToken(mod.token)
-    deMod.assertStatus(200)
-    assert.lengthOf(deMod.body().recorrido, 2)
+      const deMod = await client.get(`/api/moderator/trips/${viaje.id}/recorrido`).bearerToken(mod.token)
+      deMod.assertStatus(200)
+      assert.lengthOf(deMod.body().recorrido, 2)
 
-    const ajeno = await client.get(`/api/moderator/trips/${viaje.id}/recorrido`).bearerToken(modCali.token)
-    ajeno.assertStatus(404)
+      const ajeno = await client.get(`/api/moderator/trips/${viaje.id}/recorrido`).bearerToken(modCali.token)
+      ajeno.assertStatus(404)
 
-    // Viaje cerrado y conductor apagado: sigue el recorrido, pero sin ubicación en vivo.
-    viaje.estado = 'finalizado'
-    await viaje.save()
-    const cerrado = await client.get(`/api/admin/trips/${viaje.id}/recorrido`).bearerToken(admin.token)
-    assert.isFalse(cerrado.body().activo)
-    assert.isNull(cerrado.body().conductorUbicacion)
+      // Viaje cerrado y conductor apagado: sigue el recorrido, pero sin ubicación en vivo.
+      viaje.estado = 'finalizado'
+      await viaje.save()
+      const cerrado = await client.get(`/api/admin/trips/${viaje.id}/recorrido`).bearerToken(admin.token)
+      assert.isFalse(cerrado.body().activo)
+      assert.isNull(cerrado.body().conductorUbicacion)
+      assert.equal(cerrado.body().planeada.fuente, 'osrm')
+    } finally {
+      osrm.restaurar()
+    }
+  })
+
+  test('viaje cerrado: la ruta se pide a OSRM una sola vez y se reusa de la caché', async ({ client, assert }) => {
+    const osrm = simularOsrm()
+    try {
+      const admin = await crearUsuario(client, { rol: 'admin' })
+      const cliente = await crearUsuario(client, { rol: 'cliente' })
+      const driver = await crearConductor(client, 'Popayán')
+      const viaje = await crearViaje(cliente.user.id, driver.conductor.id, { estado: 'finalizado' })
+
+      const primera = await client.get(`/api/admin/trips/${viaje.id}/recorrido`).bearerToken(admin.token)
+      primera.assertStatus(200)
+      assert.equal(primera.body().planeada.fuente, 'osrm')
+      assert.lengthOf(osrm.llamadas, 1)
+
+      const segunda = await client.get(`/api/admin/trips/${viaje.id}/recorrido`).bearerToken(admin.token)
+      segunda.assertStatus(200)
+      assert.equal(segunda.body().planeada.fuente, 'osrm')
+      // La segunda vez no vuelve a pedirle nada a OSRM: sale de la caché.
+      assert.lengthOf(osrm.llamadas, 1)
+    } finally {
+      osrm.restaurar()
+    }
+  })
+
+  test('si OSRM falla, planeada queda null (nunca cae a Mapbox)', async ({ client, assert }) => {
+    const osrm = simularOsrm({ fallar: true })
+    try {
+      const admin = await crearUsuario(client, { rol: 'admin' })
+      const cliente = await crearUsuario(client, { rol: 'cliente' })
+      const driver = await crearConductor(client, 'Popayán')
+      const viaje = await crearViaje(cliente.user.id, driver.conductor.id, { estado: 'finalizado' })
+
+      const res = await client.get(`/api/admin/trips/${viaje.id}/recorrido`).bearerToken(admin.token)
+      res.assertStatus(200)
+      assert.isNull(res.body().planeada)
+    } finally {
+      osrm.restaurar()
+    }
   })
 })
 

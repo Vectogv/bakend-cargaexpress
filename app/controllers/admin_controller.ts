@@ -32,7 +32,8 @@ import TripFinalizationService from '#services/trip_finalization_service'
 import { DIAS_PLAZO_DEUDA_COMISION } from '#services/driver_debt_suspension_service'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { emitTripUpdateToModerators, resolverZonaAlerta } from '#services/moderator_trip_events'
-import { getAlertaEstadoLabel } from '#services/emergency_status_labels'
+import { getAlertaEstadoLabel, getTipoCierreLabel } from '#services/emergency_status_labels'
+import { validarCierreSos } from '#services/emergency_cierre_validation'
 import { sendToMultiple, sendToToken } from '#services/push_notification_service'
 import SignedUploadService from '#services/signed_upload_service'
 import { TELEFONO_REGEX } from '#validators/profile'
@@ -945,6 +946,7 @@ export default class AdminController {
       )
       .preload('usuario', (q) => q.select('id', 'nombre', 'apellido', 'telefono'))
       .preload('moderadorAtendio', (q) => q.select('id', 'nombre', 'apellido'))
+      .preload('moderadorResolvio', (q) => q.select('id', 'nombre', 'apellido'))
       .preload('viaje', (q) =>
         q
           .select('id', 'origen_direccion', 'destino_direccion', 'estado', ...COLUMNAS_VIAJE_MAPA_SOS)
@@ -970,6 +972,13 @@ export default class AdminController {
             ? `${a.moderadorAtendio.nombre || ''} ${a.moderadorAtendio.apellido || ''}`.trim()
             : null,
           atendidaAt: a.atendidaAt?.toISO() ?? null,
+          resueltoPor: a.moderadorResolvio
+            ? `${a.moderadorResolvio.nombre || ''} ${a.moderadorResolvio.apellido || ''}`.trim()
+            : null,
+          resueltaAt: a.resueltaAt?.toISO() ?? null,
+          tipoCierre: a.tipoCierre,
+          tipoCierreLabel: getTipoCierreLabel(a.tipoCierre),
+          observacion: a.observacion,
           usuario: a.usuario
             ? { nombre: a.usuario.nombre, apellido: a.usuario.apellido, telefono: a.usuario.telefono }
             : null,
@@ -1040,21 +1049,29 @@ export default class AdminController {
       return response.status(404).send(await serialize.withoutWrapping({ error: 'Alerta no encontrada' }))
     }
 
-    // Igual que moderator_controller.emergencyResolve: antes solo se marcaba
-    // `atendida`, así que el moderador y /api/sos la seguían viendo abierta.
-    if (alerta.estado !== 'resuelta') {
-      const ahora = DateTime.now()
-      alerta.estado = 'resuelta'
-      alerta.resueltaAt = ahora
-      alerta.moderadorResolvioId = user.id
-      if (!alerta.moderadorAtendioId) {
-        alerta.moderadorAtendioId = user.id
-        alerta.atendidaAt = ahora
-      }
-      const observacion = request.input('observacion', null)
-      if (observacion && String(observacion).trim()) {
-        alerta.observacion = String(observacion).trim()
-      }
+    // Igual que moderator_controller.emergencyResolve: ya resuelta → 409 (nada
+    // que cambiar; antes se devolvía 200 sin tocar nada, ahora es coherente
+    // con el moderador para no confundir a la auditoría sobre qué se guardó).
+    if (alerta.estado === 'resuelta') {
+      return response.status(409).send(await serialize.withoutWrapping({ error: 'La alerta ya fue resuelta' }))
+    }
+
+    // Para la auditoría: no se resuelve un SOS sin el tipo de caso y la
+    // gestión realizada (pedido del usuario, 2026-10-09).
+    const validacion = validarCierreSos(request.input('tipoCierre'), request.input('observacion'))
+    if (!validacion.ok) {
+      return response.status(422).send(await serialize.withoutWrapping({ error: validacion.error }))
+    }
+
+    const ahora = DateTime.now()
+    alerta.estado = 'resuelta'
+    alerta.resueltaAt = ahora
+    alerta.moderadorResolvioId = user.id
+    alerta.tipoCierre = validacion.valor.tipoCierre
+    alerta.observacion = validacion.valor.observacion
+    if (!alerta.moderadorAtendioId) {
+      alerta.moderadorAtendioId = user.id
+      alerta.atendidaAt = ahora
     }
     alerta.atendida = true
     await alerta.save()
@@ -1071,6 +1088,8 @@ export default class AdminController {
         estadoLabel: getAlertaEstadoLabel(alerta.estado),
         resueltoPor: `${user.nombre || ''} ${user.apellido || ''}`.trim(),
         resueltaAt: alerta.resueltaAt?.toISO() ?? null,
+        tipoCierre: alerta.tipoCierre,
+        tipoCierreLabel: getTipoCierreLabel(alerta.tipoCierre),
         observacion: alerta.observacion,
       })
     }
@@ -1080,7 +1099,10 @@ export default class AdminController {
       atendida: alerta.atendida,
       estado: alerta.estado,
       estadoLabel: getAlertaEstadoLabel(alerta.estado),
+      resueltoPor: `${user.nombre || ''} ${user.apellido || ''}`.trim(),
       resueltaAt: alerta.resueltaAt?.toISO() ?? null,
+      tipoCierre: alerta.tipoCierre,
+      tipoCierreLabel: getTipoCierreLabel(alerta.tipoCierre),
       observacion: alerta.observacion,
       estadoViaje,
     })

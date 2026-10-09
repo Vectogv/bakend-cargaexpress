@@ -252,6 +252,33 @@ test.group('Moderador: ?ciudad solo aplica al admin', (group) => {
       propias.map((v) => Number(v.id))
     )
   })
+
+  test('reservas: por defecto solo las vigentes; ?estado=cancelado trae las archivadas', async ({ client, assert }) => {
+    const cliente = await crearUsuario(client, { rol: 'cliente' })
+    const enZona = await crearConductor(client, 'Popayán')
+    const mod = await crearModerador(client, 'popayan')
+    const base = { tipoProgramacion: 'programada', horaProgramada: '08:00', fechaProgramada: '2030-03-01' }
+    const vigente = await crearViaje(cliente.user.id, enZona.conductor.id, { ...base, estado: 'reservado' })
+    const cancelada = await crearViaje(cliente.user.id, enZona.conductor.id, { ...base, estado: 'cancelado' })
+
+    const def = await client.get('/api/moderator/reservations?limit=100').bearerToken(mod.token)
+    def.assertStatus(200)
+    assert.include(ids(def.body()), Number(vigente.id))
+    assert.notInclude(ids(def.body()), Number(cancelada.id))
+
+    const canc = await client.get('/api/moderator/reservations?limit=100&estado=cancelado').bearerToken(mod.token)
+    canc.assertStatus(200)
+    assert.include(ids(canc.body()), Number(cancelada.id))
+    assert.notInclude(ids(canc.body()), Number(vigente.id))
+  })
+
+  test('un moderador con zona "general" recibe 403 (solo el admin ve toda la operación)', async ({ client }) => {
+    const mod = await crearModerador(client, 'general')
+    const res = await client.get('/api/moderator/reservations').bearerToken(mod.token)
+    res.assertStatus(403)
+    const mayus = await crearModerador(client, 'General')
+    ;(await client.get('/api/moderator/reservations').bearerToken(mayus.token)).assertStatus(403)
+  })
 })
 
 test.group('Moderador: atender y resolver emergencias por zona', (group) => {
@@ -294,7 +321,10 @@ test.group('Moderador: atender y resolver emergencias por zona', (group) => {
     const resMod = await client.post(`/api/moderator/emergency/${alerta.id}/resolve`).bearerToken(mod.token)
     resMod.assertStatus(403)
 
-    const resAdmin = await client.post(`/api/moderator/emergency/${alerta.id}/resolve`).bearerToken(admin.token)
+    const resAdmin = await client
+      .post(`/api/moderator/emergency/${alerta.id}/resolve`)
+      .bearerToken(admin.token)
+      .json({ tipoCierre: 'falsa_alarma', observacion: 'Se verificó con el usuario, falsa alarma' })
     resAdmin.assertStatus(200)
     assert.equal(resAdmin.body().estado, 'resuelta')
   })
@@ -327,10 +357,66 @@ test.group('Moderador: atender y resolver emergencias por zona', (group) => {
     ack.assertStatus(200)
     assert.equal(ack.body().atendidoPor, 'Ana Atiende')
 
-    const res = await client.post(`/api/moderator/emergency/${alerta.id}/resolve`).bearerToken(mod2.token)
+    const res = await client
+      .post(`/api/moderator/emergency/${alerta.id}/resolve`)
+      .bearerToken(mod2.token)
+      .json({ tipoCierre: 'otro', observacion: 'Se contactó al conductor, todo en orden' })
     res.assertStatus(200)
     assert.equal(res.body().atendidoPor, 'Ana Atiende')
     assert.equal(res.body().resueltoPor, 'Rosa Resuelve')
+  })
+
+  test('resolver sin tipoCierre ni observación exige ambos campos (auditoría)', async ({ client, assert }) => {
+    const { driver, viaje } = await escenario(client)
+    const mod = await crearModerador(client, 'popayan')
+
+    const alertaSinTipo = await AlertaEmergencia.create({
+      userId: driver.user.id,
+      viajeId: viaje.id,
+      motivo: 'Prueba',
+      estado: 'pendiente',
+      atendida: false,
+    } as any)
+    const sinTipo = await client
+      .post(`/api/moderator/emergency/${alertaSinTipo.id}/resolve`)
+      .bearerToken(mod.token)
+      .json({ observacion: 'Observación con más de veinte caracteres' })
+    sinTipo.assertStatus(422)
+    assert.equal(sinTipo.body().error, 'Elige el tipo de caso')
+
+    const sinObservacion = await client
+      .post(`/api/moderator/emergency/${alertaSinTipo.id}/resolve`)
+      .bearerToken(mod.token)
+      .json({ tipoCierre: 'robo' })
+    sinObservacion.assertStatus(422)
+    assert.equal(sinObservacion.body().error, 'Escribe la gestión realizada (mínimo 20 caracteres)')
+
+    const observacionCorta = await client
+      .post(`/api/moderator/emergency/${alertaSinTipo.id}/resolve`)
+      .bearerToken(mod.token)
+      .json({ tipoCierre: 'robo', observacion: 'Muy corta' })
+    observacionCorta.assertStatus(422)
+    assert.equal(observacionCorta.body().error, 'Escribe la gestión realizada (mínimo 20 caracteres)')
+
+    const tipoInvalido = await client
+      .post(`/api/moderator/emergency/${alertaSinTipo.id}/resolve`)
+      .bearerToken(mod.token)
+      .json({ tipoCierre: 'no_existe', observacion: 'Observación con más de veinte caracteres' })
+    tipoInvalido.assertStatus(422)
+    assert.equal(tipoInvalido.body().error, 'Elige el tipo de caso')
+
+    const ok = await client
+      .post(`/api/moderator/emergency/${alertaSinTipo.id}/resolve`)
+      .bearerToken(mod.token)
+      .json({ tipoCierre: 'robo', observacion: 'Se verificó con el conductor y el cliente' })
+    ok.assertStatus(200)
+    assert.equal(ok.body().tipoCierre, 'robo')
+    assert.equal(ok.body().tipoCierreLabel, 'Robo')
+    assert.equal(ok.body().observacion, 'Se verificó con el conductor y el cliente')
+
+    await alertaSinTipo.refresh()
+    assert.equal(alertaSinTipo.tipoCierre, 'robo')
+    assert.equal(alertaSinTipo.observacion, 'Se verificó con el conductor y el cliente')
   })
 })
 

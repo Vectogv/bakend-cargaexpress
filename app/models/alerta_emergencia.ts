@@ -6,6 +6,20 @@ import Viaje from './viaje.js'
 
 export type EstadoAlerta = 'pendiente' | 'atendida' | 'resuelta'
 
+/**
+ * Tipo de caso con el que se cierra un SOS, para la auditoría. Toda alerta
+ * resuelta debe quedar con uno de estos (ver `emergencyResolve`/`resolveEmergency`).
+ */
+export const TIPOS_CIERRE_SOS: Record<string, string> = {
+  robo: 'Robo',
+  accidente: 'Accidente',
+  falla_mecanica: 'Falla mecánica',
+  agresion_amenaza: 'Agresión o amenaza',
+  salud: 'Salud',
+  falsa_alarma: 'Falsa alarma',
+  otro: 'Otro',
+}
+
 export default class AlertaEmergencia extends BaseModel {
   static table = 'alertas_emergencia'
 
@@ -41,6 +55,9 @@ export default class AlertaEmergencia extends BaseModel {
 
   @column()
   declare observacion: string | null
+
+  @column()
+  declare tipoCierre: string | null
 
   @column.dateTime({ serializeAs: null })
   declare atendidaAt: DateTime | null
