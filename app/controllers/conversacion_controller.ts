@@ -385,6 +385,8 @@ export default class ConversacionController {
     const user = auth.getUserOrFail()
     const q = (request.input('q') || '').toString().trim()
     const limit = Math.min(Number(request.input('limit') || 50), 100)
+    // ?rol=: moderador | admin | conductor | cliente (filtra sobre lo que ya puede ver).
+    const rol = (request.input('rol') || '').toString().trim()
 
     // Admin: cualquier usuario. Moderador: staff + conductores de su ciudad; nunca
     // clientes (a ellos los contacta desde el ticket, el SOS o la disputa).
@@ -415,6 +417,8 @@ export default class ConversacionController {
         }
       })
       .whereNot('id', user.id)
+      .if(rol === 'moderador', (w) => w.where('es_moderador', true))
+      .if(['admin', 'conductor', 'cliente'].includes(rol), (w) => w.where('rol', rol).where('es_moderador', false))
       .orderBy('nombre', 'asc')
       .limit(limit)
 

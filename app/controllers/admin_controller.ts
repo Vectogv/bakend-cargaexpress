@@ -144,6 +144,15 @@ export default class AdminController {
       )
     }
 
+    // ?zona=: moderadores de la zona y conductores cuya ciudad cae en ella.
+    const zonaUsers = await zonaDelAdmin(request.input('zona'))
+    if (zonaUsers) {
+      const clave = claveDe(String(request.input('zona')))
+      query = query.where((sub) =>
+        sub.whereRaw('lower(zona_moderador) = ?', [clave]).orWhereIn('id', zonaUsers.usuarioIds)
+      )
+    }
+
     // Filtro por rol del panel: admin | cliente | conductor | moderador | lider
     if (rol === 'moderador') query = query.where('es_moderador', true)
     else if (rol === 'lider') query = query.where('es_lider', true)
@@ -186,15 +195,35 @@ export default class AdminController {
     )
   }
 
-  /** `?zona=` y `?online=1` (mapa en vivo: solo conectados). Respuesta: array; total en X-Total-Count. */
+  /**
+   * `?zona=`, `?online=1` (mapa en vivo: solo conectados), `?search=` (nombre, correo,
+   * teléfono, cédula o placa) y `?estado=` (estado de verificación). Array; total en X-Total-Count.
+   */
   async drivers({ request, response, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const deZona = await zonaDelAdmin(request.input('zona'))
     const soloOnline = ['1', 'true'].includes(String(request.input('online') || ''))
+    const search = String(request.input('search') || '').trim()
+    const estado = String(request.input('estado') || '').trim()
     const result = await Conductor.query()
       .if(deZona, (q) => q.whereIn('id', deZona!.conductorIds))
       .if(soloOnline, (q) => q.where('online', true))
+      .if(estado, (q) => q.where('estado_verificacion', estado))
+      .if(search, (q) =>
+        q.where((sub) =>
+          sub
+            .whereILike('cedula', `%${search}%`)
+            .orWhereILike('placa', `%${search}%`)
+            .orWhereHas('usuario', (u) =>
+              u
+                .whereILike('nombre', `%${search}%`)
+                .orWhereILike('apellido', `%${search}%`)
+                .orWhereILike('email', `%${search}%`)
+                .orWhereILike('telefono', `%${search}%`)
+            )
+        )
+      )
       .preload('usuario', (q) =>
         q.select('id', 'nombre', 'apellido', 'email', 'telefono', 'suspendido', 'es_lider', 'avatar')
       )
@@ -656,10 +685,13 @@ export default class AdminController {
     )
   }
 
-  async reports({ request, serialize }: HttpContext) {
+  /** `?estado=` (pendiente|revisado|...). Array; total en X-Total-Count. */
+  async reports({ request, response, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    const estado = String(request.input('estado') || '').trim()
     const reportes = await Reporte.query()
+      .if(estado, (q) => q.where('estado', estado))
       .preload('cliente', (q) =>
         q.select('id', 'nombre', 'apellido', 'email', 'reputacion', 'visibilidad')
       )
@@ -673,6 +705,7 @@ export default class AdminController {
       .preload('viaje', (q) => q.select('id', 'origen_direccion', 'destino_direccion', 'estado'))
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
+    response.header('X-Total-Count', String(reportes.total))
 
     return serialize.withoutWrapping(
       reportes.all().map((r) => ({
@@ -1932,12 +1965,14 @@ export default class AdminController {
     })
   }
 
-  /** `?zona=`: los de esa zona (claveDe) y los generales. */
+  /** `?zona=`: los de esa zona (claveDe) y los generales. `?estado=`: pendiente|aprobado|rechazado. */
   async listComunicados({ request, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
     const zona = claveDe(String(request.input('zona') ?? ''))
+    const estado = String(request.input('estado') || '').trim()
     const consulta = Comunicado.query()
+      .if(['pendiente', 'aprobado', 'rechazado'].includes(estado), (q) => q.where('estado', estado))
       .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('created_at', 'desc')
     // ponytail: la zona es texto libre, se filtra en memoria como conductoresDeZona.
@@ -1966,10 +2001,14 @@ export default class AdminController {
     )
   }
 
+  /** `?estado=`: activa | pendiente. */
   async listEncuestas({ request, serialize }: HttpContext) {
     const page = Math.max(1, Number.parseInt(request.input('page', '1')) || 1)
     const limit = Math.min(100, Math.max(1, Number.parseInt(request.input('limit', '20')) || 20))
+    const estado = String(request.input('estado') || '').trim()
     const encuestas = await Encuesta.query()
+      .if(estado === 'activa', (q) => q.where('estado', 'activa'))
+      .if(estado === 'pendiente', (q) => q.whereNot('estado', 'activa'))
       .preload('moderador', (q) => q.select('id', 'nombre', 'apellido'))
       .orderBy('created_at', 'desc')
       .paginate(page, limit)

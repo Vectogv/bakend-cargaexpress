@@ -234,6 +234,35 @@ test.group('Panel: zona y ubicación en el admin', (group) => {
     assert.notInclude(idsOn, apagado.conductor.id)
   })
 
+  test('drivers ?search= y ?estado=; users ?zona=; contactable-users ?rol=', async ({ client, assert }) => {
+    const admin = await crearUsuario(client, { rol: 'admin' })
+    const buscado = await crearConductor(client, 'Popayán', { estadoVerificacion: 'pendiente' })
+    const otro = await crearConductor(client, 'Popayán')
+    const modZona = await crearUsuario(client, { rol: 'cliente', esModerador: true, zonaModerador: 'popayan' })
+    const modOtra = await crearUsuario(client, { rol: 'cliente', esModerador: true, zonaModerador: 'cali' })
+
+    const porPlaca = await client.get(`/api/admin/drivers?search=${buscado.conductor.placa}`).bearerToken(admin.token)
+    porPlaca.assertStatus(200)
+    assert.deepEqual(porPlaca.body().map((d: any) => d.id), [buscado.conductor.id])
+
+    const porEstado = await client.get('/api/admin/drivers?estado=pendiente&limit=100').bearerToken(admin.token)
+    const idsPend = porEstado.body().map((d: any) => d.id)
+    assert.include(idsPend, buscado.conductor.id)
+    assert.notInclude(idsPend, otro.conductor.id)
+
+    const users = await client.get('/api/admin/users?zona=popayan&limit=100').bearerToken(admin.token)
+    users.assertStatus(200)
+    const idsU = users.body().map((u: any) => u.id)
+    assert.includeMembers(idsU, [modZona.user.id, buscado.user.id])
+    assert.notInclude(idsU, modOtra.user.id)
+
+    const contactables = await client.get('/api/moderator/contactable-users?rol=moderador&limit=100').bearerToken(admin.token)
+    contactables.assertStatus(200)
+    const filas = contactables.body().data ?? contactables.body()
+    assert.isTrue(filas.every((u: any) => Boolean(u.esModerador)))
+    assert.include(filas.map((u: any) => u.id), modZona.user.id)
+  })
+
   test('trips, emergencies, disputes y pending-verifications aceptan ?zona=', async ({ client, assert }) => {
     const admin = await crearUsuario(client, { rol: 'admin' })
     const cliente = await crearUsuario(client, { rol: 'cliente' })
